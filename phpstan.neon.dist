@@ -1,0 +1,8 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - config
+    tmpDir: build/phpstan
+includes:
+    - phpstan-baseline.neon
