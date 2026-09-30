@@ -1,24 +1,19 @@
 'use client';
 
-import { type Table } from '@tanstack/react-table';
-import { Button } from '@/components/ui/button';
+import { Button } from '@ui/button';
 
 interface DataTablePaginationProps {
-  table: Table<Record<string, unknown>>;
   currentPage: number;
   perPage: number;
   onPageChange: (page: number) => void;
-  onPerPageChange: (perPage: number) => void;
   totalPages: number;
   totalItems: number;
 }
 
 export function DataTablePagination({
-  table,
   currentPage,
   perPage,
   onPageChange,
-  onPerPageChange,
   totalPages,
   totalItems,
 }: DataTablePaginationProps) {

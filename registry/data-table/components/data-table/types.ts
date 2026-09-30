@@ -1,3 +1,5 @@
+import type { ColumnDef, SortingState, PaginationState, ColumnFiltersState } from '@tanstack/react-table';
+
 export interface DataTableColumn {
   name: string;
   label: string;
@@ -25,11 +27,17 @@ export interface DataTableQuery {
   filters: Array<{ column: string; value: unknown }>;
 }
 
+export interface DataTableConfig {
+  debounce: number;
+  per_page_options: number[];
+}
+
 export interface DataTableResponse<TData = unknown> {
   data: TData[];
   meta: DataTableMeta;
   query: DataTableQuery;
   columns: DataTableColumn[];
+  config: DataTableConfig;
 }
 
 export interface DataTableState {
@@ -43,5 +51,11 @@ export interface DataTableState {
 
 export interface DataTableOptions<TData = unknown> {
   data: DataTableResponse<TData>;
-  onDataChange: (data: DataTableResponse<TData>) => void;
+  onDataChange?: (data: DataTableResponse<TData>) => void;
 }
+
+export type DataTableColumnDef<TData = unknown> = ColumnDef<TData, unknown>;
+
+export type DataTableSortingState = SortingState;
+export type DataTablePaginationState = PaginationState;
+export type DataTableColumnFiltersState = ColumnFiltersState;

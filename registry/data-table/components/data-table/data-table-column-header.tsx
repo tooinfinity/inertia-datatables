@@ -1,20 +1,17 @@
 'use client';
 
-import { type Column } from '@tanstack/react-table';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
+import { type Column, type Header, flexRender } from '@tanstack/react-table';
+import { Input } from '@ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+} from '@ui/dropdown-menu';
 
 interface DataTableColumnHeaderProps {
-  header: Column<Record<string, unknown>, unknown>;
+  header: Header<Record<string, unknown>, unknown>;
   column: Column<Record<string, unknown>, unknown>;
-  onSortChange: (updater: unknown) => void;
   onColumnSearchChange: (column: string, value: string) => void;
   onFilterChange: (column: string, value: unknown) => void;
 }
@@ -22,36 +19,33 @@ interface DataTableColumnHeaderProps {
 export function DataTableColumnHeader({
   header,
   column,
-  onSortChange,
   onColumnSearchChange,
   onFilterChange,
 }: DataTableColumnHeaderProps) {
   const canSort = column.columnDef.enableSorting;
-  const canFilter = column.columnDef.enableFiltering;
+  const canFilter = column.columnDef.filterFn !== undefined;
 
   return (
     <th className="relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-      {header.isPlaceholder ? null : (
-        <div className="flex items-center gap-2">
-          {canSort && (
-            <button
-              onClick={() => column.toggleSorting(header.getIsSorted())}
-              className="flex items-center gap-1 hover:text-foreground transition-colors"
-              aria-label={`Sort by ${column.columnDef.header}`}
-            >
-              {flexRender(column.columnDef.header!, header.getContext())}
-              {header.getIsSorted() === 'asc' ? (
-                <span>↑</span>
-              ) : header.getIsSorted() === 'desc' ? (
-                <span>↓</span>
-              ) : (
-                <span className="text-muted-foreground">↕</span>
-              )}
-            </button>
-          )}
-          {!canSort && <span>{flexRender(column.columnDef.header!, header.getContext())}</span>}
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {canSort && (
+          <button
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+            className="flex items-center gap-1 hover:text-foreground transition-colors"
+            aria-label={`Sort by ${column.columnDef.header}`}
+          >
+            {flexRender(column.columnDef.header!, header.getContext())}
+            {column.getIsSorted() === 'asc' ? (
+              <span>↑</span>
+            ) : column.getIsSorted() === 'desc' ? (
+              <span>↓</span>
+            ) : (
+              <span className="text-muted-foreground">↕</span>
+            )}
+          </button>
+        )}
+        {!canSort && <span>{flexRender(column.columnDef.header!, header.getContext())}</span>}
+      </div>
       <div className="absolute right-0 top-full mt-1 w-56 p-2 rounded-md border bg-popover shadow-lg hidden group-focus-within:block group-hover:block z-10">
         {canFilter && (
           <div className="space-y-2">
@@ -60,7 +54,7 @@ export function DataTableColumnHeader({
             </label>
             <Input
               placeholder={`Search ${column.columnDef.header}...`}
-              onChange={(e) => onColumnSearchChange(column.id, e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
               value={((column.getFilterValue() as string) || '')}
             />
           </div>

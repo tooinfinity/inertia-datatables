@@ -1,13 +1,13 @@
 'use client';
 
-import { type Table } from '@tanstack/react-table';
-import { Checkbox } from '@/components/ui/checkbox';
+import { type Table, type Column } from '@tanstack/react-table';
+import { Checkbox } from '@ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from '@ui/dropdown-menu';
 
 interface DataTableColumnVisibilityProps {
   table: Table<Record<string, unknown>>;
@@ -28,15 +28,15 @@ export function DataTableColumnVisibility({ table }: DataTableColumnVisibilityPr
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56 p-2" sideOffset={8} align="end">
         <div className="space-y-1">
-          {columns.map((column) => (
+          {columns.map((column: Column<Record<string, unknown>, unknown>) => (
             <DropdownMenuItem
               key={column.id}
               className="flex items-center gap-2 px-2 py-1.5 text-sm"
-              onSelect={(e) => e.preventDefault()}
+              onSelect={(e: React.MouseEvent<HTMLDivElement>) => e.preventDefault()}
             >
               <Checkbox
                 checked={column.getIsVisible()}
-                onCheckedChange={(checked) => column.toggleVisibility(checked)}
+                onCheckedChange={(checked: boolean) => column.toggleVisibility(checked)}
                 className="h-4 w-4"
               />
               <span className="truncate">{column.columnDef.header as string}</span>

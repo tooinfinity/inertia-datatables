@@ -8,11 +8,9 @@ import {
   TableHeader,
   TableBody,
   TableFooter,
-  TableHead,
   TableRow,
   TableCell,
-  TableCaption,
-} from '@/components/ui/table';
+} from '@ui/table';
 import { DataTableToolbar } from './data-table-toolbar';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -32,21 +30,21 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
       table,
       handlePageChange,
       handlePerPageChange,
-      handleSortChange,
       handleSearchChange,
       handleColumnSearchChange,
       handleFilterChange,
       state,
+      perPageOptions,
     } = useDataTable({ data });
 
     return (
       <div className="space-y-4">
         <DataTableToolbar
-          table={table}
           search={state.search}
           onSearchChange={handleSearchChange}
           perPage={state.perPage}
           onPerPageChange={handlePerPageChange}
+          perPageOptions={perPageOptions}
         />
         <div className="rounded-md border">
           <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
@@ -58,7 +56,6 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
                       key={header.id}
                       header={header}
                       column={header.column}
-                      onSortChange={handleSortChange}
                       onColumnSearchChange={handleColumnSearchChange}
                       onFilterChange={handleFilterChange}
                     />
@@ -83,11 +80,9 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
             </TableBody>
             <TableFooter>
               <DataTablePagination
-                table={table}
                 currentPage={state.page}
                 perPage={state.perPage}
                 onPageChange={handlePageChange}
-                onPerPageChange={handlePerPageChange}
                 totalPages={data.meta.last_page}
                 totalItems={data.meta.total}
               />

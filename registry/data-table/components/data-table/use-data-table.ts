@@ -3,27 +3,26 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
-  getPaginationRowModel,
-  getFilteredRowModel,
   useReactTable,
-  type ColumnDef,
   type SortingState,
   type PaginationState,
   type ColumnFiltersState,
-  type GlobalFilterState,
+  type ColumnDef,
 } from '@tanstack/react-table';
-import { useRouter } from '@inertiajs/react';
-import type { DataTableColumn, DataTableResponse, DataTableState, DataTableOptions } from './types';
+import { router } from '@inertiajs/react';
+import type {
+  DataTableState,
+  DataTableOptions,
+  DataTableColumn,
+} from './types';
 
 const columnHelper = createColumnHelper<Record<string, unknown>>();
 
 export function useDataTable<TData extends Record<string, unknown>>({
   data: initialData,
-  onDataChange,
 }: DataTableOptions<TData>) {
-  const router = useRouter();
   const mountedRef = useRef(false);
+  const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const [state, setState] = useState<DataTableState>({
     page: initialData.query.page,
@@ -41,27 +40,30 @@ export function useDataTable<TData extends Record<string, unknown>>({
     ),
   });
 
-  const debounceTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const debounceMs = initialData.config?.debounce ?? 300;
+  const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
 
-  const columns = useMemo<ColumnDef<TData>[]>(() => {
-    return initialData.columns
-      .filter((col) => !col.hidden)
-      .map((col) => {
-        const column = columnHelper.accessor(col.name, {
-          header: col.label,
-          cell: (info) => flexRender(info.column.columnDef.cell!, info.getContext()),
-        });
+  const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
+    const visibility: Record<string, boolean> = {};
+    initialData.columns.forEach((col) => {
+      visibility[col.name] = !col.hidden;
+    });
+    return visibility;
+  }, [initialData.columns]);
 
-        if (col.sortable) {
-          column.enableSorting = true;
-        }
-
-        if (col.filterable) {
-          column.enableFiltering = true;
-        }
-
-        return column;
+  const columns = useMemo<ColumnDef<Record<string, unknown>, unknown>[]>(() => {
+    return initialData.columns.map((col: DataTableColumn) => {
+      const column = columnHelper.accessor(col.name, {
+        header: col.label,
+        cell: (info) => flexRender(info.column.columnDef.cell!, info),
       });
+
+      if (col.sortable) {
+        column.enableSorting = true;
+      }
+
+      return column;
+    });
   }, [initialData.columns]);
 
   const [sorting, setSorting] = useState<SortingState>(
@@ -73,30 +75,33 @@ export function useDataTable<TData extends Record<string, unknown>>({
     pageSize: state.perPage,
   });
 
-  const [globalFilter, setGlobalFilter] = useState<GlobalFilterState>(state.search);
+  const [globalFilter, setGlobalFilter] = useState<string>(state.search);
 
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
     Object.entries(state.searches).map(([key, value]) => ({ id: key, value })) as ColumnFiltersState
   );
 
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(initialColumnVisibility);
+
   const table = useReactTable({
-    data: initialData.data as TData[],
+    data: initialData.data as Record<string, unknown>[],
     columns,
     state: {
       sorting,
       pagination,
       globalFilter,
       columnFilters,
+      columnVisibility,
     },
     onSortingChange: setSorting,
     onPaginationChange: setPagination,
     onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
     manualSorting: true,
     manualFiltering: true,
-    manualGlobalFilter: true,
     pageCount: initialData.meta.last_page,
   });
 
@@ -134,7 +139,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
     (value: string) => {
       setGlobalFilter(value);
       setState((prev) => ({ ...prev, search: value, page: 1 }));
-      debouncedVisit('search', value, { search: value, page: 1 });
+      debouncedVisit('search', { search: value, page: 1 });
     },
     []
   );
@@ -155,10 +160,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         searches: { ...prev.searches, [column]: value },
         page: 1,
       }));
-      debouncedVisit(`searches.${column}`, value, {
-        [`searches[${column}]`]: value,
-        page: 1,
-      });
+      debouncedVisit(`searches.${column}`, { [`searches[${column}]`]: value, page: 1 });
     },
     []
   );
@@ -191,19 +193,19 @@ export function useDataTable<TData extends Record<string, unknown>>({
         only: ['data'],
       });
     },
-    [router]
+    []
   );
 
   const debouncedVisit = useCallback(
-    (key: string, value: unknown, params: Record<string, unknown>) => {
+    (key: string, params: Record<string, unknown>) => {
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
       debounceTimersRef.current[key] = setTimeout(() => {
         visitWithParams(params);
-      }, 300);
+      }, debounceMs);
     },
-    [visitWithParams]
+    [visitWithParams, debounceMs]
   );
 
   if (!mountedRef.current) {
@@ -220,5 +222,6 @@ export function useDataTable<TData extends Record<string, unknown>>({
     handleSearchChange,
     handleColumnSearchChange,
     handleFilterChange,
+    perPageOptions,
   };
 }

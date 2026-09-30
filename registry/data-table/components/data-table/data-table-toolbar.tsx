@@ -1,26 +1,24 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { type Table } from '@tanstack/react-table';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui/select';
 
 interface DataTableToolbarProps {
-  table: Table<Record<string, unknown>>;
   search: string;
   onSearchChange: (value: string) => void;
   perPage: number;
   onPerPageChange: (value: number) => void;
+  perPageOptions: number[];
   children?: ReactNode;
 }
 
 export function DataTableToolbar({
-  table,
   search,
   onSearchChange,
   perPage,
   onPerPageChange,
+  perPageOptions,
   children,
 }: DataTableToolbarProps) {
   return (
@@ -29,7 +27,7 @@ export function DataTableToolbar({
         <Input
           placeholder="Search..."
           value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
           className="w-64 max-w-[200px]"
           aria-label="Global search"
         />
@@ -39,15 +37,16 @@ export function DataTableToolbar({
         <label htmlFor="per-page" className="text-sm text-muted-foreground">
           Show
         </label>
-        <Select value={String(perPage)} onValueChange={(value) => onPerPageChange(Number(value))}>
+        <Select value={String(perPage)} onValueChange={(value: string) => onPerPageChange(Number(value))}>
           <SelectTrigger id="per-page" className="w-[100px]">
             <SelectValue placeholder="Per page" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="10">10</SelectItem>
-            <SelectItem value="25">25</SelectItem>
-            <SelectItem value="50">50</SelectItem>
-            <SelectItem value="100">100</SelectItem>
+            {perPageOptions.map((option) => (
+              <SelectItem key={String(option)} value={String(option)}>
+                {option}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">per page</span>

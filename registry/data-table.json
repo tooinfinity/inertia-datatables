@@ -6,42 +6,42 @@
   "description": "Server-side DataTable with TanStack Table v8, Inertia 3, and shadcn/ui",
   "files": [
     {
-      "path": "components/data-table/types.ts",
+      "path": "registry/data-table/components/data-table/types.ts",
       "type": "registry:component",
       "target": "components/data-table/types.ts"
     },
     {
-      "path": "components/data-table/data-table.tsx",
+      "path": "registry/data-table/components/data-table/data-table.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table.tsx"
     },
     {
-      "path": "components/data-table/data-table-toolbar.tsx",
+      "path": "registry/data-table/components/data-table/data-table-toolbar.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table-toolbar.tsx"
     },
     {
-      "path": "components/data-table/data-table-pagination.tsx",
+      "path": "registry/data-table/components/data-table/data-table-pagination.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table-pagination.tsx"
     },
     {
-      "path": "components/data-table/data-table-column-header.tsx",
+      "path": "registry/data-table/components/data-table/data-table-column-header.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table-column-header.tsx"
     },
     {
-      "path": "components/data-table/data-table-column-visibility.tsx",
+      "path": "registry/data-table/components/data-table/data-table-column-visibility.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table-column-visibility.tsx"
     },
     {
-      "path": "components/data-table/data-table-empty.tsx",
+      "path": "registry/data-table/components/data-table/data-table-empty.tsx",
       "type": "registry:component",
       "target": "components/data-table/data-table-empty.tsx"
     },
     {
-      "path": "components/data-table/use-data-table.ts",
+      "path": "registry/data-table/components/data-table/use-data-table.ts",
       "type": "registry:component",
       "target": "components/data-table/use-data-table.ts"
     }
