@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["registry/data-table/components/*"],
+      "@ui/*": ["registry/data-table/components/ui/*"]
+    }
+  },
+  "include": [
+    "registry/data-table/components/**/*.ts",
+    "registry/data-table/components/**/*.tsx",
+    "vitest.config.ts",
+    "vite.config.ts",
+    "registry/data-table/components/data-table/global.d.ts"
+  ],
+  "exclude": ["node_modules", "build"]
+}
