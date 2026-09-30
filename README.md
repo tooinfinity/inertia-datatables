@@ -71,6 +71,8 @@ return [
 
 ## Backend Usage
 
+### With Eloquent Builder
+
 ```php
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTable;
@@ -97,6 +99,31 @@ public function index()
             Column::make('created_at')
                 ->label('Created')
                 ->sortable(),
+        ])
+        ->defaultSort('created_at', 'desc')
+        ->handle();
+
+    return inertia('Users/Index', [
+        'users' => $users,
+    ]);
+}
+```
+
+### With Query Builder
+
+```php
+use Illuminate\Support\Facades\DB;
+use TooInfinity\InertiaDataTables\Column;
+use TooInfinity\InertiaDataTables\DataTable;
+
+public function index()
+{
+    $users = DataTable::query(DB::table('users'))
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+            Column::make('status')->filterable()->sortable(),
+            Column::make('created_at')->sortable(),
         ])
         ->defaultSort('created_at', 'desc')
         ->handle();
@@ -183,11 +210,17 @@ interface DataTableQuery {
     filters: Array<{ column: string; value: unknown }>;
 }
 
+interface DataTableConfig {
+    debounce: number;
+    per_page_options: number[];
+}
+
 interface DataTableResponse<TData = unknown> {
     data: TData[];
     meta: DataTableMeta;
     query: DataTableQuery;
     columns: DataTableColumn[];
+    config: DataTableConfig;
 }
 ```
 
