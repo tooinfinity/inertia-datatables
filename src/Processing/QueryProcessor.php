@@ -50,10 +50,20 @@ final readonly class QueryProcessor
         /** @var array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}> $columnsArray */
         $columnsArray = array_map(fn (Column $column): array => $column->toArray(), $this->columns);
 
+        $debounce = config('inertia-datatables.search.debounce', 300);
+        $perPageOptions = config('inertia-datatables.per_page_options', [10, 25, 50, 100]);
+
+        /** @var array<int, int> $perPageOptions */
+        $config = [
+            'debounce' => (int) $debounce,
+            'per_page_options' => $perPageOptions,
+        ];
+
         return new DataTableResult(
             paginator: $paginator,
             columns: $columnsArray,
             query: $request->toArray(),
+            config: $config,
         );
     }
 

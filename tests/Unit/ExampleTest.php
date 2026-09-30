@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Http\Request;
 use TooInfinity\InertiaDataTables\Column;
+use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
 use TooInfinity\InertiaDataTables\Filtering\Filter;
 use TooInfinity\InertiaDataTables\Filtering\FilterCollection;
 use TooInfinity\InertiaDataTables\Searching\Search;
@@ -107,10 +108,19 @@ it('creates a sort with desc direction', function (): void {
     expect($sort->isDescending())->toBeTrue();
 });
 
-it('normalizes sort direction', function (): void {
+it('throws exception for invalid sort direction', function (): void {
+    $thrown = false;
+    try {
+        Sort::make('name', 'invalid');
+    } catch (InvalidSortException) {
+        $thrown = true;
+    }
+    expect($thrown)->toBeTrue();
+});
+
+it('normalizes sort direction case', function (): void {
     expect(Sort::make('name', 'ASC')->direction)->toBe('asc');
     expect(Sort::make('name', 'DESC')->direction)->toBe('desc');
-    expect(Sort::make('name', 'invalid')->direction)->toBe('asc');
 });
 
 it('converts sort to array', function (): void {

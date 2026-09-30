@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Sorting;
 
+use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
+
 final readonly class Sort
 {
     public function __construct(
@@ -13,9 +15,15 @@ final readonly class Sort
 
     public static function make(string $column, string $direction = 'asc'): self
     {
+        $normalizedDirection = strtolower($direction);
+
+        if (! in_array($normalizedDirection, ['asc', 'desc'], true)) {
+            throw InvalidSortException::invalidDirection($direction);
+        }
+
         return new self(
             column: $column,
-            direction: strtolower($direction) === 'desc' ? 'desc' : 'asc',
+            direction: $normalizedDirection,
         );
     }
 

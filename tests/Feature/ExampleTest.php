@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTable;
@@ -253,4 +254,114 @@ it('enforces max per page', function (): void {
         ->handle($request);
 
     expect($table->paginator->perPage())->toBe(100); // max_per_page
+});
+
+it('handles empty results correctly with null from/to', function (): void {
+    $table = DataTable::query(User::query())
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+        ])
+        ->handle();
+
+    expect($table->paginator->total())->toBe(0)
+        ->and($table->paginator->firstItem())->toBeNull()
+        ->and($table->paginator->lastItem())->toBeNull()
+        ->and($table->toArray()['meta']['from'])->toBeNull()
+        ->and($table->toArray()['meta']['to'])->toBeNull()
+        ->and($table->toArray()['meta']['total'])->toBe(0)
+        ->and($table->toArray()['meta']['last_page'])->toBe(1)
+        ->and($table->toArray()['meta']['current_page'])->toBe(1);
+});
+
+it('works with QueryBuilder', function (): void {
+    for ($i = 0; $i < 10; $i++) {
+        createUser();
+    }
+
+    $table = DataTable::query(DB::table('users'))
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+            Column::make('status')->filterable()->sortable(),
+            Column::make('created_at')->sortable(),
+        ])
+        ->defaultSort('created_at', 'desc')
+        ->handle();
+
+    expect($table)->toBeInstanceOf(DataTableResult::class)
+        ->and($table->paginator->total())->toBe(10)
+        ->and($table->paginator->items())->toHaveCount(10)
+        ->and($table->columns)->toHaveCount(4);
+});
+
+it('applies global search with QueryBuilder', function (): void {
+    createUser(['name' => 'John Doe', 'email' => 'john@example.com']);
+    createUser(['name' => 'Jane Smith', 'email' => 'jane@example.com']);
+
+    $request = new DataTableRequest(
+        page: 1,
+        perPage: 25,
+        search: 'john',
+        sorts: new SortCollection,
+        searches: new SearchCollection,
+        filters: new FilterCollection,
+    );
+
+    $table = DataTable::query(DB::table('users'))
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+        ])
+        ->handle($request);
+
+    expect($table->paginator->total())->toBe(1);
+    expect($table->paginator->items()[0]->name)->toBe('John Doe');
+});
+
+it('applies column sorting with QueryBuilder', function (): void {
+    createUser(['name' => 'Zebra', 'email' => 'zebra@example.com']);
+    createUser(['name' => 'Alpha', 'email' => 'alpha@example.com']);
+
+    $request = new DataTableRequest(
+        page: 1,
+        perPage: 25,
+        search: '',
+        sorts: new SortCollection([new Sort('name', 'asc')]),
+        searches: new SearchCollection,
+        filters: new FilterCollection,
+    );
+
+    $table = DataTable::query(DB::table('users'))
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+        ])
+        ->handle($request);
+
+    expect($table->paginator->items()[0]->name)->toBe('Alpha');
+    expect($table->paginator->items()[1]->name)->toBe('Zebra');
+});
+
+it('applies column filtering with QueryBuilder', function (): void {
+    createUser(['name' => 'John', 'status' => 'active']);
+    createUser(['name' => 'Jane', 'status' => 'inactive']);
+
+    $request = new DataTableRequest(
+        page: 1,
+        perPage: 25,
+        search: '',
+        sorts: new SortCollection,
+        searches: new SearchCollection,
+        filters: new FilterCollection([new Filter('status', 'active')]),
+    );
+
+    $table = DataTable::query(DB::table('users'))
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('status')->filterable()->sortable(),
+        ])
+        ->handle($request);
+
+    expect($table->paginator->total())->toBe(1)
+        ->and($table->paginator->items()[0]->status)->toBe('active');
 });
