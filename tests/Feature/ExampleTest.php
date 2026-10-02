@@ -35,16 +35,6 @@ afterEach(function (): void {
     Schema::dropIfExists('users');
 });
 
-function createUser(array $attributes = []): User
-{
-    return User::create(array_merge([
-        'name' => fake()->name(),
-        'email' => fake()->unique()->safeEmail(),
-        'status' => 'active',
-        'password' => 'password',
-    ], $attributes));
-}
-
 it('resolves the singleton', function (): void {
     expect(app(InertiaDataTables::class))->toBeInstanceOf(InertiaDataTables::class);
 });
