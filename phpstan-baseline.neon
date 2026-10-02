@@ -27,7 +27,7 @@ parameters:
 		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
-			count: 1
+			count: 2
 			path: src/DataTableRequest.php
 
 		-
@@ -47,12 +47,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: src/Filtering/Filter.php
-
-		-
-			message: '#^Class TooInfinity\\InertiaDataTables\\Filtering\\FilterCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Filtering/FilterCollection.php
 
 		-
 			message: '#^Method TooInfinity\\InertiaDataTables\\InertiaDataTables\:\:query\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
@@ -75,14 +69,20 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$direction of method Illuminate\\Database\\Eloquent\\Builder\<TModel of Illuminate\\Database\\Eloquent\\Model\>\:\:orderBy\(\) expects ''asc''\|''desc''\|SortDirection, string given\.$#'
 			identifier: argument.type
-			count: 2
+			count: 1
 			path: src/Processing/QueryProcessor.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'
 			identifier: cast.string
-			count: 1
+			count: 2
 			path: src/Searching/SearchCollection.php
+
+		-
+			message: '#^Class TooInfinity\\InertiaDataTables\\Filtering\\FilterCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Filtering/FilterCollection.php
 
 		-
 			message: '#^Class TooInfinity\\InertiaDataTables\\Searching\\SearchCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'

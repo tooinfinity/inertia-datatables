@@ -11,6 +11,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -27,7 +28,8 @@
     "registry/data-table/components/**/*.tsx",
     "vitest.config.ts",
     "vite.config.ts",
+    "vitest.setup.tsx",
     "registry/data-table/components/data-table/global.d.ts"
   ],
-  "exclude": ["node_modules", "build"]
+  "exclude": ["node_modules", "build", "dist"]
 }
