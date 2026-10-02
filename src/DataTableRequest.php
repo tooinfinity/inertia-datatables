@@ -21,19 +21,21 @@ final readonly class DataTableRequest
     ) {}
 
     /**
-     * @param  array{page: string, per_page: string, search: string, sort: string, filters: string}  $queryConfig
+     * @param  array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string}  $queryConfig
      */
     public static function fromRequest(Request $request, array $queryConfig): self
     {
         $page = max(1, (int) $request->query($queryConfig['page'], 1));
-        $perPage = (int) $request->query($queryConfig['per_page'], config('inertia-datatables.default_per_page', 25));
+        $defaultPerPage = (int) config('inertia-datatables.default_per_page', 25);
+        $maxPerPage = (int) config('inertia-datatables.max_per_page', 100);
+        $perPage = max(1, min($maxPerPage, (int) $request->query($queryConfig['per_page'], $defaultPerPage)));
         $search = (string) $request->query($queryConfig['search'], '');
 
         $sorts = SortCollection::fromQueryString(
             (string) $request->query($queryConfig['sort'], ''),
         );
 
-        $searches = SearchCollection::fromRequest($request, $queryConfig['search']);
+        $searches = SearchCollection::fromRequest($request, $queryConfig['searches']);
 
         $filters = FilterCollection::fromRequest($request, $queryConfig['filters']);
 

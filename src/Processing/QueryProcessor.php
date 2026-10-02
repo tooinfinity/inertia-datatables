@@ -182,9 +182,14 @@ final readonly class QueryProcessor
                     throw InvalidSortException::notAllowed($defaultSortColumn);
                 }
 
+                $normalizedDirection = strtolower($defaultSortDirection);
+                if (! in_array($normalizedDirection, ['asc', 'desc'], true)) {
+                    throw InvalidSortException::invalidDirection($defaultSortDirection);
+                }
+
                 $resolvedColumn = ColumnResolver::resolve($defaultColumn->name);
 
-                return $query->orderBy($resolvedColumn, $defaultSortDirection);
+                return $query->orderBy($resolvedColumn, $normalizedDirection);
             }
 
             return $query;

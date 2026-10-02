@@ -22,6 +22,7 @@ return [
         'page' => 'page',
         'per_page' => 'per_page',
         'search' => 'search',
+        'searches' => 'searches',
         'sort' => 'sort',
         'filters' => 'filters',
     ],

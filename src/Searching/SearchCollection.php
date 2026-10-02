@@ -29,10 +29,32 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
     public static function fromRequest(Request $request, string $searchParameter): self
     {
         $searches = [];
+
+        // Handle both formats:
+        // 1. Bracket notation in query string: searches[name]=john (parsed as array by PHP)
+        // 2. Manual setting: search[name]=john (preserved as key by Laravel)
+
+        $queryData = $request->query();
+
+        // First check if the parameter is an array (PHP parsed format)
+        if (isset($queryData[$searchParameter]) && is_array($queryData[$searchParameter])) {
+            foreach ($queryData[$searchParameter] as $column => $value) {
+                if ($value === '') {
+                    continue;
+                }
+                $searches[] = Search::make($column, (string) $value);
+            }
+        }
+
+        // Also check for bracket notation in keys (manual format)
         $prefix = $searchParameter.'[';
 
-        foreach ($request->query() as $key => $value) {
+        foreach ($queryData as $key => $value) {
             if (! str_starts_with($key, $prefix)) {
+                continue;
+            }
+
+            if (! str_ends_with($key, ']')) {
                 continue;
             }
 
