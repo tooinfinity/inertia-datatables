@@ -1,17 +1,15 @@
 import type { SelectHTMLAttributes, HTMLAttributes, OptionHTMLAttributes, ButtonHTMLAttributes } from 'react';
 
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  onValueChange?: (value: string) => void;
-}
-interface SelectContentProps extends HTMLAttributes<HTMLDivElement> {}
-interface SelectItemProps extends OptionHTMLAttributes<HTMLOptionElement> {}
-interface SelectTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {}
-interface SelectValueProps extends HTMLAttributes<HTMLSpanElement> {
-  placeholder?: string;
-}
+export const Select = ({ children, onValueChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onValueChange?: (_value: string) => void }) => (
+    <select {...props} onChange={(e) => onValueChange?.(e.target.value)}>{children}</select>
+);
 
-export const Select = ({ children, ...props }: SelectProps) => <select {...props}>{children}</select>;
-export const SelectContent = ({ children, ...props }: SelectContentProps) => <div {...props}>{children}</div>;
-export const SelectItem = ({ children, ...props }: SelectItemProps) => <option {...props}>{children}</option>;
-export const SelectTrigger = ({ children, ...props }: SelectTriggerProps) => <button {...props}>{children}</button>;
-export const SelectValue = ({ children, ...props }: SelectValueProps) => <span {...props}>{children}</span>;
+export const SelectContent = ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>;
+
+export const SelectItem = ({ children, ...props }: OptionHTMLAttributes<HTMLOptionElement>) => <option {...props}>{children}</option>;
+
+export const SelectTrigger = ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>;
+
+export const SelectValue = ({ children, placeholder, ...props }: HTMLAttributes<HTMLSpanElement> & { placeholder?: string }) => (
+    <span {...props}>{children ?? placeholder}</span>
+);

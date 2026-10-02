@@ -1,5 +1,3 @@
 import type { HTMLAttributes } from 'react';
 
-interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {}
-
-export const Skeleton = ({ ...props }: SkeletonProps) => <div {...props} />;
+export const Skeleton = ({ ...props }: HTMLAttributes<HTMLDivElement>) => <div {...props} />;

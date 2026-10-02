@@ -1,7 +1,5 @@
 import type { InputHTMLAttributes } from 'react';
 
-interface CheckboxProps extends InputHTMLAttributes<HTMLInputElement> {
-  onCheckedChange?: (checked: boolean) => void;
-}
-
-export const Checkbox = ({ ...props }: CheckboxProps) => <input type="checkbox" {...props} />;
+export const Checkbox = ({ onCheckedChange, ...props }: InputHTMLAttributes<HTMLInputElement> & { onCheckedChange?: (_checked: boolean) => void }) => (
+    <input type="checkbox" {...props} onChange={(e) => onCheckedChange?.(e.target.checked)} />
+);
