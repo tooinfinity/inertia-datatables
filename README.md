@@ -63,6 +63,7 @@ return [
         'page' => 'page',
         'per_page' => 'per_page',
         'search' => 'search',
+        'searches' => 'searches',
         'sort' => 'sort',
         'filters' => 'filters',
     ],
@@ -173,10 +174,12 @@ type User = {
 
 export default function Index({ users }: { users: DataTableResponse<User> }) {
     return (
-        <DataTable data={users} />
+        <DataTable data={users} dataPropName="users" />
     );
 }
 ```
+
+The `dataPropName` prop specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes. If omitted, it defaults to `'data'`.
 
 ### TypeScript Types
 
@@ -223,6 +226,19 @@ interface DataTableResponse<TData = unknown> {
     config: DataTableConfig;
 }
 ```
+
+### Hook Options
+
+The `useDataTable` hook accepts the following options:
+
+```typescript
+interface DataTableOptions<TData = unknown> {
+    data: DataTableResponse<TData>;
+    dataPropName?: string;  // Inertia prop name for partial reloads (default: 'data')
+}
+```
+
+The `dataPropName` option specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes.
 
 ## Security
 
