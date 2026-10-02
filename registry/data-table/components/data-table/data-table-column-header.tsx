@@ -1,85 +1,93 @@
 'use client';
 
-import { type Column, type Header, flexRender } from '@tanstack/react-table';
+import React from 'react';
+import { type Column, type Header, type ColumnMeta, flexRender } from '@tanstack/react-table';
 import { Input } from '@ui/input';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from '@ui/dropdown-menu';
 
-interface DataTableColumnHeaderProps {
-  header: Header<Record<string, unknown>, unknown>;
-  column: Column<Record<string, unknown>, unknown>;
-  onColumnSearchChange: (column: string, value: string) => void;
-  onFilterChange: (column: string, value: unknown) => void;
+interface DataTableColumnMeta extends ColumnMeta<unknown, unknown> {
+    searchable?: boolean;
+    filterable?: boolean;
 }
 
-export function DataTableColumnHeader({
-  header,
-  column,
-  onColumnSearchChange,
-  onFilterChange,
-}: DataTableColumnHeaderProps) {
-  const canSort = column.columnDef.enableSorting;
-  const canFilter = column.columnDef.filterFn !== undefined;
+interface DataTableColumnHeaderProps<TData extends Record<string, unknown>> {
+    header: Header<TData, unknown>;
+    column: Column<TData, unknown>;
+    onColumnSearchChange: (_column: string, _value: string) => void;
+    onFilterChange: (_column: string, _value: unknown) => void;
+}
 
-  return (
-    <th className="relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-      <div className="flex items-center gap-2">
-        {canSort && (
-          <button
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-            aria-label={`Sort by ${column.columnDef.header}`}
-          >
-            {flexRender(column.columnDef.header!, header.getContext())}
-            {column.getIsSorted() === 'asc' ? (
-              <span>↑</span>
-            ) : column.getIsSorted() === 'desc' ? (
-              <span>↓</span>
-            ) : (
-              <span className="text-muted-foreground">↕</span>
-            )}
-          </button>
-        )}
-        {!canSort && <span>{flexRender(column.columnDef.header!, header.getContext())}</span>}
-      </div>
-      <div className="absolute right-0 top-full mt-1 w-56 p-2 rounded-md border bg-popover shadow-lg hidden group-focus-within:block group-hover:block z-10">
-        {canFilter && (
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-muted-foreground">
-              Column search
-            </label>
-            <Input
-              placeholder={`Search ${column.columnDef.header}...`}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
-              value={((column.getFilterValue() as string) || '')}
-            />
-          </div>
-        )}
-        {canFilter && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center justify-between px-2 py-1 text-sm text-muted-foreground hover:text-foreground rounded">
-                Filter
-                <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-48">
-              <DropdownMenuItem
-                onClick={() => onFilterChange(column.id, '')}
-                className="text-sm"
-              >
-                Clear filter
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-    </th>
-  );
+export function DataTableColumnHeader<TData extends Record<string, unknown>>({
+    header,
+    column,
+    onColumnSearchChange,
+    onFilterChange,
+}: DataTableColumnHeaderProps<TData>) {
+    const canSort = column.columnDef.enableSorting;
+    const meta = column.columnDef.meta as DataTableColumnMeta | undefined;
+    const canSearch = meta?.searchable === true;
+    const canFilter = meta?.filterable === true;
+
+    return (
+        <th className="relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
+            <div className="flex items-center gap-2">
+                {canSort && (
+                    <button
+                        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        aria-label={`Sort by ${column.columnDef.header}`}
+                    >
+                        {flexRender(column.columnDef.header!, header.getContext())}
+                        {column.getIsSorted() === 'asc' ? (
+                            <span>↑</span>
+                        ) : column.getIsSorted() === 'desc' ? (
+                            <span>↓</span>
+                        ) : (
+                            <span className="text-muted-foreground">↕</span>
+                        )}
+                    </button>
+                )}
+                {!canSort && <span>{flexRender(column.columnDef.header!, header.getContext())}</span>}
+            </div>
+            <div className="absolute right-0 top-full mt-1 w-56 p-2 rounded-md border bg-popover shadow-lg hidden group-focus-within:block group-hover:block z-10">
+                {canSearch && (
+                    <div className="space-y-2">
+                        <label className="block text-xs font-medium text-muted-foreground">
+                            Column search
+                        </label>
+                        <Input
+                            placeholder={`Search ${column.columnDef.header}...`}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
+                            value={((column.getFilterValue() as string) || '')}
+                        />
+                    </div>
+                )}
+                {canFilter && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="flex w-full items-center justify-between px-2 py-1 text-sm text-muted-foreground hover:text-foreground rounded">
+                                Filter
+                                <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-48">
+                            <DropdownMenuItem
+                                onClick={() => onFilterChange(column.id, '')}
+                                className="text-sm"
+                            >
+                                Clear filter
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+            </div>
+        </th>
+    );
 }
