@@ -39,7 +39,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate
         }
 
         foreach ($filtersInput as $column => $value) {
-            if ($value === '' || $value === null) {
+            if (! is_string($column) || $value === '' || $value === null) {
                 continue;
             }
 

@@ -37,7 +37,7 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
         // Handle array format: searches[name]=john&searches[email]=example
         if (isset($queryData[$searchParameter]) && is_array($queryData[$searchParameter])) {
             foreach ($queryData[$searchParameter] as $column => $value) {
-                if ($value === '') {
+                if (! is_string($column) || $value === '') {
                     continue;
                 }
                 $searches[$column] = Search::make($column, (string) $value);

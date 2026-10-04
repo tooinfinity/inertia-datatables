@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Workbench\Database\Factories\UserFactory;
 
-#[Fillable(['name', 'email', 'password', 'status'])]
+#[Fillable(['name', 'email', 'password', 'status', 'role', 'code', 'is_admin', 'secret'])]
 #[Hidden(['password', 'remember_token'])]
 final class User extends Authenticatable
 {
