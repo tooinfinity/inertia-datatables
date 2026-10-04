@@ -1,26 +1,14 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\Column\:\:jsonSerialize\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Column.php
-
-		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\DataTable\:\:__construct\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
-			identifier: missingType.generics
+			message: '#^Method TooInfinity\\InertiaDataTables\\DataTable\:\:handle\(\) should return TooInfinity\\InertiaDataTables\\DataTableResult\<TModel of Illuminate\\Database\\Eloquent\\Model\> but returns TooInfinity\\InertiaDataTables\\DataTableResult\<Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
 			count: 1
 			path: src/DataTable.php
 
 		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\DataTable\:\:handle\(\) return type with generic class TooInfinity\\InertiaDataTables\\DataTableResult does not specify its types\: T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/DataTable.php
-
-		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\DataTable\:\:query\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
-			identifier: missingType.generics
+			message: '#^Parameter \#1 \$query of method TooInfinity\\InertiaDataTables\\Processing\\QueryProcessor\<Illuminate\\Database\\Eloquent\\Model\>\:\:process\(\) expects Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Query\\Builder, Illuminate\\Database\\Eloquent\\Builder\<TModel of Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Query\\Builder given\.$#'
+			identifier: argument.type
 			count: 1
 			path: src/DataTable.php
 
@@ -31,32 +19,26 @@ parameters:
 			path: src/DataTableRequest.php
 
 		-
+			message: '#^Method TooInfinity\\InertiaDataTables\\InertiaDataTables\:\:query\(\) should return TooInfinity\\InertiaDataTables\\DataTable\<TModel of Illuminate\\Database\\Eloquent\\Model\> but returns TooInfinity\\InertiaDataTables\\DataTable\<Illuminate\\Database\\Eloquent\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/InertiaDataTables.php
+
+		-
+			message: '#^Parameter \#1 \$query of static method TooInfinity\\InertiaDataTables\\DataTable\<Illuminate\\Database\\Eloquent\\Model\>\:\:query\(\) expects Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Query\\Builder, Illuminate\\Database\\Eloquent\\Builder\<TModel of Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Query\\Builder given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/InertiaDataTables.php
+
+		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
 			count: 1
 			path: src/Processing/QueryProcessor.php
 
 		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\DataTableRequest\:\:jsonSerialize\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/DataTableRequest.php
-
-		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\Filtering\\Filter\:\:jsonSerialize\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Filtering/Filter.php
-
-		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\InertiaDataTables\:\:query\(\) has parameter \$query with generic class Illuminate\\Database\\Eloquent\\Builder but does not specify its types\: TModel$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/InertiaDataTables.php
-
-		-
-			message: '#^Method TooInfinity\\InertiaDataTables\\Processing\\QueryProcessor\:\:process\(\) return type with generic class TooInfinity\\InertiaDataTables\\DataTableResult does not specify its types\: T$#'
-			identifier: missingType.generics
+			message: '#^Method TooInfinity\\InertiaDataTables\\Processing\\QueryProcessor\:\:process\(\) should return TooInfinity\\InertiaDataTables\\DataTableResult\<TModel of Illuminate\\Database\\Eloquent\\Model\> but returns TooInfinity\\InertiaDataTables\\DataTableResult\<mixed\>\.$#'
+			identifier: return.type
 			count: 1
 			path: src/Processing/QueryProcessor.php
 
@@ -77,21 +59,3 @@ parameters:
 			identifier: cast.string
 			count: 2
 			path: src/Searching/SearchCollection.php
-
-		-
-			message: '#^Class TooInfinity\\InertiaDataTables\\Filtering\\FilterCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Filtering/FilterCollection.php
-
-		-
-			message: '#^Class TooInfinity\\InertiaDataTables\\Searching\\SearchCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Searching/SearchCollection.php
-
-		-
-			message: '#^Class TooInfinity\\InertiaDataTables\\Sorting\\SortCollection implements generic interface IteratorAggregate but does not specify its types\: TKey, TValue$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Sorting/SortCollection.php

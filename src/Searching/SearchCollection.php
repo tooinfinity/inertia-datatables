@@ -9,6 +9,9 @@ use Countable;
 use Illuminate\Http\Request;
 use IteratorAggregate;
 
+/**
+ * @implements IteratorAggregate<int, Search>
+ */
 final readonly class SearchCollection implements Countable, IteratorAggregate
 {
     /**
@@ -29,32 +32,23 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
     public static function fromRequest(Request $request, string $searchParameter): self
     {
         $searches = [];
-
-        // Handle both formats:
-        // 1. Bracket notation in query string: searches[name]=john (parsed as array by PHP)
-        // 2. Manual setting: search[name]=john (preserved as key by Laravel)
-
         $queryData = $request->query();
 
-        // First check if the parameter is an array (PHP parsed format)
+        // Handle array format: searches[name]=john&searches[email]=example
         if (isset($queryData[$searchParameter]) && is_array($queryData[$searchParameter])) {
             foreach ($queryData[$searchParameter] as $column => $value) {
                 if ($value === '') {
                     continue;
                 }
-                $searches[] = Search::make($column, (string) $value);
+                $searches[$column] = Search::make($column, (string) $value);
             }
         }
 
-        // Also check for bracket notation in keys (manual format)
+        // Handle bracket notation in keys: search[name]=john
         $prefix = $searchParameter.'[';
 
         foreach ($queryData as $key => $value) {
-            if (! str_starts_with($key, $prefix)) {
-                continue;
-            }
-
-            if (! str_ends_with($key, ']')) {
+            if (! str_starts_with($key, $prefix) || ! str_ends_with($key, ']')) {
                 continue;
             }
 
@@ -64,10 +58,11 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
                 continue;
             }
 
-            $searches[] = Search::make($column, (string) $value);
+            // Use column as key to deduplicate (last occurrence wins)
+            $searches[$column] = Search::make($column, (string) $value);
         }
 
-        return new self($searches);
+        return new self(array_values($searches));
     }
 
     /**
@@ -123,5 +118,13 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
     public function toArray(): array
     {
         return array_map(fn (Search $search): array => $search->toArray(), $this->searches);
+    }
+
+    /**
+     * @return array<int, array{column: string, value: string}>
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

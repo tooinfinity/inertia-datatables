@@ -27,6 +27,9 @@ final readonly class Filter
         ];
     }
 
+    /**
+     * @return array{column: string, value: mixed}
+     */
     public function jsonSerialize(): array
     {
         return $this->toArray();

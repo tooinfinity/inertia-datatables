@@ -29,16 +29,7 @@ afterEach(function (): void {
 function makeTestRoute(string $uri, array $columns, ?string $defaultSortColumn = null, string $defaultSortDirection = 'desc'): void
 {
     Route::get($uri, function (Request $request) use ($columns, $defaultSortColumn, $defaultSortDirection) {
-        $queryConfig = config('inertia-datatables.query', [
-            'page' => 'page',
-            'per_page' => 'per_page',
-            'search' => 'search',
-            'searches' => 'searches',
-            'sort' => 'sort',
-            'filters' => 'filters',
-        ]);
-
-        $dataTableRequest = DataTableRequest::fromRequest($request, $queryConfig);
+        $dataTableRequest = DataTableRequest::fromRequest($request);
 
         $table = DataTable::query(User::query())
             ->columns($columns);
@@ -56,16 +47,7 @@ function makeTestRoute(string $uri, array $columns, ?string $defaultSortColumn =
 function makeQbTestRoute(string $uri, array $columns, ?string $defaultSortColumn = null, string $defaultSortDirection = 'desc'): void
 {
     Route::get($uri, function (Request $request) use ($columns, $defaultSortColumn, $defaultSortDirection) {
-        $queryConfig = config('inertia-datatables.query', [
-            'page' => 'page',
-            'per_page' => 'per_page',
-            'search' => 'search',
-            'searches' => 'searches',
-            'sort' => 'sort',
-            'filters' => 'filters',
-        ]);
-
-        $dataTableRequest = DataTableRequest::fromRequest($request, $queryConfig);
+        $dataTableRequest = DataTableRequest::fromRequest($request);
 
         $table = DataTable::query(DB::table('users'))
             ->columns($columns);

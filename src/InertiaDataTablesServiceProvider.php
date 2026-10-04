@@ -14,19 +14,7 @@ final class InertiaDataTablesServiceProvider extends ServiceProvider
 
         $this->app->singleton(InertiaDataTables::class);
 
-        $this->app->bind(DataTableRequest::class, function (): DataTableRequest {
-            /** @var array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string} $queryConfig */
-            $queryConfig = config('inertia-datatables.query', [
-                'page' => 'page',
-                'per_page' => 'per_page',
-                'search' => 'search',
-                'searches' => 'searches',
-                'sort' => 'sort',
-                'filters' => 'filters',
-            ]);
-
-            return DataTableRequest::fromRequest(request(), $queryConfig);
-        });
+        $this->app->bind(DataTableRequest::class, fn (): DataTableRequest => DataTableRequest::fromRequest(request()));
     }
 
     public function boot(): void

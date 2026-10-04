@@ -13,7 +13,6 @@ use TooInfinity\InertiaDataTables\DataTableResult;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
-use TooInfinity\InertiaDataTables\Query\ColumnResolver;
 
 /**
  * @template TModel of Model
@@ -29,6 +28,7 @@ final readonly class QueryProcessor
 
     /**
      * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return DataTableResult<TModel>
      */
     public function process(
         EloquentBuilder|QueryBuilder $query,
@@ -80,9 +80,7 @@ final readonly class QueryProcessor
                 throw InvalidFilterException::notAllowed($filter->column);
             }
 
-            $resolvedColumn = ColumnResolver::resolve($column->name);
-
-            $query = $this->applyFilter($query, $resolvedColumn, $filter->value);
+            $query = $this->applyFilter($query, $column->name, $filter->value);
         }
 
         return $query;
@@ -135,8 +133,7 @@ final readonly class QueryProcessor
 
         return $query->where(function (EloquentBuilder|QueryBuilder $q) use ($search, $searchableColumns): void {
             foreach ($searchableColumns as $column) {
-                $resolvedColumn = ColumnResolver::resolve($column->name);
-                $q->orWhere($resolvedColumn, 'LIKE', "%{$search}%");
+                $q->orWhere($column->name, 'LIKE', "%{$search}%");
             }
         });
     }
@@ -154,9 +151,7 @@ final readonly class QueryProcessor
                 throw InvalidColumnException::notAllowed($search->column, 'search');
             }
 
-            $resolvedColumn = ColumnResolver::resolve($column->name);
-
-            $query->where($resolvedColumn, 'LIKE', "%{$search->value}%");
+            $query->where($column->name, 'LIKE', "%{$search->value}%");
         }
 
         return $query;
@@ -187,9 +182,7 @@ final readonly class QueryProcessor
                     throw InvalidSortException::invalidDirection($defaultSortDirection);
                 }
 
-                $resolvedColumn = ColumnResolver::resolve($defaultColumn->name);
-
-                return $query->orderBy($resolvedColumn, $normalizedDirection);
+                return $query->orderBy($defaultColumn->name, $normalizedDirection);
             }
 
             return $query;
@@ -202,9 +195,7 @@ final readonly class QueryProcessor
                 throw InvalidSortException::notAllowed($sort->column);
             }
 
-            $resolvedColumn = ColumnResolver::resolve($column->name);
-
-            $query->orderBy($resolvedColumn, $sort->direction);
+            $query->orderBy($column->name, $sort->direction);
         }
 
         return $query;

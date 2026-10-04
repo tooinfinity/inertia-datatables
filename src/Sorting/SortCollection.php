@@ -8,6 +8,9 @@ use ArrayIterator;
 use Countable;
 use IteratorAggregate;
 
+/**
+ * @implements IteratorAggregate<int, Sort>
+ */
 final readonly class SortCollection implements Countable, IteratorAggregate
 {
     /**
@@ -110,5 +113,13 @@ final readonly class SortCollection implements Countable, IteratorAggregate
             fn (Sort $sort): string => ($sort->isDescending() ? '-' : '').$sort->column,
             $this->sorts,
         ));
+    }
+
+    /**
+     * @return array<int, array{column: string, direction: string}>
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

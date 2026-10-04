@@ -9,6 +9,9 @@ use Countable;
 use Illuminate\Http\Request;
 use IteratorAggregate;
 
+/**
+ * @implements IteratorAggregate<int, Filter>
+ */
 final readonly class FilterCollection implements Countable, IteratorAggregate
 {
     /**
@@ -106,5 +109,13 @@ final readonly class FilterCollection implements Countable, IteratorAggregate
     public function toArray(): array
     {
         return array_map(fn (Filter $filter): array => $filter->toArray(), $this->filters);
+    }
+
+    /**
+     * @return array<int, array{column: string, value: mixed}>
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

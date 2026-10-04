@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace TooInfinity\InertiaDataTables;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use TooInfinity\InertiaDataTables\Processing\QueryProcessor;
 
+/**
+ * @template TModel of Model
+ */
 final readonly class DataTable
 {
     /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
      * @param  array<int, Column>  $columns
      */
     private function __construct(
@@ -21,6 +26,10 @@ final readonly class DataTable
         private ?int $perPage = null,
     ) {}
 
+    /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return self<TModel>
+     */
     public static function query(EloquentBuilder|QueryBuilder $query): self
     {
         return new self($query);
@@ -28,6 +37,7 @@ final readonly class DataTable
 
     /**
      * @param  array<int, Column>  $columns
+     * @return self<TModel>
      */
     public function columns(array $columns): self
     {
@@ -40,6 +50,9 @@ final readonly class DataTable
         );
     }
 
+    /**
+     * @return self<TModel>
+     */
     public function defaultSort(string $column, string $direction = 'desc'): self
     {
         return new self(
@@ -51,6 +64,9 @@ final readonly class DataTable
         );
     }
 
+    /**
+     * @return self<TModel>
+     */
     public function perPage(int $perPage): self
     {
         return new self(
@@ -62,6 +78,9 @@ final readonly class DataTable
         );
     }
 
+    /**
+     * @return DataTableResult<TModel>
+     */
     public function handle(?DataTableRequest $request = null): DataTableResult
     {
         $request ??= app(DataTableRequest::class);

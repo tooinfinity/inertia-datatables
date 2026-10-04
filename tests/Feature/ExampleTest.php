@@ -54,6 +54,8 @@ it('creates a DataTable from query', function (): void {
         'email' => 'john@example.com',
     ]);
 
+    $request = DataTableRequest::fromRequest(request());
+
     $table = DataTable::query(User::query())
         ->columns([
             Column::make('name')->searchable()->sortable(),
@@ -62,7 +64,7 @@ it('creates a DataTable from query', function (): void {
             Column::make('created_at')->sortable(),
         ])
         ->defaultSort('created_at', 'desc')
-        ->handle();
+        ->handle($request);
 
     expect($table)->toBeInstanceOf(DataTableResult::class)
         ->and($table->paginator->total())->toBe(1)

@@ -98,6 +98,9 @@ final readonly class Column
         ];
     }
 
+    /**
+     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}
+     */
     public function jsonSerialize(): array
     {
         return $this->toArray();
