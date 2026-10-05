@@ -47,7 +47,8 @@
     }
   ],
   "dependencies": [
-    "@tanstack/react-table"
+    "@tanstack/react-table",
+    "@inertiajs/react"
   ],
   "registryDependencies": [
     "button",

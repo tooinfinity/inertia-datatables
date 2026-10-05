@@ -1,6 +1,5 @@
 import { forwardRef } from 'react';
 import type { TableHTMLAttributes, HTMLAttributes } from 'react';
-
 export const Table = forwardRef<HTMLTableElement, TableHTMLAttributes<HTMLTableElement>>(({ children, ...props }, ref) => <table ref={ref} {...props}>{children}</table>);
 export const TableHeader = ({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) => <thead {...props}>{children}</thead>;
 export const TableBody = ({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) => <tbody {...props}>{children}</tbody>;

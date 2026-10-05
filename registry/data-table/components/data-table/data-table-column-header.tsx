@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { type Column, type Header, type ColumnMeta, flexRender } from '@tanstack/react-table';
-import { Input } from '@ui/input';
+import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,8 +10,8 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
     DropdownMenuLabel,
-} from '@ui/dropdown-menu';
-import { Checkbox } from '@ui/checkbox';
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface DataTableColumnMeta extends ColumnMeta<unknown, unknown> {
     searchable?: boolean;

@@ -19,8 +19,8 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["registry/data-table/components/*"],
-      "@ui/*": ["registry/data-table/components/ui/*"]
+      "@/*": ["./*"],
+      "@/components/ui/*": ["registry/data-table/components/ui/*"]
     }
   },
   "include": [
