@@ -20,6 +20,7 @@ interface DataTableColumnHeaderProps<TData extends Record<string, unknown>> {
     column: Column<TData, unknown>;
     onColumnSearchChange: (_column: string, _value: string) => void;
     onFilterChange: (_column: string, _value: unknown) => void;
+    columnSearchValue: string;
 }
 
 export function DataTableColumnHeader<TData extends Record<string, unknown>>({
@@ -27,6 +28,7 @@ export function DataTableColumnHeader<TData extends Record<string, unknown>>({
     column,
     onColumnSearchChange,
     onFilterChange,
+    columnSearchValue,
 }: DataTableColumnHeaderProps<TData>) {
     const canSort = column.columnDef.enableSorting;
     const meta = column.columnDef.meta as DataTableColumnMeta | undefined;
@@ -63,7 +65,7 @@ export function DataTableColumnHeader<TData extends Record<string, unknown>>({
                         <Input
                             placeholder={`Search ${column.columnDef.header}...`}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
-                            value={((column.getFilterValue() as string) || '')}
+                            value={columnSearchValue}
                         />
                     </div>
                 )}

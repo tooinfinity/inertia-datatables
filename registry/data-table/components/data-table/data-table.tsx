@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { type ReactNode, forwardRef } from 'react';
 import { flexRender } from '@tanstack/react-table';
 import { type DataTableResponse } from './types';
 import {
@@ -24,77 +24,78 @@ interface DataTableProps<TData extends Record<string, unknown>> {
     dataPropName?: string;
 }
 
-export function DataTable<TData extends Record<string, unknown>>(
-    { data, children, dataPropName = 'data', ...props }: DataTableProps<TData>,
-    ref: React.Ref<HTMLTableElement> | null
-) {
-    const {
-        table,
-        handlePageChange,
-        handlePerPageChange,
-        handleSearchChange,
-        handleColumnSearchChange,
-        handleFilterChange,
-        state,
-        perPageOptions,
-    } = useDataTable<TData>({ data, dataPropName });
+export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<string, unknown>>>(
+    ({ data, children, dataPropName = 'data', ...props }, ref) => {
+        const {
+            table,
+            handlePageChange,
+            handlePerPageChange,
+            handleSearchChange,
+            handleColumnSearchChange,
+            handleFilterChange,
+            state,
+            perPageOptions,
+            columnSearches,
+        } = useDataTable<Record<string, unknown>>({ data, dataPropName });
 
-    return (
-        <div className="space-y-4">
-            <DataTableToolbar
-                search={state.search}
-                onSearchChange={handleSearchChange}
-                perPage={state.perPage}
-                onPerPageChange={handlePerPageChange}
-                perPageOptions={perPageOptions}
-            />
-            <div className="rounded-md border">
-                <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
-                    <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => (
-                                    <DataTableColumnHeader
-                                        key={header.id}
-                                        header={header}
-                                        column={header.column}
-                                        onColumnSearchChange={handleColumnSearchChange}
-                                        onFilterChange={handleFilterChange}
-                                    />
-                                ))}
-                            </TableRow>
-                        ))}
-                    </TableHeader>
-                    <TableBody>
-                        {table.getRowModel().rows.length === 0 ? (
-                            <DataTableEmpty columns={table.getAllLeafColumns().length} />
-                        ) : (
-                            table.getRowModel().rows.map((row) => (
-                                <TableRow key={row.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                                    {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id} className="p-4 align-middle">
-                                            {flexRender(cell.column.columnDef.cell!, cell.getContext())}
-                                        </TableCell>
+        return (
+            <div className="space-y-4">
+                <DataTableToolbar
+                    search={state.search}
+                    onSearchChange={handleSearchChange}
+                    perPage={state.perPage}
+                    onPerPageChange={handlePerPageChange}
+                    perPageOptions={perPageOptions}
+                />
+                <div className="rounded-md border">
+                    <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
+                        <TableHeader>
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => (
+                                        <DataTableColumnHeader
+                                            key={header.id}
+                                            header={header}
+                                            column={header.column}
+                                            onColumnSearchChange={handleColumnSearchChange}
+                                            onFilterChange={handleFilterChange}
+                                            columnSearchValue={columnSearches[header.column.id] ?? ''}
+                                        />
                                     ))}
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                    <TableFooter>
-                        <DataTablePagination
-                            currentPage={state.page}
-                            perPage={state.perPage}
-                            onPageChange={handlePageChange}
-                            totalPages={data.meta.last_page}
-                            totalItems={data.meta.total}
-                        />
-                    </TableFooter>
-                </Table>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {table.getRowModel().rows.length === 0 ? (
+                                <DataTableEmpty columns={table.getAllLeafColumns().length} />
+                            ) : (
+                                table.getRowModel().rows.map((row) => (
+                                    <TableRow key={row.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                                        {row.getVisibleCells().map((cell) => (
+                                            <TableCell key={cell.id} className="p-4 align-middle">
+                                                {flexRender(cell.column.columnDef.cell!, cell.getContext())}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                        <TableFooter>
+                            <DataTablePagination
+                                currentPage={state.page}
+                                perPage={state.perPage}
+                                onPageChange={handlePageChange}
+                                totalPages={data.meta.last_page}
+                                totalItems={data.meta.total}
+                            />
+                        </TableFooter>
+                    </Table>
+                </div>
+                <DataTableColumnVisibility table={table} />
+                {children}
             </div>
-            <DataTableColumnVisibility table={table} />
-            {children}
-        </div>
-    );
-}
+        );
+    }
+);
 
 DataTable.displayName = 'DataTable';

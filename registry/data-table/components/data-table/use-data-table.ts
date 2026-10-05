@@ -11,6 +11,7 @@ import {
     type ColumnFiltersState,
     type ColumnDef,
     type FilterFnOption,
+    type VisibilityState,
 } from '@tanstack/react-table';
 import { router } from '@inertiajs/react';
 import type {
@@ -19,6 +20,8 @@ import type {
     DataTableColumn,
 } from './types';
 
+type ColumnSearchesState = Record<string, string>;
+
 export function useDataTable<TData extends Record<string, unknown>>({
     data: initialData,
     dataPropName = 'data',
@@ -26,6 +29,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
     const mountedRef = useRef(false);
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const sortingRef = useRef<SortingState>([]);
+    const pendingVisitRef = useRef<Record<string, boolean>>({});
 
     const [state, setState] = useState<DataTableState>({
         page: initialData.query.page,
@@ -105,7 +109,9 @@ export function useDataTable<TData extends Record<string, unknown>>({
         Object.entries(state.filters).map(([key, value]) => ({ id: key, value })) as ColumnFiltersState
     );
 
-    const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(initialColumnVisibility);
+    const [columnSearches, setColumnSearches] = useState<ColumnSearchesState>(state.searches);
+
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
 
     useEffect(() => {
         sortingRef.current = sorting;
@@ -135,8 +141,13 @@ export function useDataTable<TData extends Record<string, unknown>>({
             if (debounceTimersRef.current[key]) {
                 clearTimeout(debounceTimersRef.current[key]);
             }
+            if (pendingVisitRef.current[key]) {
+                return;
+            }
+            pendingVisitRef.current[key] = true;
             debounceTimersRef.current[key] = setTimeout(() => {
                 visitWithParams(params);
+                pendingVisitRef.current[key] = false;
             }, debounceMs);
         },
         [visitWithParams, debounceMs]
@@ -162,6 +173,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         (pageIndex: number) => {
             const page = pageIndex + 1;
             setState((prev) => ({ ...prev, page }));
+            setPagination((prev) => ({ ...prev, pageIndex }));
             visitWithParams({ page });
         },
         [visitWithParams]
@@ -170,6 +182,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
     const handlePerPageChange = useCallback(
         (pageSize: number) => {
             setState((prev) => ({ ...prev, perPage: pageSize, page: 1 }));
+            setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
             visitWithParams({ per_page: pageSize, page: 1 });
         },
         [visitWithParams]
@@ -179,6 +192,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         (value: string) => {
             setGlobalFilter(value);
             setState((prev) => ({ ...prev, search: value, page: 1 }));
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
             debouncedVisit('search', { search: value, page: 1 });
         },
         [debouncedVisit]
@@ -186,35 +200,54 @@ export function useDataTable<TData extends Record<string, unknown>>({
 
     const handleColumnSearchChange = useCallback(
         (column: string, value: string) => {
-            setColumnFilters((prev) => {
-                const newFilters = new Map(prev.map((f) => [f.id, f.value]));
+            setColumnSearches((prev) => {
+                const next = { ...prev };
                 if (value) {
-                    newFilters.set(column, value);
+                    next[column] = value;
                 } else {
-                    newFilters.delete(column);
+                    delete next[column];
                 }
-                return Array.from(newFilters.entries()).map(([id, value]) => ({ id, value })) as ColumnFiltersState;
+                return next;
             });
             setState((prev) => ({
                 ...prev,
                 searches: { ...prev.searches, [column]: value },
                 page: 1,
             }));
-            debouncedVisit(`searches.${column}`, { [`searches[${column}]`]: value, page: 1 });
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+            debouncedVisit(`searches.${column}`, { [`searches[${column}]`]: value || undefined, page: 1 });
         },
         [debouncedVisit]
     );
 
     const handleFilterChange = useCallback(
         (column: string, value: unknown) => {
+            setColumnFilters((prev) => {
+                const newFilters = new Map(prev.map((f) => [f.id, f.value]));
+                if (value === '' || value === null || value === undefined) {
+                    newFilters.delete(column);
+                } else {
+                    newFilters.set(column, value);
+                }
+                return Array.from(newFilters.entries()).map(([id, value]) => ({ id, value })) as ColumnFiltersState;
+            });
             setState((prev) => ({
                 ...prev,
                 filters: { ...prev.filters, [column]: value },
                 page: 1,
             }));
-            visitWithParams({ [`filters[${column}]`]: value, page: 1 });
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+            visitWithParams({ [`filters[${column}]`]: value || undefined, page: 1 });
         },
         [visitWithParams]
+    );
+
+    const handleColumnVisibilityChange = useCallback(
+        (updater: VisibilityState | ((_old: VisibilityState) => VisibilityState)) => {
+            const newVisibility = typeof updater === 'function' ? updater(columnVisibility) : updater;
+            setColumnVisibility(newVisibility);
+        },
+        [columnVisibility]
     );
 
     useEffect(() => {
@@ -249,6 +282,9 @@ export function useDataTable<TData extends Record<string, unknown>>({
                 Object.fromEntries(initialData.query.filters.map((f) => [f.column, f.value]))
             ).map(([id, value]) => ({ id, value })) as ColumnFiltersState
         );
+        setColumnSearches(
+            Object.fromEntries(initialData.query.searches.map((s) => [s.column, s.value]))
+        );
     }, [initialData.query]);
 
     if (!mountedRef.current) {
@@ -269,7 +305,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         onPaginationChange: setPagination,
         onGlobalFilterChange: setGlobalFilter,
         onColumnFiltersChange: setColumnFilters,
-        onColumnVisibilityChange: setColumnVisibility,
+        onColumnVisibilityChange: handleColumnVisibilityChange,
         getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualSorting: true,
@@ -288,5 +324,6 @@ export function useDataTable<TData extends Record<string, unknown>>({
         handleColumnSearchChange,
         handleFilterChange,
         perPageOptions,
+        columnSearches,
     };
 }
