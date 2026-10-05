@@ -49,22 +49,23 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
                 />
                 <div className="rounded-md border">
                     <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
-                        <TableHeader>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => (
-                                        <DataTableColumnHeader
-                                            key={header.id}
-                                            header={header}
-                                            column={header.column}
-                                            onColumnSearchChange={handleColumnSearchChange}
-                                            onFilterChange={handleFilterChange}
-                                            columnSearchValue={columnSearches[header.column.id] ?? ''}
-                                        />
-                                    ))}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
+<TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                            <DataTableColumnHeader
+                                key={header.id}
+                                header={header}
+                                column={header.column}
+                                onColumnSearchChange={handleColumnSearchChange}
+                                onFilterChange={handleFilterChange}
+                                columnSearchValue={columnSearches[header.column.id] ?? ''}
+                                currentFilterValue={state.filters[header.column.id]}
+                            />
+                        ))}
+                    </TableRow>
+                ))}
+            </TableHeader>
                         <TableBody>
                             {table.getRowModel().rows.length === 0 ? (
                                 <DataTableEmpty columns={table.getAllLeafColumns().length} />

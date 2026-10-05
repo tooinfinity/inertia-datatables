@@ -86,6 +86,8 @@ export function useDataTable<TData extends Record<string, unknown>>({
                 column.meta = {
                     ...column.meta,
                     filterable: true,
+                    filter_type: col.filter_type,
+                    filter_options: col.filter_options,
                 };
                 column.filterFn = 'includes' as FilterFnOption<TData>;
             }
@@ -237,7 +239,8 @@ export function useDataTable<TData extends Record<string, unknown>>({
                 page: 1,
             }));
             setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-            visitWithParams({ [`filters[${column}]`]: value || undefined, page: 1 });
+            const paramValue = value === '' || value === null || value === undefined ? undefined : value;
+            visitWithParams({ [`filters[${column}]`]: paramValue, page: 1 });
         },
         [visitWithParams]
     );

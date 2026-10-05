@@ -313,4 +313,236 @@ describe('useDataTable', () => {
             expect.objectContaining({ only: ['users'] })
         );
     });
+
+    it('handles filter change with boolean value', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('is_admin', true);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bis_admin%5D=true&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('handles filter change with false boolean value', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('is_admin', false);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bis_admin%5D=false&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('handles multiple filters', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: 'active' }],
+            },
+        });
+
+        // Set initial URL to match initial data
+        window.location.search = '?filters%5Bstatus%5D=active';
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('is_admin', true);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D=active&filters%5Bis_admin%5D=true&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('updates existing filter value', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: 'active' }],
+            },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('status', 'inactive');
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D=inactive&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('clears filter when value is null', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: 'active' }],
+            },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('status', null);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('clears filter when value is undefined', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: 'active' }],
+            },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('status', undefined);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('resets page to 1 when filter changes', () => {
+        const initialData = createMockData({
+            query: {
+                page: 3,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [],
+            },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('status', 'active');
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D=active&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('initializes state with multiple filters', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [
+                    { column: 'status', value: 'active' },
+                    { column: 'is_admin', value: true },
+                    { column: 'role', value: 'admin' },
+                ],
+            },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        expect(capturedResult).not.toBeNull();
+        expect(capturedResult!.state.filters).toEqual({
+            status: 'active',
+            is_admin: true,
+            role: 'admin',
+        });
+    });
+
+    it('handles filter with special characters in value', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        capturedResult!.handleFilterChange('name', 'john*doe');
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bname%5D=john*doe&page=1',
+            expect.any(Object)
+        );
+    });
 });

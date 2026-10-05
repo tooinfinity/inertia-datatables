@@ -142,9 +142,22 @@ Column::make('name');                              // Basic column
 Column::make('name')->label('Full Name');          // Custom label
 Column::make('email')->searchable();               // Enable global search
 Column::make('email')->sortable();                 // Enable sorting
-Column::make('status')->filterable();              // Enable filtering
+Column::make('status')->filterable();              // Enable filtering (text input)
+Column::make('status')->filterable()->filterType('select')->filterOptions([
+    ['value' => 'active', 'label' => 'Active'],
+    ['value' => 'inactive', 'label' => 'Inactive'],
+]);                                                // Select dropdown filter
+Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
 ```
+
+### Filter Types
+
+| Type | Description | UI Control |
+|------|-------------|------------|
+| `text` (default) | Free-text exact match | Text input |
+| `select` | Predefined options | Checkbox list |
+| `boolean` | True/false values | Yes/No checkboxes |
 
 ### Request Parameters
 
@@ -193,6 +206,8 @@ interface DataTableColumn {
     searchable: boolean;
     filterable: boolean;
     hidden: boolean;
+    filter_type?: 'text' | 'select' | 'boolean' | null;
+    filter_options?: Array<{ value: string; label: string }>;
 }
 
 interface DataTableMeta {

@@ -89,6 +89,8 @@ it('converts column to array', function (): void {
         'sortable' => true,
         'filterable' => false,
         'hidden' => false,
+        'filter_type' => null,
+        'filter_options' => [],
     ]);
 });
 

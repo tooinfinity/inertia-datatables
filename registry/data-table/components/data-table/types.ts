@@ -7,6 +7,8 @@ export interface DataTableColumn {
     searchable: boolean;
     filterable: boolean;
     hidden: boolean;
+    filter_type?: 'text' | 'select' | 'boolean' | null;
+    filter_options?: Array<{ value: string; label: string }>;
 }
 
 export interface DataTableMeta {

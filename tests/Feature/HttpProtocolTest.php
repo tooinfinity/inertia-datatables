@@ -193,7 +193,7 @@ it('handles combined query parameters', function (): void {
     ], 'created_at', 'desc');
 
     for ($i = 0; $i < 30; $i++) {
-        createUser(['status' => $i % 2 === 0 ? 'active' : 'inactive']);
+        createUser(['name' => "User {$i}", 'status' => $i % 2 === 0 ? 'active' : 'inactive', 'email' => "user{$i}@example.com"]);
     }
     createUser(['name' => 'John Active', 'status' => 'active', 'email' => 'john@active.com']);
     createUser(['name' => 'John Inactive', 'status' => 'inactive', 'email' => 'john@inactive.com']);
