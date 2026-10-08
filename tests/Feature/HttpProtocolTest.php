@@ -279,10 +279,10 @@ it('works with QueryBuilder', function (): void {
     ], 'created_at', 'desc');
 
     for ($i = 0; $i < 10; $i++) {
-        createUser();
+        createUser(['name' => "User {$i}"]);
     }
 
-    $response = $this->get('/test-users-qb?search=john');
+    $response = $this->get('/test-users-qb?search=xyz123');
 
     $response->assertOk();
     expect($response->json('meta.total'))->toBe(0);

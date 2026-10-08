@@ -259,6 +259,176 @@ The `dataPropName` option specifies which Inertia page prop contains the DataTab
 
 The package implements a strict column allow-list. Only columns explicitly defined with `->searchable()`, `->sortable()`, or `->filterable()` can be used in requests. Malicious requests like `sort=users.password` or `filters[email]=admin@example.com` are rejected with clear exceptions.
 
+## Query/Response Contract
+
+### Request Parameters (Client → Server)
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | `integer` | Current page number (min: 1) |
+| `per_page` | `integer` | Items per page (min: 1, max: `max_per_page` config) |
+| `search` | `string` | Global search across all searchable columns |
+| `sort` | `string` | Comma-separated sort columns. Prefix with `-` for descending (e.g., `name,-created_at`) |
+| `searches` | `object` | Column-specific search (e.g., `searches[name]=john&searches[email]=example`) |
+| `filters` | `object` | Column filters (e.g., `filters[status]=active&filters[is_admin]=true`) |
+
+#### Filter Value Semantics
+
+| Value | Behavior |
+|-------|----------|
+| `"null"` / `"NULL"` | `WHERE column IS NULL` |
+| `"not_null"` / `"NOT_NULL"` | `WHERE column IS NOT NULL` |
+| `"*value"` | `LIKE '%value'` (wildcard prefix) |
+| `"value*"` | `LIKE 'value%'` (wildcard suffix) |
+| `"*value*"` | `LIKE '%value%'` (wildcard both sides) |
+| `"true"` / `"false"` | Boolean exact match |
+| Other strings | Exact match `WHERE column = value` |
+
+### Response Structure (Server → Client)
+
+```json
+{
+  "data": [],
+  "meta": {
+    "current_page": 1,
+    "per_page": 25,
+    "from": 1,
+    "to": 25,
+    "total": 100,
+    "last_page": 4
+  },
+  "query": {
+    "page": 1,
+    "per_page": 25,
+    "search": "",
+    "sort": [],
+    "searches": [],
+    "filters": []
+  },
+  "columns": [
+    {
+      "name": "name",
+      "label": "Name",
+      "searchable": true,
+      "sortable": true,
+      "filterable": false,
+      "hidden": false,
+      "filter_type": null,
+      "filter_options": []
+    }
+  ],
+  "config": {
+    "debounce": 300,
+    "per_page_options": [10, 25, 50, 100]
+  }
+}
+```
+
+### TypeScript Types
+
+```typescript
+interface DataTableColumn {
+    name: string;
+    label: string;
+    sortable: boolean;
+    searchable: boolean;
+    filterable: boolean;
+    hidden: boolean;
+    filter_type?: 'text' | 'select' | 'boolean' | null;
+    filter_options?: Array<{ value: string; label: string }>;
+}
+
+interface DataTableMeta {
+    current_page: number;
+    per_page: number;
+    from: number | null;
+    to: number | null;
+    total: number;
+    last_page: number;
+}
+
+interface DataTableQuery {
+    page: number;
+    per_page: number;
+    search: string;
+    sort: Array<{ column: string; direction: string }>;
+    searches: Array<{ column: string; value: string }>;
+    filters: Array<{ column: string; value: unknown }>;
+}
+
+interface DataTableConfig {
+    debounce: number;
+    per_page_options: number[];
+}
+
+interface DataTableResponse<TData = unknown> {
+    data: TData[];
+    meta: DataTableMeta;
+    query: DataTableQuery;
+    columns: DataTableColumn[];
+    config: DataTableConfig;
+}
+```
+
+## Optional: Reusable UsersDataTable Component
+
+For projects with multiple user tables, extract a reusable component:
+
+```tsx
+// components/data-table/users-data-table.tsx
+import { DataTable } from './data-table';
+
+interface User {
+    id: number;
+    name: string;
+    email: string;
+    status: string;
+    role: string;
+    is_admin: boolean;
+    created_at: string;
+}
+
+const columns = [
+    { name: 'name', label: 'Name', searchable: true, sortable: true },
+    { name: 'email', label: 'Email', searchable: true, sortable: true },
+    { name: 'status', label: 'Status', filterable: true, sortable: true },
+    { name: 'role', label: 'Role', filterable: true, sortable: true },
+    { name: 'is_admin', label: 'Admin', filterable: true, filter_type: 'boolean', sortable: true },
+    { name: 'created_at', label: 'Created', sortable: true },
+] as const;
+
+export function UsersDataTable({ users }: { users: DataTableResponse<User> }) {
+    return <DataTable data={users} dataPropName="users" />;
+}
+```
+
+```php
+// In your controller
+public function index()
+{
+    $users = DataTable::query(User::query())
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+            Column::make('status')->filterable()->sortable(),
+            Column::make('role')->filterable()->sortable(),
+            Column::make('is_admin')->filterable()->filterType('boolean')->sortable(),
+            Column::make('created_at')->sortable(),
+        ])
+        ->defaultSort('created_at', 'desc')
+        ->handle();
+
+    return inertia('Users/Index', ['users' => $users]);
+}
+```
+
+## Compatibility
+
+| Laravel | PHP | Testbench | Status |
+|---------|-----|-----------|--------|
+| 12.x | 8.4+ | 10.x | ✅ Supported |
+| 13.x | 8.4+ | 11.x | ✅ Supported |
+
 ## Testing
 
 ```bash

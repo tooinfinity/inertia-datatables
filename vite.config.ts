@@ -10,7 +10,6 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './registry/data-table/components'),
       '@ui': path.resolve(__dirname, './registry/data-table/components/ui'),
     },
   },

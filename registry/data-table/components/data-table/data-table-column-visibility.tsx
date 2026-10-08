@@ -2,13 +2,13 @@
 
 import React from 'react';
 import { type Table, type Column } from '@tanstack/react-table';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Checkbox } from '@ui/checkbox';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from '@ui/dropdown-menu';
 
 interface DataTableColumnVisibilityProps<TData extends Record<string, unknown>> {
     table: Table<TData>;

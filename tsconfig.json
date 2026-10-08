@@ -20,7 +20,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@/components/ui/*": ["registry/data-table/components/ui/*"]
+      "@/components/ui/*": ["registry/data-table/components/ui/*"],
+      "@ui/*": ["registry/data-table/components/ui/*"]
     }
   },
   "include": [
