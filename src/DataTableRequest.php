@@ -26,8 +26,12 @@ final readonly class DataTableRequest implements JsonSerializable
         $queryConfig ??= QueryConfig::fromConfig();
 
         $page = max(1, (int) $request->query($queryConfig->page, 1));
-        $defaultPerPage = (int) config('inertia-datatables.default_per_page', 25);
-        $maxPerPage = (int) config('inertia-datatables.max_per_page', 100);
+
+        /** @var int $defaultPerPage */
+        $defaultPerPage = config('inertia-datatables.default_per_page', 25);
+        /** @var int $maxPerPage */
+        $maxPerPage = config('inertia-datatables.max_per_page', 100);
+
         $perPage = max(1, min($maxPerPage, (int) $request->query($queryConfig->perPage, $defaultPerPage)));
 
         $searchQuery = $request->query($queryConfig->search, '');

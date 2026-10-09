@@ -50,15 +50,17 @@ final readonly class QueryProcessor
         /** @var array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}> $columnsArray */
         $columnsArray = array_map(fn (Column $column): array => $column->toArray(), $this->columns);
 
+        /** @var int $debounce */
         $debounce = config('inertia-datatables.search.debounce', 300);
+        /** @var array<int, int> $perPageOptions */
         $perPageOptions = config('inertia-datatables.per_page_options', [10, 25, 50, 100]);
 
-        /** @var array<int, int> $perPageOptions */
         $config = [
-            'debounce' => (int) $debounce,
+            'debounce' => $debounce,
             'per_page_options' => $perPageOptions,
         ];
 
+        /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator<array-key, TModel> $paginator */
         return new DataTableResult(
             paginator: $paginator,
             columns: $columnsArray,
@@ -182,6 +184,7 @@ final readonly class QueryProcessor
                     throw InvalidSortException::invalidDirection($defaultSortDirection);
                 }
 
+                /** @var 'asc'|'desc' $normalizedDirection */
                 return $query->orderBy($defaultColumn->name, $normalizedDirection);
             }
 
@@ -195,7 +198,13 @@ final readonly class QueryProcessor
                 throw InvalidSortException::notAllowed($sort->column);
             }
 
-            $query->orderBy($column->name, $sort->direction);
+            $direction = strtolower($sort->direction);
+            if (! in_array($direction, ['asc', 'desc'], true)) {
+                throw InvalidSortException::invalidDirection($sort->direction);
+            }
+
+            /** @var 'asc'|'desc' $direction */
+            $query->orderBy($column->name, $direction);
         }
 
         return $query;
@@ -237,6 +246,7 @@ final readonly class QueryProcessor
 
     private function resolvePerPage(DataTableRequest $request, ?int $override): int
     {
+        /** @var int $maxPerPage */
         $maxPerPage = config('inertia-datatables.max_per_page', 100);
         $perPage = $override ?? $request->perPage;
 

@@ -27,8 +27,10 @@ final readonly class DataTable
     ) {}
 
     /**
-     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
-     * @return self<TModel>
+     * @template TNewModel of Model
+     *
+     * @param  EloquentBuilder<TNewModel>|QueryBuilder  $query
+     * @return self<TNewModel>
      */
     public static function query(EloquentBuilder|QueryBuilder $query): self
     {
@@ -85,6 +87,9 @@ final readonly class DataTable
     {
         $request ??= app(DataTableRequest::class);
 
-        return new QueryProcessor($this->columns)->process($this->query, $request, $this->defaultSortColumn, $this->defaultSortDirection, $this->perPage);
+        /** @var QueryProcessor<TModel> $processor */
+        $processor = new QueryProcessor($this->columns);
+
+        return $processor->process($this->query, $request, $this->defaultSortColumn, $this->defaultSortDirection, $this->perPage);
     }
 }
