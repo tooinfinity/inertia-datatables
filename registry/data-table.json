@@ -1,7 +1,7 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry-item.json",
   "name": "data-table",
-  "type": "registry:component",
+  "type": "registry:block",
   "title": "Data Table",
   "description": "Server-side DataTable with TanStack Table v8, Inertia 3, and shadcn/ui",
   "files": [

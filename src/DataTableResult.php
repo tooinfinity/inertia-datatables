@@ -7,13 +7,13 @@ namespace TooInfinity\InertiaDataTables;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 /**
- * @template T
+ * @template T of object
  */
 final readonly class DataTableResult
 {
     /**
      * @param  LengthAwarePaginator<array-key, T>  $paginator
-     * @param  array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}>  $columns
+     * @param  array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}>  $columns
      * @param  array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>}  $query
      * @param  array{debounce: int, per_page_options: array<int, int>}  $config
      */
@@ -29,7 +29,7 @@ final readonly class DataTableResult
      *     data: array<int, T>,
      *     meta: array{current_page: int, per_page: int, from: int|null, to: int|null, total: int, last_page: int},
      *     query: array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>},
-     *     columns: array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}>,
+     *     columns: array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}>,
      *     config: array{debounce: int, per_page_options: array<int, int>}
      * }
      */
@@ -56,7 +56,7 @@ final readonly class DataTableResult
      *     data: array<int, T>,
      *     meta: array{current_page: int, per_page: int, from: int|null, to: int|null, total: int, last_page: int},
      *     query: array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>},
-     *     columns: array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}>,
+     *     columns: array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}>,
      *     config: array{debounce: int, per_page_options: array<int, int>}
      * }
      */

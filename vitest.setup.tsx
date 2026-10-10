@@ -29,11 +29,8 @@ vi.mock('@tanstack/react-table', () => ({
         accessor: (key: string, options: Record<string, unknown>) => ({ ...options, id: key, accessorKey: key }),
     }),
     flexRender: (render: (props: unknown) => React.ReactNode, props: unknown) => render?.(props) ?? null,
-    getCoreRowModel: () => () => ({ rows: [] }),
-    getSortedRowModel: () => () => ({ rows: [] }),
-    getPaginationRowModel: () => () => ({ rows: [] }),
-    getFilteredRowModel: () => () => ({ rows: [] }),
-    useReactTable: (options: Record<string, unknown>) => ({
+    createCoreRowModel: () => () => ({ rows: [] }),
+    useTable: (options: Record<string, unknown>) => ({
         ...options,
         getHeaderGroups: () => [],
         getRowModel: () => ({ rows: [] }),

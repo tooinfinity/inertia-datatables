@@ -47,7 +47,7 @@ final readonly class QueryProcessor
         $perPage = $this->resolvePerPage($request, $perPageOverride);
         $paginator = $query->paginate($perPage, page: $request->page);
 
-        /** @var array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool}> $columnsArray */
+        /** @var array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}> $columnsArray */
         $columnsArray = array_map(fn (Column $column): array => $column->toArray(), $this->columns);
 
         /** @var int $debounce */
@@ -82,7 +82,7 @@ final readonly class QueryProcessor
                 throw InvalidFilterException::notAllowed($filter->column);
             }
 
-            $query = $this->applyFilter($query, $column->name, $filter->value);
+            $query = $this->applyFilter($query, $column, $filter->value);
         }
 
         return $query;
@@ -92,27 +92,37 @@ final readonly class QueryProcessor
      * @param  EloquentBuilder<TModel>|QueryBuilder  $query
      * @return EloquentBuilder<TModel>|QueryBuilder
      */
-    private function applyFilter(EloquentBuilder|QueryBuilder $query, string $column, mixed $value): EloquentBuilder|QueryBuilder
+    private function applyFilter(EloquentBuilder|QueryBuilder $query, Column $column, mixed $value): EloquentBuilder|QueryBuilder
     {
+        // Handle boolean filter type - query params send "true"/"false" as strings
+        if ($column->filterType === 'boolean') {
+            if (in_array($value, ['true', 'True', '1'], true)) {
+                return $query->where($column->name, true);
+            }
+            if (in_array($value, ['false', 'False', '0'], true)) {
+                return $query->where($column->name, false);
+            }
+        }
+
         if (is_bool($value)) {
-            return $query->where($column, $value);
+            return $query->where($column->name, $value);
         }
 
         if ($value === 'null' || $value === 'NULL') {
-            return $query->whereNull($column);
+            return $query->whereNull($column->name);
         }
 
         if ($value === 'not_null' || $value === 'NOT_NULL') {
-            return $query->whereNotNull($column);
+            return $query->whereNotNull($column->name);
         }
 
         if (is_string($value) && str_contains($value, '*')) {
             $value = str_replace('*', '%', $value);
 
-            return $query->where($column, 'LIKE', $value);
+            return $query->where($column->name, 'LIKE', $value);
         }
 
-        return $query->where($column, $value);
+        return $query->where($column->name, $value);
     }
 
     /**

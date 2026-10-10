@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createColumnHelper,
     flexRender,
-    getCoreRowModel,
-    useReactTable,
+    createCoreRowModel,
+    useTable,
     type SortingState,
     type PaginationState,
     type ColumnFiltersState,
@@ -29,7 +29,6 @@ export function useDataTable<TData extends Record<string, unknown>>({
     const mountedRef = useRef(false);
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const sortingRef = useRef<SortingState>([]);
-    const pendingVisitRef = useRef<Record<string, boolean>>({});
 
     const [state, setState] = useState<DataTableState>({
         page: initialData.query.page,
@@ -143,13 +142,9 @@ export function useDataTable<TData extends Record<string, unknown>>({
             if (debounceTimersRef.current[key]) {
                 clearTimeout(debounceTimersRef.current[key]);
             }
-            if (pendingVisitRef.current[key]) {
-                return;
-            }
-            pendingVisitRef.current[key] = true;
             debounceTimersRef.current[key] = setTimeout(() => {
                 visitWithParams(params);
-                pendingVisitRef.current[key] = false;
+                delete debounceTimersRef.current[key];
             }, debounceMs);
         },
         [visitWithParams, debounceMs]
@@ -290,11 +285,18 @@ export function useDataTable<TData extends Record<string, unknown>>({
         );
     }, [initialData.query]);
 
+    useEffect(() => {
+        return () => {
+            Object.values(debounceTimersRef.current).forEach((timer) => clearTimeout(timer));
+            debounceTimersRef.current = {};
+        };
+    }, []);
+
     if (!mountedRef.current) {
         mountedRef.current = true;
     }
 
-    const table = useReactTable({
+    const table = useTable({
         data: initialData.data as TData[],
         columns,
         state: {
@@ -309,7 +311,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         onGlobalFilterChange: setGlobalFilter,
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: handleColumnVisibilityChange,
-        getCoreRowModel: getCoreRowModel(),
+        getCoreRowModel: createCoreRowModel(),
         manualPagination: true,
         manualSorting: true,
         manualFiltering: true,

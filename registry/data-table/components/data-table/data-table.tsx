@@ -10,7 +10,7 @@ import {
     TableFooter,
     TableRow,
     TableCell,
-} from '@ui/table';
+} from '@/components/ui/table';
 import { DataTableToolbar } from './data-table-toolbar';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableColumnHeader } from './data-table-column-header';

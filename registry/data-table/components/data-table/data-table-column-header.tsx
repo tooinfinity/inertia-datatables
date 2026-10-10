@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { type Column, type Header, type ColumnMeta, flexRender } from '@tanstack/react-table';
-import { Input } from '@ui/input';
+import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,8 +10,8 @@ import {
     DropdownMenuTrigger,
     DropdownMenuSeparator,
     DropdownMenuLabel,
-} from '@ui/dropdown-menu';
-import { Checkbox } from '@ui/checkbox';
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface DataTableColumnMeta extends ColumnMeta<unknown, unknown> {
     searchable?: boolean;
@@ -46,6 +46,14 @@ export function DataTableColumnHeader<TData extends Record<string, unknown>>({
     const isFilterActive = currentFilterValue !== '' && currentFilterValue !== null && currentFilterValue !== undefined;
 
     const [filterInputValue, setFilterInputValue] = useState<string>('');
+
+    useEffect(() => {
+        if (filterType === 'text' && typeof currentFilterValue === 'string') {
+            setFilterInputValue(currentFilterValue);
+        } else if (filterType === 'text') {
+            setFilterInputValue('');
+        }
+    }, [currentFilterValue, filterType]);
 
     const handleFilterSelect = (value: string) => {
         onFilterChange(column.id, value);

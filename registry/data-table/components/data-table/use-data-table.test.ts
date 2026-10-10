@@ -11,17 +11,14 @@ vi.mock('@inertiajs/react', () => ({
   }),
 }));
 
-// Mock TanStack Table
+// Mock TanStack Table v9
 vi.mock('@tanstack/react-table', () => ({
   createColumnHelper: () => ({
     accessor: (key: string, options: Record<string, unknown>) => ({ ...options, id: key, accessorKey: key }),
   }),
   flexRender: (render: ((props: unknown) => React.ReactNode) | null, props: unknown) => render?.(props) ?? null,
-  getCoreRowModel: () => () => ({ rows: [] }),
-  getSortedRowModel: () => () => ({ rows: [] }),
-  getPaginationRowModel: () => () => ({ rows: [] }),
-  getFilteredRowModel: () => () => ({ rows: [] }),
-  useReactTable: () => ({
+  createCoreRowModel: () => () => ({ rows: [] }),
+  useTable: () => ({
     getHeaderGroups: () => [],
     getRowModel: () => ({ rows: [] }),
     getAllLeafColumns: () => [],
@@ -31,7 +28,8 @@ vi.mock('@tanstack/react-table', () => ({
   getColumnFromId: (columns: ColumnDef<unknown, unknown>[], id: string) => columns.find((c) => c.id === id),
 }));
 
-Object.defineProperty(window, 'location', {
+// Mock window.location
+Object.defineProperty(global, 'location', {
   value: {
     pathname: '/',
     search: '',
