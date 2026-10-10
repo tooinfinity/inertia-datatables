@@ -3,7 +3,7 @@
   "name": "data-table",
   "type": "registry:block",
   "title": "Data Table",
-  "description": "Server-side DataTable with TanStack Table v8, Inertia 3, and shadcn/ui",
+  "description": "Server-side DataTable with TanStack Table v9, Inertia 3, and shadcn/ui",
   "files": [
     {
       "path": "registry/data-table/components/data-table/types.ts",
@@ -44,6 +44,11 @@
       "path": "registry/data-table/components/data-table/use-data-table.ts",
       "type": "registry:component",
       "target": "components/data-table/use-data-table.ts"
+    },
+    {
+      "path": "registry/data-table/components/ui/table.tsx",
+      "type": "registry:component",
+      "target": "components/ui/table.tsx"
     }
   ],
   "dependencies": [
