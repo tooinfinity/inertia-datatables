@@ -1,6 +1,6 @@
 # Inertia Datatables
 
-Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v8, and shadcn/ui.
+Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v9, and shadcn/ui.
 
 ## Installation
 
@@ -34,6 +34,7 @@ This will install the complete DataTable feature into your application:
 - `components/data-table/data-table-empty.tsx`
 - `components/data-table/use-data-table.ts`
 - `components/data-table/types.ts`
+- `components/ui/table.tsx`
 
 Required shadcn primitives (auto-installed as registry dependencies):
 - `button`
