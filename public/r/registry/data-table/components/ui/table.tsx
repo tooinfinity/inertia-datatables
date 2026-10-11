@@ -1,0 +1,10 @@
+import { forwardRef } from 'react';
+import type { TableHTMLAttributes, HTMLAttributes } from 'react';
+export const Table = forwardRef<HTMLTableElement, TableHTMLAttributes<HTMLTableElement>>(({ children, ...props }, ref) => <table ref={ref} {...props}>{children}</table>);
+export const TableHeader = ({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) => <thead {...props}>{children}</thead>;
+export const TableBody = ({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) => <tbody {...props}>{children}</tbody>;
+export const TableFooter = ({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) => <tfoot {...props}>{children}</tfoot>;
+export const TableHead = ({ children, ...props }: HTMLAttributes<HTMLTableRowElement>) => <tr {...props}>{children}</tr>;
+export const TableRow = ({ children, ...props }: HTMLAttributes<HTMLTableRowElement>) => <tr {...props}>{children}</tr>;
+export const TableCell = ({ children, ...props }: HTMLAttributes<HTMLTableCellElement>) => <td {...props}>{children}</td>;
+export const TableCaption = ({ children, ...props }: HTMLAttributes<HTMLTableCaptionElement>) => <caption {...props}>{children}</caption>;

@@ -21,20 +21,24 @@ php artisan vendor:publish --tag="inertia-datatables-config"
 Install the DataTable components via the shadcn registry:
 
 ```bash
-npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/registry/data-table.json
+# For Laravel projects (installs to resources/js/components/)
+npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
+
+# Or from local path if cloning the repo
+npx shadcn@latest add ./path/to/inertia-datatables/public/r/data-table.json
 ```
 
-This will install the complete DataTable feature into your application:
+This will install the complete DataTable feature into your Laravel application:
 
-- `components/data-table/data-table.tsx`
-- `components/data-table/data-table-toolbar.tsx`
-- `components/data-table/data-table-pagination.tsx`
-- `components/data-table/data-table-column-header.tsx`
-- `components/data-table/data-table-column-visibility.tsx`
-- `components/data-table/data-table-empty.tsx`
-- `components/data-table/use-data-table.ts`
-- `components/data-table/types.ts`
-- `components/ui/table.tsx`
+- `resources/js/components/data-table/data-table.tsx`
+- `resources/js/components/data-table/data-table-toolbar.tsx`
+- `resources/js/components/data-table/data-table-pagination.tsx`
+- `resources/js/components/data-table/data-table-column-header.tsx`
+- `resources/js/components/data-table/data-table-column-visibility.tsx`
+- `resources/js/components/data-table/data-table-empty.tsx`
+- `resources/js/components/data-table/use-data-table.ts`
+- `resources/js/components/data-table/types.ts`
+- `resources/js/components/ui/table.tsx`
 
 Required shadcn primitives (auto-installed as registry dependencies):
 - `button`
@@ -192,6 +196,8 @@ export default function Index({ users }: { users: DataTableResponse<User> }) {
     );
 }
 ```
+
+> **Note:** The `@/` alias maps to `resources/js/` in Laravel projects. Components are installed to `resources/js/components/` via the shadcn registry.
 
 The `dataPropName` prop specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes. If omitted, it defaults to `'data'`.
 
@@ -376,7 +382,7 @@ interface DataTableResponse<TData = unknown> {
 For projects with multiple user tables, extract a reusable component:
 
 ```tsx
-// components/data-table/users-data-table.tsx
+// resources/js/components/data-table/users-data-table.tsx
 import { DataTable } from './data-table';
 
 interface User {
