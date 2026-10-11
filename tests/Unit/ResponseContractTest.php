@@ -17,6 +17,7 @@ beforeEach(function (): void {
         $table->string('password');
         $table->string('status')->default('active');
         $table->timestamps();
+        $table->softDeletes();
     });
 });
 
