@@ -185,17 +185,8 @@ final readonly class QueryProcessor
             if ($defaultSortColumn !== null) {
                 $defaultColumn = $this->findColumn($defaultSortColumn);
 
-                if (! $defaultColumn->sortable) {
-                    throw InvalidSortException::notAllowed($defaultSortColumn);
-                }
-
-                $normalizedDirection = strtolower($defaultSortDirection);
-                if (! in_array($normalizedDirection, ['asc', 'desc'], true)) {
-                    throw InvalidSortException::invalidDirection($defaultSortDirection);
-                }
-
-                /** @var 'asc'|'desc' $normalizedDirection */
-                return $query->orderBy($defaultColumn->name, $normalizedDirection);
+                /** @var 'asc'|'desc' $defaultSortDirection */
+                return $query->orderBy($defaultColumn->name, $defaultSortDirection);
             }
 
             return $query;

@@ -7,6 +7,7 @@ namespace TooInfinity\InertiaDataTables;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
 use TooInfinity\InertiaDataTables\Processing\QueryProcessor;
 
 /**
@@ -43,13 +44,19 @@ final readonly class DataTable
      */
     public function columns(array $columns): self
     {
-        return new self(
+        $newTable = new self(
             query: $this->query,
             columns: $columns,
             defaultSortColumn: $this->defaultSortColumn,
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $this->perPage,
         );
+
+        if ($newTable->defaultSortColumn !== null) {
+            $newTable->validateDefaultSort($columns);
+        }
+
+        return $newTable;
     }
 
     /**
@@ -57,13 +64,24 @@ final readonly class DataTable
      */
     public function defaultSort(string $column, string $direction = 'desc'): self
     {
-        return new self(
+        $normalizedDirection = strtolower($direction);
+        if (! in_array($normalizedDirection, ['asc', 'desc'], true)) {
+            throw InvalidSortException::invalidDirection($direction);
+        }
+
+        $newTable = new self(
             query: $this->query,
             columns: $this->columns,
             defaultSortColumn: $column,
-            defaultSortDirection: $direction,
+            defaultSortDirection: $normalizedDirection,
             perPage: $this->perPage,
         );
+
+        if ($newTable->columns !== []) {
+            $newTable->validateDefaultSort($this->columns);
+        }
+
+        return $newTable;
     }
 
     /**
@@ -91,5 +109,30 @@ final readonly class DataTable
         $processor = new QueryProcessor($this->columns);
 
         return $processor->process($this->query, $request, $this->defaultSortColumn, $this->defaultSortDirection, $this->perPage);
+    }
+
+    /**
+     * @param  array<int, Column>  $columns
+     */
+    private function validateDefaultSort(array $columns): void
+    {
+        /** @var string $defaultSortColumn */
+        $defaultSortColumn = $this->defaultSortColumn;
+
+        $columnMap = [];
+
+        foreach ($columns as $column) {
+            $columnMap[$column->name] = $column;
+        }
+
+        if (! isset($columnMap[$defaultSortColumn])) {
+            throw InvalidSortException::notAllowed($defaultSortColumn);
+        }
+
+        $column = $columnMap[$defaultSortColumn];
+
+        if (! $column->sortable) {
+            throw InvalidSortException::notAllowed($defaultSortColumn);
+        }
     }
 }
