@@ -156,6 +156,15 @@ Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
 ```
 
+### Hidden Columns
+
+The `->hidden()` option marks a column as hidden in the **UI only**. It does **not** restrict API access:
+
+- Hidden columns are still included in the response data
+- Hidden columns can still be searched, sorted, and filtered if their capabilities are enabled
+- The `hidden` flag is a UI hint for the frontend to not display the column by default
+- For true security restrictions, simply don't enable `->searchable()`, `->sortable()`, or `->filterable()` on sensitive columns
+
 ### Filter Types
 
 | Type | Description | UI Control |
