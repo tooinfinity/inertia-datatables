@@ -26,4 +26,12 @@ return [
         'sort' => 'sort',
         'filters' => 'filters',
     ],
+
+    'validation' => [
+        'max_search_length' => 500,
+        'max_filter_value_length' => 500,
+        'max_sorts' => 10,
+        'max_filters' => 20,
+        'max_searches' => 20,
+    ],
 ];

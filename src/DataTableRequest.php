@@ -36,14 +36,20 @@ final readonly class DataTableRequest implements JsonSerializable
 
         $searchQuery = $request->query($queryConfig->search, '');
         $search = is_array($searchQuery) ? '' : (string) $searchQuery;
+        $search = self::sanitizeSearch($search, $queryConfig->maxSearchLength);
 
         $sorts = SortCollection::fromQueryString(
             (string) $request->query($queryConfig->sort, ''),
         );
+        $sorts = $sorts->limit($queryConfig->maxSorts);
 
         $searches = SearchCollection::fromRequest($request, $queryConfig->searches);
+        $searches = $searches->limit($queryConfig->maxSearches);
+        $searches = $searches->sanitizeValues($queryConfig->maxFilterValueLength);
 
         $filters = FilterCollection::fromRequest($request, $queryConfig->filters);
+        $filters = $filters->limit($queryConfig->maxFilters);
+        $filters = $filters->sanitizeValues($queryConfig->maxFilterValueLength);
 
         return new self(
             page: $page,
@@ -76,5 +82,16 @@ final readonly class DataTableRequest implements JsonSerializable
     public function jsonSerialize(): array
     {
         return $this->toArray();
+    }
+
+    private static function sanitizeSearch(string $search, int $maxLength): string
+    {
+        $search = trim($search);
+
+        if (strlen($search) > $maxLength) {
+            return mb_substr($search, 0, $maxLength);
+        }
+
+        return $search;
     }
 }

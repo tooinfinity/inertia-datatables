@@ -8,17 +8,18 @@ use ArrayIterator;
 use Countable;
 use Illuminate\Http\Request;
 use IteratorAggregate;
+use JsonSerializable;
 
 /**
  * @implements IteratorAggregate<int, Filter>
  */
-final readonly class FilterCollection implements Countable, IteratorAggregate
+final readonly class FilterCollection implements Countable, IteratorAggregate, JsonSerializable
 {
     /**
      * @param  array<int, Filter>  $filters
      */
     public function __construct(
-        private array $filters = [],
+        public array $filters = [],
     ) {}
 
     /**
@@ -101,6 +102,32 @@ final readonly class FilterCollection implements Countable, IteratorAggregate
     public function isNotEmpty(): bool
     {
         return ! $this->isEmpty();
+    }
+
+    public function limit(int $max): self
+    {
+        if (count($this->filters) <= $max) {
+            return $this;
+        }
+
+        return new self(array_slice($this->filters, 0, $max));
+    }
+
+    public function sanitizeValues(int $maxLength): self
+    {
+        $sanitized = [];
+
+        foreach ($this->filters as $filter) {
+            $value = $filter->value;
+
+            if (is_string($value) && strlen($value) > $maxLength) {
+                $value = mb_substr($value, 0, $maxLength);
+            }
+
+            $sanitized[] = Filter::make($filter->column, $value);
+        }
+
+        return new self($sanitized);
     }
 
     /**

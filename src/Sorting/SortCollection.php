@@ -7,17 +7,18 @@ namespace TooInfinity\InertiaDataTables\Sorting;
 use ArrayIterator;
 use Countable;
 use IteratorAggregate;
+use JsonSerializable;
 
 /**
  * @implements IteratorAggregate<int, Sort>
  */
-final readonly class SortCollection implements Countable, IteratorAggregate
+final readonly class SortCollection implements Countable, IteratorAggregate, JsonSerializable
 {
     /**
      * @param  array<int, Sort>  $sorts
      */
     public function __construct(
-        private array $sorts = [],
+        public array $sorts = [],
     ) {}
 
     /**
@@ -97,6 +98,15 @@ final readonly class SortCollection implements Countable, IteratorAggregate
     public function isNotEmpty(): bool
     {
         return ! $this->isEmpty();
+    }
+
+    public function limit(int $max): self
+    {
+        if (count($this->sorts) <= $max) {
+            return $this;
+        }
+
+        return new self(array_slice($this->sorts, 0, $max));
     }
 
     /**

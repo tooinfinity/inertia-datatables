@@ -8,17 +8,18 @@ use ArrayIterator;
 use Countable;
 use Illuminate\Http\Request;
 use IteratorAggregate;
+use JsonSerializable;
 
 /**
  * @implements IteratorAggregate<int, Search>
  */
-final readonly class SearchCollection implements Countable, IteratorAggregate
+final readonly class SearchCollection implements Countable, IteratorAggregate, JsonSerializable
 {
     /**
      * @param  array<int, Search>  $searches
      */
     public function __construct(
-        private array $searches = [],
+        public array $searches = [],
     ) {}
 
     /**
@@ -110,6 +111,32 @@ final readonly class SearchCollection implements Countable, IteratorAggregate
     public function isNotEmpty(): bool
     {
         return ! $this->isEmpty();
+    }
+
+    public function limit(int $max): self
+    {
+        if (count($this->searches) <= $max) {
+            return $this;
+        }
+
+        return new self(array_slice($this->searches, 0, $max));
+    }
+
+    public function sanitizeValues(int $maxLength): self
+    {
+        $sanitized = [];
+
+        foreach ($this->searches as $search) {
+            $value = $search->value;
+
+            if (strlen($value) > $maxLength) {
+                $value = mb_substr($value, 0, $maxLength);
+            }
+
+            $sanitized[] = Search::make($search->column, $value);
+        }
+
+        return new self($sanitized);
     }
 
     /**
