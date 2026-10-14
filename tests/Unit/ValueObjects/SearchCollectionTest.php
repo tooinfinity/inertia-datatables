@@ -65,12 +65,6 @@ describe('SearchCollection', function (): void {
         expect($collection->get('count')->value)->toBe('42');
     });
 
-    it('ignores non-string column keys', function (): void {
-        $request = Request::create('/test');
-        $request->query->set('searches', [123 => 'value']); // This won't work via query string but tests the logic
-        // We can't easily test non-string keys via Request::create, so we'll skip this edge case
-    });
-
     it('gets search by column', function (): void {
         $searches = [Search::make('name', 'john')];
         $collection = SearchCollection::make($searches);
