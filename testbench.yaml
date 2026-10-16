@@ -11,7 +11,7 @@ seeders:
 
 workbench:
   start: '/'
-  install: true
+  install: false
   health: false
   discovers:
     web: true
