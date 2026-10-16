@@ -74,7 +74,7 @@ export function DataTableColumnHeader<TData extends Record<string, unknown>>({
     };
 
     return (
-        <th className="relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
+        <th className="group relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
             <div className="flex items-center gap-2">
                 {canSort && (
                     <button
