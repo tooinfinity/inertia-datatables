@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables;
 
-final readonly class Column
+use JsonSerializable;
+
+final readonly class Column implements JsonSerializable
 {
     public function __construct(
         public string $name,

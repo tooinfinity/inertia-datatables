@@ -245,3 +245,34 @@ it('jsonSerialize returns same structure as toArray', function (): void {
 
     expect($jsonSerialize)->toBe($toArray);
 });
+
+it('implements JsonSerializable and Arrayable producing documented contract via json_encode', function (): void {
+    createUser(['name' => 'John Doe', 'email' => 'john@example.com']);
+
+    $request = DataTableRequest::fromRequest(Request::create('/test'));
+
+    $result = DataTable::query(User::query())
+        ->columns([
+            Column::make('name')->searchable()->sortable(),
+            Column::make('email')->searchable()->sortable(),
+        ])
+        ->handle($request);
+
+    expect($result)->toBeInstanceOf(JsonSerializable::class);
+    expect($result)->toBeInstanceOf(Illuminate\Contracts\Support\Arrayable::class);
+
+    $json = json_encode($result);
+    expect($json)->toBeString();
+
+    /** @var array{data: list<array<string, mixed>>, meta: array<string, mixed>, query: array<string, mixed>, columns: list<array<string, mixed>>, config: array<string, mixed>} $decoded */
+    $decoded = json_decode($json, true);
+
+    expect($decoded)->toHaveKeys(['data', 'meta', 'query', 'columns', 'config']);
+    expect($decoded['data'])->toBeArray();
+    expect($decoded['data'])->toHaveCount(1);
+    expect($decoded['meta'])->toHaveKeys(['current_page', 'per_page', 'from', 'to', 'total', 'last_page']);
+    expect($decoded['query'])->toHaveKeys(['page', 'per_page', 'search', 'sort', 'searches', 'filters']);
+    expect($decoded['columns'])->toBeArray();
+    expect($decoded['columns'])->toHaveCount(2);
+    expect($decoded['config'])->toHaveKeys(['debounce', 'per_page_options']);
+});

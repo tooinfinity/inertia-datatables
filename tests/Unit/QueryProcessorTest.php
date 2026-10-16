@@ -174,6 +174,50 @@ describe('QueryProcessor', function (): void {
         expect($result->paginator->first()->email)->toBe('john@example.com');
     });
 
+    it('escapes raw % and _ inputs in global search', function () use ($processor): void {
+        Illuminate\Support\Facades\DB::enableQueryLog();
+
+        $query = User::query();
+        $request = new DataTableRequest(1, 25, '100%_test', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
+        $processor->process($query, $request);
+
+        $queries = Illuminate\Support\Facades\DB::getQueryLog();
+        Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $lastQuery = end($queries);
+        expect($lastQuery['bindings'])->toContain('%100\\%\\_test%');
+    });
+
+    it('escapes raw % and _ inputs in column search', function () use ($processor): void {
+        Illuminate\Support\Facades\DB::enableQueryLog();
+
+        $query = User::query();
+        $searches = new TooInfinity\InertiaDataTables\Searching\SearchCollection([new TooInfinity\InertiaDataTables\Searching\Search('name', 'col%_test')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, $searches, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
+        $processor->process($query, $request);
+
+        $queries = Illuminate\Support\Facades\DB::getQueryLog();
+        Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $lastQuery = end($queries);
+        expect($lastQuery['bindings'])->toContain('%col\\%\\_test%');
+    });
+
+    it('escapes raw % and _ inputs in wildcard filtering', function () use ($processor): void {
+        Illuminate\Support\Facades\DB::enableQueryLog();
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('email', '100%_*')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+        $processor->process($query, $request);
+
+        $queries = Illuminate\Support\Facades\DB::getQueryLog();
+        Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $lastQuery = end($queries);
+        expect($lastQuery['bindings'])->toContain('100\\%\\_%');
+    });
+
     it('applies sorting with single column', function () use ($processor): void {
         createUser(['name' => 'Zebra']);
         createUser(['name' => 'Alpha']);

@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace TooInfinity\InertiaDataTables;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
 
 /**
  * @template T of object
+ *
+ * @implements Arrayable<string, mixed>
  */
-final readonly class DataTableResult
+final readonly class DataTableResult implements Arrayable, JsonSerializable
 {
     /**
      * @param  LengthAwarePaginator<array-key, T>  $paginator
