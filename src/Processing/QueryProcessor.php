@@ -117,7 +117,7 @@ final readonly class QueryProcessor
         }
 
         if (is_string($value) && str_contains($value, '*')) {
-            $value = str_replace('*', '%', $value);
+            $value = str_replace('*', '%', addcslashes($value, '%_\\'));
 
             return $query->where($column->name, 'LIKE', $value);
         }
@@ -143,6 +143,8 @@ final readonly class QueryProcessor
             return $query;
         }
 
+        $search = addcslashes($search, '%_\\');
+
         return $query->where(function (EloquentBuilder|QueryBuilder $q) use ($search, $searchableColumns): void {
             foreach ($searchableColumns as $column) {
                 $q->orWhere($column->name, 'LIKE', "%{$search}%");
@@ -163,7 +165,9 @@ final readonly class QueryProcessor
                 throw InvalidColumnException::notAllowed($search->column, 'search');
             }
 
-            $query->where($column->name, 'LIKE', "%{$search->value}%");
+            $escaped = addcslashes($search->value, '%_\\');
+
+            $query->where($column->name, 'LIKE', "%{$escaped}%");
         }
 
         return $query;
