@@ -15,7 +15,16 @@ vi.mock('@tanstack/react-table', () => ({
         accessor: (key: string, options: Record<string, unknown>) => ({ ...options, id: key, accessorKey: key }),
     }),
     flexRender: (render: (props: unknown) => React.ReactNode, propsArg: unknown) => render?.(propsArg) ?? null,
+    getCoreRowModel: () => () => ({ rows: [] }),
     createCoreRowModel: () => () => ({ rows: [] }),
+    useReactTable: (options: Record<string, unknown>) => ({
+        ...options,
+        getHeaderGroups: () => [],
+        getRowModel: () => ({ rows: [] }),
+        getAllLeafColumns: () => options.columns ?? [],
+        getState: () => options.state ?? {},
+        setState: vi.fn(),
+    }),
     useTable: (options: Record<string, unknown>) => ({
         ...options,
         getHeaderGroups: () => [],

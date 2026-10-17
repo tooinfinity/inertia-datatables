@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createColumnHelper,
     flexRender,
-    createCoreRowModel,
-    useTable,
+    getCoreRowModel,
+    useReactTable,
     type SortingState,
     type PaginationState,
     type ColumnFiltersState,
@@ -296,7 +296,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         mountedRef.current = true;
     }
 
-    const table = useTable({
+    const table = useReactTable({
         data: initialData.data as TData[],
         columns,
         state: {
@@ -311,7 +311,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
         onGlobalFilterChange: setGlobalFilter,
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: handleColumnVisibilityChange,
-        getCoreRowModel: createCoreRowModel(),
+        getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualSorting: true,
         manualFiltering: true,
