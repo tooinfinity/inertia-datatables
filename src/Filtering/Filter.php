@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Filtering;
 
-final readonly class Filter
+use JsonSerializable;
+
+final readonly class Filter implements JsonSerializable
 {
     public function __construct(
         public string $column,

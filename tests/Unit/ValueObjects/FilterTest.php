@@ -42,6 +42,7 @@ describe('Filter', function (): void {
     it('implements JsonSerializable', function (): void {
         $filter = Filter::make('status', 'active');
 
+        expect($filter)->toBeInstanceOf(JsonSerializable::class);
         expect(json_encode($filter))->toBe('{"column":"status","value":"active"}');
     });
 

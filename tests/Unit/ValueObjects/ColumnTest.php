@@ -110,6 +110,7 @@ describe('Column', function (): void {
     it('implements JsonSerializable', function (): void {
         $column = Column::make('name')->searchable();
 
+        expect($column)->toBeInstanceOf(JsonSerializable::class);
         expect(json_encode($column))->toContain('"searchable":true');
     });
 

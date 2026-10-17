@@ -24,6 +24,7 @@ describe('Search', function (): void {
     it('implements JsonSerializable', function (): void {
         $search = Search::make('name', 'john');
 
+        expect($search)->toBeInstanceOf(JsonSerializable::class);
         expect(json_encode($search))->toBe('{"column":"name","value":"john"}');
     });
 });

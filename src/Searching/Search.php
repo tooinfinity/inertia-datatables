@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Searching;
 
-final readonly class Search
+use JsonSerializable;
+
+final readonly class Search implements JsonSerializable
 {
     public function __construct(
         public string $column,
@@ -25,5 +27,13 @@ final readonly class Search
             'column' => $this->column,
             'value' => $this->value,
         ];
+    }
+
+    /**
+     * @return array{column: string, value: string}
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }
