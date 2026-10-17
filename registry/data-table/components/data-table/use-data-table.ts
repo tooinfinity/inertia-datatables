@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createColumnHelper,
+    flexRender,
     getCoreRowModel,
     useReactTable,
     type SortingState,

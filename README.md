@@ -1,5 +1,10 @@
 # Inertia Datatables
 
+[![Tests](https://github.com/tooinfinity/inertia-datatables/actions/workflows/tests.yml/badge.svg)](https://github.com/tooinfinity/inertia-datatables/actions/workflows/tests.yml)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/tooinfinity/inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/tooinfinity/inertia-datatables)
+[![Total Downloads](https://img.shields.io/packagist/dt/tooinfinity/inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/tooinfinity/inertia-datatables)
+[![License](https://img.shields.io/packagist/l/tooinfinity/inertia-datatables.svg?style=flat-square)](LICENSE.md)
+
 Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v9, and shadcn/ui.
 
 ## Installation
@@ -72,8 +77,27 @@ return [
         'sort' => 'sort',
         'filters' => 'filters',
     ],
+    'validation' => [
+        'max_search_length' => 500,
+        'max_filter_value_length' => 500,
+        'max_sorts' => 10,
+        'max_filters' => 20,
+        'max_searches' => 20,
+    ],
 ];
 ```
+
+### Validation & Limits
+
+The `validation` configuration protects your application against excessive payload sizes and Denial of Service (DoS) queries:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_search_length` | `500` | Maximum character length for global and column searches |
+| `max_filter_value_length` | `500` | Maximum character length for individual filter values |
+| `max_sorts` | `10` | Maximum number of sort columns permitted per request |
+| `max_filters` | `20` | Maximum number of column filters permitted per request |
+| `max_searches` | `20` | Maximum number of column-specific searches permitted per request |
 
 ## Backend Usage
 
@@ -340,52 +364,6 @@ The package implements a strict column allow-list. Only columns explicitly defin
 }
 ```
 
-### TypeScript Types
-
-```typescript
-interface DataTableColumn {
-    name: string;
-    label: string;
-    sortable: boolean;
-    searchable: boolean;
-    filterable: boolean;
-    hidden: boolean;
-    filter_type?: 'text' | 'select' | 'boolean' | null;
-    filter_options?: Array<{ value: string; label: string }>;
-}
-
-interface DataTableMeta {
-    current_page: number;
-    per_page: number;
-    from: number | null;
-    to: number | null;
-    total: number;
-    last_page: number;
-}
-
-interface DataTableQuery {
-    page: number;
-    per_page: number;
-    search: string;
-    sort: Array<{ column: string; direction: string }>;
-    searches: Array<{ column: string; value: string }>;
-    filters: Array<{ column: string; value: unknown }>;
-}
-
-interface DataTableConfig {
-    debounce: number;
-    per_page_options: number[];
-}
-
-interface DataTableResponse<TData = unknown> {
-    data: TData[];
-    meta: DataTableMeta;
-    query: DataTableQuery;
-    columns: DataTableColumn[];
-    config: DataTableConfig;
-}
-```
-
 ## Optional: Reusable UsersDataTable Component
 
 For projects with multiple user tables, extract a reusable component:
@@ -466,7 +444,7 @@ Please review [our security policy](.github/SECURITY.md) on how to report securi
 ## Credits
 
 - [TouwfiQ Meghlaoui](https://github.com/tooinfinity)
-- [All Contributors](../../contributors)
+- [All Contributors](https://github.com/tooinfinity/inertia-datatables/graphs/contributors)
 
 ## License
 

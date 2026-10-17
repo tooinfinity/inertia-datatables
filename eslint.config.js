@@ -6,7 +6,7 @@ import globals from 'globals';
 
 export default tseslint.config(
     {
-        ignores: ['build', 'node_modules', 'vendor', 'workbench', '.git', 'dist', '**/*.test.{ts,tsx}', 'vitest.setup.tsx', 'eslint.config.js'],
+        ignores: ['build', 'node_modules', 'vendor', 'workbench', '.git', 'dist', 'public', '**/*.test.{ts,tsx}', 'vitest.setup.tsx', 'eslint.config.js'],
     },
     js.configs.recommended,
     ...tseslint.configs.recommended,

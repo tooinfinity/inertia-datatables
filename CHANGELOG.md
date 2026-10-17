@@ -1,8 +1,12 @@
 # Release Notes
 
-## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...HEAD)
+## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...HEAD)
 
-## [v0.0.1](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...v0.0.1) - 2026-10-08
+## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
+
+Initial pre-release.
+
+## [v0.0.1](https://github.com/tooinfinity/inertia-datatables/compare/...v0.0.1) - 2026-10-08
 
 Initial pre-release of inertia-datatables.
 
@@ -28,7 +32,3 @@ Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v8,
 - Laravel 12.x / 13.x
 - PHP 8.4+
 - Testbench 10.x / 11.x
-
-## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/...v0.1.0) - 202x-xx-xx
-
-Initial pre-release.
