@@ -6,6 +6,7 @@ namespace Workbench\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Workbench\App\Models\Post;
+use Workbench\App\Models\User;
 
 /**
  * @extends Factory<Post>

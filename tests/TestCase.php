@@ -6,6 +6,7 @@ namespace TooInfinity\InertiaDataTables\Tests;
 
 use Orchestra\Testbench\TestCase as Orchestra;
 use TooInfinity\InertiaDataTables\InertiaDataTablesServiceProvider;
+use Workbench\Database\Factories\UserFactory;
 
 abstract class TestCase extends Orchestra
 {
@@ -19,7 +20,7 @@ abstract class TestCase extends Orchestra
     protected function getPackageFactories($app): array
     {
         return [
-            Workbench\Database\Factories\UserFactory::class,
+            UserFactory::class,
         ];
     }
 
@@ -31,5 +32,6 @@ abstract class TestCase extends Orchestra
             'database' => ':memory:',
             'prefix' => '',
         ]);
+        $app['config']->set('hashing.bcrypt.rounds', 4);
     }
 }

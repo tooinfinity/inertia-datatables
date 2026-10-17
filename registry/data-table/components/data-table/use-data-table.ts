@@ -66,7 +66,7 @@ export function useDataTable<TData extends Record<string, unknown>>({
                 {
                     header: col.label,
                     id: col.name,
-                    cell: (info) => flexRender(info.column.columnDef.cell!, info),
+                    cell: (info) => info.getValue(),
                 }
             );
 
@@ -167,10 +167,9 @@ export function useDataTable<TData extends Record<string, unknown>>({
     );
 
     const handlePageChange = useCallback(
-        (pageIndex: number) => {
-            const page = pageIndex + 1;
+        (page: number) => {
             setState((prev) => ({ ...prev, page }));
-            setPagination((prev) => ({ ...prev, pageIndex }));
+            setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
             visitWithParams({ page });
         },
         [visitWithParams]
@@ -235,9 +234,9 @@ export function useDataTable<TData extends Record<string, unknown>>({
             }));
             setPagination((prev) => ({ ...prev, pageIndex: 0 }));
             const paramValue = value === '' || value === null || value === undefined ? undefined : value;
-            visitWithParams({ [`filters[${column}]`]: paramValue, page: 1 });
+            debouncedVisit(`filters.${column}`, { [`filters[${column}]`]: paramValue, page: 1 });
         },
-        [visitWithParams]
+        [debouncedVisit]
     );
 
     const handleColumnVisibilityChange = useCallback(
