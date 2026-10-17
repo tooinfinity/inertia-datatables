@@ -7,7 +7,6 @@ import {
     Table,
     TableHeader,
     TableBody,
-    TableFooter,
     TableRow,
     TableCell,
 } from '@/components/ui/table';
@@ -81,16 +80,14 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
                                 ))
                             )}
                         </TableBody>
-                        <TableFooter>
-                            <DataTablePagination
-                                currentPage={state.page}
-                                perPage={state.perPage}
-                                onPageChange={handlePageChange}
-                                totalPages={data.meta.last_page}
-                                totalItems={data.meta.total}
-                            />
-                        </TableFooter>
                     </Table>
+                    <DataTablePagination
+                        currentPage={state.page}
+                        perPage={state.perPage}
+                        onPageChange={handlePageChange}
+                        totalPages={data.meta.last_page}
+                        totalItems={data.meta.total}
+                    />
                 </div>
                 <DataTableColumnVisibility table={table} />
                 {children}
