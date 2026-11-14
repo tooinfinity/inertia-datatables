@@ -125,7 +125,20 @@ final readonly class QueryProcessor
             return $query->whereIn($column->name, $value);
         }
 
+        // Handle boolean string values ("true"/"false"/"1"/"0") for any filterable column
+        // This allows boolean filtering without requiring filterType('boolean')
+        if (is_string($value)) {
+            $lowerValue = strtolower($value);
+            if (in_array($lowerValue, ['true', '1'], true)) {
+                return $query->where($column->name, true);
+            }
+            if (in_array($lowerValue, ['false', '0'], true)) {
+                return $query->where($column->name, false);
+            }
+        }
+
         // Handle boolean filter type - query params send "true"/"false" as strings
+        // (kept for backward compatibility with explicit filterType('boolean'))
         if ($column->filterType === 'boolean') {
             if (in_array($value, ['true', 'True', '1'], true)) {
                 return $query->where($column->name, true);

@@ -554,17 +554,80 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
             Column::make('is_admin')->filterable(),
         ]);
 
-        // Note: This tests boolean filter values passed as query params
-        // Query params are always strings, so boolean filtering via query string
-        // would need special handling. This test documents current behavior.
+        // Boolean string values ("true"/"false"/"1"/"0") are automatically
+        // converted to boolean for any filterable column.
         createUser(['name' => 'John', 'is_admin' => true]);
         createUser(['name' => 'Jane', 'is_admin' => false]);
 
         $response = $this->get('/security-filter-boolean?filters[is_admin]=true');
 
         $response->assertOk();
-        // String "true" !== boolean true, so exact match
-        expect($response->json('meta.total'))->toBe(0);
+        expect($response->json('meta.total'))->toBe(1);
+        expect($response->json('data.0.name'))->toBe('John');
+    });
+
+    it('filters boolean values with false string', function (): void {
+        makeTestRoute('/security-filter-boolean-false', [
+            Column::make('name')->sortable(),
+            Column::make('is_admin')->filterable(),
+        ]);
+
+        createUser(['name' => 'John', 'is_admin' => true]);
+        createUser(['name' => 'Jane', 'is_admin' => false]);
+
+        $response = $this->get('/security-filter-boolean-false?filters[is_admin]=false');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(1);
+        expect($response->json('data.0.name'))->toBe('Jane');
+    });
+
+    it('filters boolean values with 1 string', function (): void {
+        makeTestRoute('/security-filter-boolean-1', [
+            Column::make('name')->sortable(),
+            Column::make('is_admin')->filterable(),
+        ]);
+
+        createUser(['name' => 'John', 'is_admin' => true]);
+        createUser(['name' => 'Jane', 'is_admin' => false]);
+
+        $response = $this->get('/security-filter-boolean-1?filters[is_admin]=1');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(1);
+        expect($response->json('data.0.name'))->toBe('John');
+    });
+
+    it('filters boolean values with 0 string', function (): void {
+        makeTestRoute('/security-filter-boolean-0', [
+            Column::make('name')->sortable(),
+            Column::make('is_admin')->filterable(),
+        ]);
+
+        createUser(['name' => 'John', 'is_admin' => true]);
+        createUser(['name' => 'Jane', 'is_admin' => false]);
+
+        $response = $this->get('/security-filter-boolean-0?filters[is_admin]=0');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(1);
+        expect($response->json('data.0.name'))->toBe('Jane');
+    });
+
+    it('filters boolean values case-insensitively', function (): void {
+        makeTestRoute('/security-filter-boolean-case', [
+            Column::make('name')->sortable(),
+            Column::make('is_admin')->filterable(),
+        ]);
+
+        createUser(['name' => 'John', 'is_admin' => true]);
+        createUser(['name' => 'Jane', 'is_admin' => false]);
+
+        $response = $this->get('/security-filter-boolean-case?filters[is_admin]=TRUE');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(1);
+        expect($response->json('data.0.name'))->toBe('John');
     });
 });
 

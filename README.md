@@ -352,11 +352,13 @@ The package implements a strict column allow-list. Only columns explicitly defin
 | `"*value"` | `LIKE '%value'` (wildcard prefix) |
 | `"value*"` | `LIKE 'value%'` (wildcard suffix) |
 | `"*value*"` | `LIKE '%value%'` (wildcard both sides) |
-| `"true"` / `"false"` | Boolean exact match |
+| `"true"` / `"false"` / `"1"` / `"0"` | Boolean exact match (automatically detected for any filterable column) |
 | Other strings | Exact match `WHERE column = value` |
 | Array (e.g., `filters[status][]=a&filters[status][]=b`) | `WHERE column IN (a, b)` — multi-value filter, supported for all filterable columns; for `select` type, values are validated against `filter_options` |
 
 > **Note:** Array filters are limited by `max_filter_values` config (default: 20). Nested arrays are rejected. String values within arrays are truncated to `max_filter_value_length`.
+>
+> **Note:** Boolean values (`"true"`, `"false"`, `"1"`, `"0"`) are automatically converted to boolean for any filterable column. Explicit `filterType('boolean')` is still supported for backward compatibility.
 
 ### Response Structure (Server → Client)
 
