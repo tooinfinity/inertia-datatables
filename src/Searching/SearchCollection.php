@@ -49,7 +49,7 @@ final readonly class SearchCollection implements Countable, IteratorAggregate, J
         $prefix = $searchParameter.'[';
 
         foreach ($queryData as $key => $value) {
-            if (! str_starts_with($key, $prefix) || ! str_ends_with($key, ']')) {
+            if (! is_string($key) || ! str_starts_with($key, $prefix) || ! str_ends_with($key, ']')) {
                 continue;
             }
 

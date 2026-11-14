@@ -39,6 +39,20 @@ describe('SearchCollection', function (): void {
         expect($collection->get('name')->value)->toBe('john');
     });
 
+    it('ignores integer-keyed query parameters', function (string $query): void {
+        $request = Request::create('/test?'.$query);
+
+        expect(array_key_first($request->query()))->toBeInt();
+
+        $collection = SearchCollection::fromRequest($request, 'searches');
+
+        expect($collection->isEmpty())->toBeTrue();
+    })->with([
+        'zero' => '0=x',
+        'numeric' => '123',
+        'array' => '1[]=a',
+    ]);
+
     it('deduplicates searches by column (last wins)', function (): void {
         $request = Request::create('/test?searches[name]=john&searches[name]=jane');
         $collection = SearchCollection::fromRequest($request, 'searches');

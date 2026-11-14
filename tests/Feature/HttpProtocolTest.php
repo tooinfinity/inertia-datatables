@@ -96,6 +96,25 @@ it('handles multiple column searches', function (): void {
     expect($response->json('query.searches'))->toHaveCount(2);
 });
 
+it('ignores integer-keyed query parameters', function (string $query): void {
+    makeTestRoute('/test-users-numeric-query', [
+        Column::make('name')->searchable()->sortable(),
+        Column::make('email')->searchable()->sortable(),
+    ], 'name', 'asc');
+
+    createUser(['name' => 'John Doe', 'email' => 'john@example.com']);
+    createUser(['name' => 'Jane Smith', 'email' => 'jane@example.com']);
+
+    $expected = $this->get('/test-users-numeric-query')->assertOk()->json();
+    $response = $this->get('/test-users-numeric-query?'.$query)->assertOk();
+
+    expect($response->json())->toBe($expected);
+})->with([
+    'zero' => '0=x',
+    'numeric' => '123',
+    'array' => '1[]=a',
+]);
+
 it('handles sorting via sort parameter', function (): void {
     makeTestRoute('/test-users-sort', [
         Column::make('name')->searchable()->sortable(),
