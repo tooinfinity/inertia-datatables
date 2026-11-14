@@ -7,6 +7,7 @@ namespace TooInfinity\InertiaDataTables\Processing;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\Query\Expression;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTableRequest;
 use TooInfinity\InertiaDataTables\DataTableResult;
@@ -117,9 +118,11 @@ final readonly class QueryProcessor
         }
 
         if (is_string($value) && str_contains($value, '*')) {
-            $value = str_replace('*', '%', addcslashes($value, '%_\\'));
+            $pattern = $this->escapeLikeValue($value, allowWildcards: true);
 
-            return $query->where($column->name, 'LIKE', $value);
+            $this->applyLike($query, $column->name, $pattern);
+
+            return $query;
         }
 
         return $query->where($column->name, $value);
@@ -143,11 +146,11 @@ final readonly class QueryProcessor
             return $query;
         }
 
-        $search = addcslashes($search, '%_\\');
+        $search = $this->escapeLikeValue($search);
 
         return $query->where(function (EloquentBuilder|QueryBuilder $q) use ($search, $searchableColumns): void {
             foreach ($searchableColumns as $column) {
-                $q->orWhere($column->name, 'LIKE', "%{$search}%");
+                $this->applyLike($q, $column->name, "%{$search}%", 'or');
             }
         });
     }
@@ -165,12 +168,51 @@ final readonly class QueryProcessor
                 throw InvalidColumnException::notAllowed($search->column, 'search')->forRequest();
             }
 
-            $escaped = addcslashes($search->value, '%_\\');
+            $escaped = $this->escapeLikeValue($search->value);
 
-            $query->where($column->name, 'LIKE', "%{$escaped}%");
+            $this->applyLike($query, $column->name, "%{$escaped}%");
         }
 
         return $query;
+    }
+
+    /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @param  'and'|'or'  $boolean
+     */
+    private function applyLike(
+        EloquentBuilder|QueryBuilder $query,
+        string $column,
+        string $pattern,
+        string $boolean = 'and',
+    ): void {
+        $queryBuilder = $query instanceof EloquentBuilder
+            ? $query->getQuery()
+            : $query;
+
+        // Keep the pattern bound while placing the portable escape clause after its placeholder.
+        $queryBuilder->where(
+            $column,
+            'LIKE',
+            new Expression("? ESCAPE '!'"),
+            $boolean,
+        );
+        $queryBuilder->addBinding($pattern);
+    }
+
+    private function escapeLikeValue(string $value, bool $allowWildcards = false): string
+    {
+        $value = str_replace(
+            ['!', '%', '_', '\\'],
+            ['!!', '!%', '!_', '!\\'],
+            $value,
+        );
+
+        if ($allowWildcards) {
+            $value = str_replace('*', '%', $value);
+        }
+
+        return $value;
     }
 
     /**

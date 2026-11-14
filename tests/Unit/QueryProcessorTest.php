@@ -174,49 +174,58 @@ describe('QueryProcessor', function (): void {
         expect($result->paginator->first()->email)->toBe('john@example.com');
     });
 
-    it('escapes raw % and _ inputs in global search', function () use ($processor): void {
-        Illuminate\Support\Facades\DB::enableQueryLog();
+    it('matches LIKE special characters literally in global search', function (string $term, string $matchingName, string $nonMatchingName) use ($processor): void {
+        createUser(['name' => $matchingName, 'email' => 'matching@example.test']);
+        createUser(['name' => $nonMatchingName, 'email' => 'non-matching@example.test']);
 
-        $query = User::query();
-        $request = new DataTableRequest(1, 25, '100%_test', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
-        $processor->process($query, $request);
+        $request = new DataTableRequest(1, 25, $term, new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
 
-        $queries = Illuminate\Support\Facades\DB::getQueryLog();
-        Illuminate\Support\Facades\DB::disableQueryLog();
+        $result = $processor->process(User::query(), $request);
 
-        $lastQuery = end($queries);
-        expect($lastQuery['bindings'])->toContain('%100\\%\\_test%');
-    });
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->name)->toBe($matchingName);
+    })->with([
+        'percent' => ['%', '100% cotton', '100x cotton'],
+        'underscore' => ['_', 'a_b', 'axb'],
+        'backslash' => ['\\', 'back\\slash', 'backslash'],
+        'exclamation mark' => ['!', 'wow!', 'wow'],
+    ]);
 
-    it('escapes raw % and _ inputs in column search', function () use ($processor): void {
-        Illuminate\Support\Facades\DB::enableQueryLog();
+    it('matches LIKE special characters literally in column search', function (string $term, string $matchingName, string $nonMatchingName) use ($processor): void {
+        createUser(['name' => $matchingName, 'email' => 'matching@example.test']);
+        createUser(['name' => $nonMatchingName, 'email' => 'non-matching@example.test']);
 
-        $query = User::query();
-        $searches = new TooInfinity\InertiaDataTables\Searching\SearchCollection([new TooInfinity\InertiaDataTables\Searching\Search('name', 'col%_test')]);
+        $searches = new TooInfinity\InertiaDataTables\Searching\SearchCollection([new TooInfinity\InertiaDataTables\Searching\Search('name', $term)]);
         $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, $searches, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
-        $processor->process($query, $request);
 
-        $queries = Illuminate\Support\Facades\DB::getQueryLog();
-        Illuminate\Support\Facades\DB::disableQueryLog();
+        $result = $processor->process(User::query(), $request);
 
-        $lastQuery = end($queries);
-        expect($lastQuery['bindings'])->toContain('%col\\%\\_test%');
-    });
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->name)->toBe($matchingName);
+    })->with([
+        'percent' => ['%', '100% cotton', '100x cotton'],
+        'underscore' => ['_', 'a_b', 'axb'],
+        'backslash' => ['\\', 'back\\slash', 'backslash'],
+        'exclamation mark' => ['!', 'wow!', 'wow'],
+    ]);
 
-    it('escapes raw % and _ inputs in wildcard filtering', function () use ($processor): void {
-        Illuminate\Support\Facades\DB::enableQueryLog();
+    it('matches LIKE special characters literally in wildcard filtering', function (string $pattern, string $matchingName, string $nonMatchingName) use ($processor): void {
+        createUser(['name' => $matchingName, 'email' => 'matching@example.test']);
+        createUser(['name' => $nonMatchingName, 'email' => 'non-matching@example.test']);
 
-        $query = User::query();
-        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('email', '100%_*')]);
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('name', $pattern)]);
         $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
-        $processor->process($query, $request);
 
-        $queries = Illuminate\Support\Facades\DB::getQueryLog();
-        Illuminate\Support\Facades\DB::disableQueryLog();
+        $result = $processor->process(User::query(), $request);
 
-        $lastQuery = end($queries);
-        expect($lastQuery['bindings'])->toContain('100\\%\\_%');
-    });
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->name)->toBe($matchingName);
+    })->with([
+        'percent' => ['100%*', '100% cotton', '100x cotton'],
+        'underscore' => ['a_*', 'a_b', 'axb'],
+        'backslash' => ['*\\*', 'back\\slash', 'backslash'],
+        'exclamation mark' => ['*!*', 'wow!', 'wow'],
+    ]);
 
     it('applies sorting with single column', function () use ($processor): void {
         createUser(['name' => 'Zebra']);
