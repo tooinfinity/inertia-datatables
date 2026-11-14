@@ -96,6 +96,7 @@ The `validation` configuration protects your application against excessive paylo
 |--------|---------|-------------|
 | `max_search_length` | `500` | Maximum character length for global and column searches |
 | `max_filter_value_length` | `500` | Maximum character length for individual filter values |
+| `max_filter_values` | `20` | Maximum number of values in a multi-value filter array |
 | `max_sorts` | `10` | Maximum number of sort columns permitted per request |
 | `max_filters` | `20` | Maximum number of column filters permitted per request |
 | `max_searches` | `20` | Maximum number of column-specific searches permitted per request |
@@ -323,7 +324,7 @@ The package implements a strict column allow-list. Only columns explicitly defin
 | `search` | `string` | Global search across all searchable columns |
 | `sort` | `string` | Comma-separated sort columns. Prefix with `-` for descending (e.g., `name,-created_at`) |
 | `searches` | `object` | Column-specific search (e.g., `searches[name]=john&searches[email]=example`) |
-| `filters` | `object` | Column filters (e.g., `filters[status]=active&filters[is_admin]=true`) |
+| `filters` | `object` | Column filters (e.g., `filters[status]=active&filters[is_admin]=true` or `filters[status][]=active&filters[status][]=inactive` for multi-value) |
 
 #### Filter Value Semantics
 
@@ -336,6 +337,9 @@ The package implements a strict column allow-list. Only columns explicitly defin
 | `"*value*"` | `LIKE '%value%'` (wildcard both sides) |
 | `"true"` / `"false"` | Boolean exact match |
 | Other strings | Exact match `WHERE column = value` |
+| Array (e.g., `filters[status][]=a&filters[status][]=b`) | `WHERE column IN (a, b)` — multi-value filter, supported for all filterable columns; for `select` type, values are validated against `filter_options` |
+
+> **Note:** Array filters are limited by `max_filter_values` config (default: 20). Nested arrays are rejected. String values within arrays are truncated to `max_filter_value_length`.
 
 ### Response Structure (Server → Client)
 

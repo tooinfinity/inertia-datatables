@@ -95,6 +95,27 @@ final readonly class QueryProcessor
      */
     private function applyFilter(EloquentBuilder|QueryBuilder $query, Column $column, mixed $value): EloquentBuilder|QueryBuilder
     {
+        // Handle array values - use whereIn for multi-value filtering
+        if (is_array($value)) {
+            // For select filter type, validate against allowed options
+            if ($column->filterType === 'select' && $column->filterOptions !== []) {
+                $allowedValues = array_column($column->filterOptions, 'value');
+                foreach ($value as $item) {
+                    $itemString = is_string($item) ? $item : json_encode($item);
+                    if (! in_array($item, $allowedValues, true)) {
+                        throw InvalidFilterException::invalidValue($column->name, "Value '{$itemString}' is not in allowed options");
+                    }
+                }
+            }
+
+            // Empty array means no results
+            if ($value === []) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->whereIn($column->name, $value);
+        }
+
         // Handle boolean filter type - query params send "true"/"false" as strings
         if ($column->filterType === 'boolean') {
             if (in_array($value, ['true', 'True', '1'], true)) {

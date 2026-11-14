@@ -50,9 +50,14 @@ final readonly class DataTableRequest implements JsonSerializable
         $searches = $searches->limit($queryConfig->maxSearches);
         $searches = $searches->sanitizeValues($queryConfig->maxFilterValueLength);
 
-        $filters = FilterCollection::fromRequest($request, $queryConfig->filters);
+        $filters = FilterCollection::fromRequest(
+            $request,
+            $queryConfig->filters,
+            $queryConfig->maxFilterValues,
+            $queryConfig->maxFilterValueLength
+        );
         $filters = $filters->limit($queryConfig->maxFilters);
-        $filters = $filters->sanitizeValues($queryConfig->maxFilterValueLength);
+        $filters = $filters->sanitizeValues($queryConfig->maxFilterValueLength, $queryConfig->maxFilterValues);
 
         return new self(
             page: $page,

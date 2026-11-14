@@ -17,6 +17,7 @@ final readonly class QueryConfig
         public string $filters = 'filters',
         public int $maxSearchLength = 500,
         public int $maxFilterValueLength = 500,
+        public int $maxFilterValues = 20,
         public int $maxSorts = 10,
         public int $maxFilters = 20,
         public int $maxSearches = 20,
@@ -34,10 +35,11 @@ final readonly class QueryConfig
             'filters' => 'filters',
         ]);
 
-        /** @var array{max_search_length: int, max_filter_value_length: int, max_sorts: int, max_filters: int, max_searches: int} $validationConfig */
+        /** @var array{max_search_length: int, max_filter_value_length: int, max_filter_values: int, max_sorts: int, max_filters: int, max_searches: int} $validationConfig */
         $validationConfig = config('inertia-datatables.validation', [
             'max_search_length' => 500,
             'max_filter_value_length' => 500,
+            'max_filter_values' => 20,
             'max_sorts' => 10,
             'max_filters' => 20,
             'max_searches' => 20,
@@ -54,6 +56,7 @@ final readonly class QueryConfig
             filters: $queryConfig['filters'],
             maxSearchLength: $validationConfig['max_search_length'],
             maxFilterValueLength: $validationConfig['max_filter_value_length'],
+            maxFilterValues: $validationConfig['max_filter_values'],
             maxSorts: $validationConfig['max_sorts'],
             maxFilters: $validationConfig['max_filters'],
             maxSearches: $validationConfig['max_searches'],
@@ -61,7 +64,7 @@ final readonly class QueryConfig
     }
 
     /**
-     * @return array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string, max_search_length: int, max_filter_value_length: int, max_sorts: int, max_filters: int, max_searches: int}
+     * @return array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string, max_search_length: int, max_filter_value_length: int, max_filter_values: int, max_sorts: int, max_filters: int, max_searches: int}
      */
     public function toArray(): array
     {
@@ -74,6 +77,7 @@ final readonly class QueryConfig
             'filters' => $this->filters,
             'max_search_length' => $this->maxSearchLength,
             'max_filter_value_length' => $this->maxFilterValueLength,
+            'max_filter_values' => $this->maxFilterValues,
             'max_sorts' => $this->maxSorts,
             'max_filters' => $this->maxFilters,
             'max_searches' => $this->maxSearches,
@@ -82,7 +86,7 @@ final readonly class QueryConfig
 
     /**
      * @param  array<string, string>  $queryConfig
-     * @param  array{max_search_length: int, max_filter_value_length: int, max_sorts: int, max_filters: int, max_searches: int}  $validationConfig
+     * @param  array{max_search_length: int, max_filter_value_length: int, max_filter_values: int, max_sorts: int, max_filters: int, max_searches: int}  $validationConfig
      */
     private static function validateConfig(array $queryConfig, array $validationConfig): void
     {
@@ -98,6 +102,10 @@ final readonly class QueryConfig
 
         if ($validationConfig['max_filter_value_length'] < 1) {
             throw new InvalidArgumentException('Validation config max_filter_value_length must be >= 1.');
+        }
+
+        if ($validationConfig['max_filter_values'] < 1) {
+            throw new InvalidArgumentException('Validation config max_filter_values must be >= 1.');
         }
 
         if ($validationConfig['max_sorts'] < 1) {

@@ -2,6 +2,14 @@
 
 ## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...HEAD)
 
+### Added
+
+- Multi-value filter support: `filters[column][]=value1&filters[column][]=value2` now uses `WHERE IN` for all filterable columns
+- `max_filter_values` validation config (default: 20) to limit array size in multi-value filters
+- `select` filter type validates array values against `filter_options`
+- Nested arrays and objects in filter values are rejected with `422` error
+- String values in filter arrays are truncated to `max_filter_value_length`
+
 ### Fixed
 
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors

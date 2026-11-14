@@ -9,6 +9,7 @@ use Countable;
 use Illuminate\Http\Request;
 use IteratorAggregate;
 use JsonSerializable;
+use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
 
 /**
  * @implements IteratorAggregate<int, Filter>
@@ -30,7 +31,11 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
         return new self($filters);
     }
 
-    public static function fromRequest(Request $request, string $filterParameter): self
+    /**
+     * @param  int  $maxValues  Maximum number of values allowed in a single filter array
+     * @param  int  $maxValueLength  Maximum length of each string value
+     */
+    public static function fromRequest(Request $request, string $filterParameter, int $maxValues = 20, int $maxValueLength = 500): self
     {
         $filters = [];
         $filtersInput = $request->query($filterParameter, []);
@@ -44,6 +49,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
                 continue;
             }
 
+            $value = self::sanitizeValue($value, $maxValues, $maxValueLength);
             $filters[] = Filter::make($column, $value);
         }
 
@@ -113,21 +119,55 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
         return new self(array_slice($this->filters, 0, $max));
     }
 
-    public function sanitizeValues(int $maxLength): self
+    /**
+     * @param  int  $maxLength  Maximum length of string values
+     * @param  int  $maxValues  Maximum number of values in an array
+     */
+    public function sanitizeValues(int $maxLength, int $maxValues = 20): self
     {
         $sanitized = [];
 
         foreach ($this->filters as $filter) {
             $value = $filter->value;
 
-            if (is_string($value) && strlen($value) > $maxLength) {
-                $value = mb_substr($value, 0, $maxLength);
-            }
+            $value = self::sanitizeValue($value, $maxValues, $maxLength);
 
             $sanitized[] = Filter::make($filter->column, $value);
         }
 
         return new self($sanitized);
+    }
+
+    /**
+     * Validate array filter values against allowed options (for select filter type).
+     *
+     * @param  array<string, array<int, array{value: string, label: string}>>  $columnOptions  Map of column name to filter options
+     *
+     * @throws InvalidFilterException If any value is not in the allowed options
+     */
+    public function validateAgainstOptions(array $columnOptions): void
+    {
+        foreach ($this->filters as $filter) {
+            $value = $filter->value;
+            $column = $filter->column;
+
+            if (! is_array($value)) {
+                continue;
+            }
+
+            if (! isset($columnOptions[$column])) {
+                continue;
+            }
+
+            $allowedValues = array_column($columnOptions[$column], 'value');
+
+            foreach ($value as $item) {
+                $itemString = is_string($item) ? $item : json_encode($item);
+                if (! in_array($item, $allowedValues, true)) {
+                    throw InvalidFilterException::invalidValue($column, "Value '{$itemString}' is not in allowed options");
+                }
+            }
+        }
     }
 
     /**
@@ -144,5 +184,60 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
     public function jsonSerialize(): array
     {
         return $this->toArray();
+    }
+
+    /**
+     * Sanitize a filter value - handles both scalars and arrays.
+     *
+     * @param  int  $maxValues  Maximum number of values allowed in an array
+     * @param  int  $maxValueLength  Maximum length of each string value
+     *
+     * @throws InvalidFilterException If value is a nested array/object or exceeds limits
+     */
+    private static function sanitizeValue(mixed $value, int $maxValues, int $maxValueLength): mixed
+    {
+        // Reject nested arrays and objects
+        if (is_array($value)) {
+            // Check if it's a flat array (all keys are integers 0, 1, 2...)
+            $keys = array_keys($value);
+            if ($keys !== range(0, count($keys) - 1)) {
+                throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+            }
+
+            // Check for nested arrays in values
+            foreach ($value as $item) {
+                if (is_array($item)) {
+                    throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+                }
+            }
+
+            // Limit array size
+            if (count($value) > $maxValues) {
+                throw InvalidFilterException::invalidValue('filter', "Filter value array exceeds maximum of {$maxValues} items");
+            }
+
+            // Sanitize each item
+            $sanitized = [];
+            foreach ($value as $item) {
+                if (is_scalar($item) || $item === null) {
+                    $sanitizedItem = $item;
+                    if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
+                        $sanitizedItem = mb_substr($sanitizedItem, 0, $maxValueLength);
+                    }
+                    $sanitized[] = $sanitizedItem;
+                } else {
+                    throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
+                }
+            }
+
+            return $sanitized;
+        }
+
+        // Scalar value - truncate string if too long
+        if (is_string($value) && strlen($value) > $maxValueLength) {
+            return mb_substr($value, 0, $maxValueLength);
+        }
+
+        return $value;
     }
 }
