@@ -194,6 +194,23 @@ Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
 ```
 
+### Per-page Defaults
+
+Use `->perPage(15)` to set the table's default page size:
+
+```php
+$users = DataTable::query(User::query())
+    ->columns([
+        Column::make('name')->sortable(),
+    ])
+    ->perPage(15)
+    ->handle();
+```
+
+The default applies when the request does not include a `per_page` parameter. A client-supplied `per_page` takes precedence, allowing the user to choose another configured page size. Both values are clamped to `max_per_page`.
+
+The effective page size is returned in both `query.per_page` and `meta.per_page`, so the frontend always reflects the number of rows actually loaded. The effective value is also included in `config.per_page_options`; options above `max_per_page` are excluded.
+
 ### Hidden Columns
 
 The `->hidden()` option marks a column as hidden in the **UI only**. It does **not** restrict API access:
@@ -218,7 +235,7 @@ The DataTable accepts these query parameters:
 | Parameter | Description |
 |-----------|-------------|
 | `page` | Current page number |
-| `per_page` | Items per page (max: `max_per_page` config) |
+| `per_page` | Items per page (overrides the table's `->perPage()` default; max: `max_per_page` config) |
 | `search` | Global search across searchable columns |
 | `sort` | Sort columns (e.g., `name,-created_at`) |
 | `filters` | Column filters (e.g., `filters[status]=active`) |
@@ -380,6 +397,8 @@ The package implements a strict column allow-list. Only columns explicitly defin
   }
 }
 ```
+
+The `query` object reflects the effective table state. In particular, `query.per_page` always matches `meta.per_page`, and an applied `defaultSort()` is included in `query.sort` even when the client did not send a sort parameter.
 
 ## Optional: Reusable UsersDataTable Component
 

@@ -122,6 +122,8 @@ describe('useDataTable', () => {
         expect(capturedResult!.state.sort).toEqual([{ column: 'name', direction: 'desc' }]);
         expect(capturedResult!.state.searches).toEqual({ email: 'example' });
         expect(capturedResult!.state.filters).toEqual({ status: 'active' });
+        expect(capturedResult!.table.getState().sorting).toEqual([{ id: 'name', desc: true }]);
+        expect(capturedResult!.table.getState().pagination.pageSize).toBe(10);
     });
 
     it('handles page change and triggers Inertia visit with correct URL', () => {

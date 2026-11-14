@@ -63,8 +63,11 @@ it('returns deterministic JSON response structure with Eloquent', function (): v
     expect($array['query'])->toHaveKeys(['page', 'per_page', 'search', 'sort', 'searches', 'filters']);
     expect($array['query']['page'])->toBe(1);
     expect($array['query']['per_page'])->toBe(25);
+    expect($array['query']['per_page'])->toBe($array['meta']['per_page']);
     expect($array['query']['search'])->toBe('');
-    expect($array['query']['sort'])->toBeArray();
+    expect($array['query']['sort'])->toBe([
+        ['column' => 'created_at', 'direction' => 'desc'],
+    ]);
     expect($array['query']['searches'])->toBeArray();
     expect($array['query']['filters'])->toBeArray();
 
@@ -83,6 +86,50 @@ it('returns deterministic JSON response structure with Eloquent', function (): v
     expect($array['config'])->toHaveKeys(['debounce', 'per_page_options']);
     expect($array['config']['debounce'])->toBeInt();
     expect($array['config']['per_page_options'])->toBeArray();
+});
+
+it('uses the table per-page default when the client does not provide one', function (): void {
+    $request = DataTableRequest::fromRequest(Request::create('/test'));
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')->sortable()])
+        ->perPage(15)
+        ->handle($request);
+
+    $array = $result->toArray();
+
+    expect($array['meta']['per_page'])->toBe(15)
+        ->and($array['query']['per_page'])->toBe(15)
+        ->and($array['query']['per_page'])->toBe($array['meta']['per_page'])
+        ->and($array['config']['per_page_options'])->toContain(15);
+});
+
+it('lets a client per-page value override the table default', function (): void {
+    $request = DataTableRequest::fromRequest(Request::create('/test?per_page=50'));
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')->sortable()])
+        ->perPage(15)
+        ->handle($request);
+
+    $array = $result->toArray();
+
+    expect($array['meta']['per_page'])->toBe(50)
+        ->and($array['query']['per_page'])->toBe(50)
+        ->and($array['query']['per_page'])->toBe($array['meta']['per_page']);
+});
+
+it('excludes per-page options above the configured maximum', function (): void {
+    config()->set('inertia-datatables.max_per_page', 50);
+    config()->set('inertia-datatables.per_page_options', [10, 50, 100]);
+
+    $request = DataTableRequest::fromRequest(Request::create('/test'));
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')->sortable()])
+        ->handle($request);
+
+    expect($result->config['per_page_options'])->toBe([10, 25, 50]);
 });
 
 it('returns deterministic JSON response structure with QueryBuilder', function (): void {

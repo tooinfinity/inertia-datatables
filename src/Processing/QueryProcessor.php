@@ -14,6 +14,8 @@ use TooInfinity\InertiaDataTables\DataTableResult;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
+use TooInfinity\InertiaDataTables\Sorting\Sort;
+use TooInfinity\InertiaDataTables\Sorting\SortCollection;
 
 /**
  * @template TModel of Model
@@ -43,9 +45,13 @@ final readonly class QueryProcessor
         $query = $this->applyFilters($query, $request);
         $query = $this->applyGlobalSearch($query, $request);
         $query = $this->applyColumnSearches($query, $request);
+
+        $sorts = $this->resolveSorts($request, $defaultSortColumn, $defaultSortDirection);
         $query = $this->applySorting($query, $request, $defaultSortColumn, $defaultSortDirection);
 
-        $perPage = $this->resolvePerPage($request, $perPageOverride);
+        /** @var int $maxPerPage */
+        $maxPerPage = config('inertia-datatables.max_per_page', 100);
+        $perPage = $this->resolvePerPage($request, $perPageOverride, $maxPerPage);
         $paginator = $query->paginate($perPage, page: $request->page);
 
         /** @var array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}> $columnsArray */
@@ -53,8 +59,11 @@ final readonly class QueryProcessor
 
         /** @var int $debounce */
         $debounce = config('inertia-datatables.search.debounce', 300);
-        /** @var array<int, int> $perPageOptions */
-        $perPageOptions = config('inertia-datatables.per_page_options', [10, 25, 50, 100]);
+        $perPageOptions = $this->resolvePerPageOptions($perPage, $maxPerPage);
+
+        $queryState = $request->toArray();
+        $queryState['per_page'] = $perPage;
+        $queryState['sort'] = $sorts->toArray();
 
         $config = [
             'debounce' => $debounce,
@@ -65,7 +74,7 @@ final readonly class QueryProcessor
         return new DataTableResult(
             paginator: $paginator,
             columns: $columnsArray,
-            query: $request->toArray(),
+            query: $queryState,
             config: $config,
         );
     }
@@ -236,6 +245,24 @@ final readonly class QueryProcessor
         return $value;
     }
 
+    private function resolveSorts(
+        DataTableRequest $request,
+        ?string $defaultSortColumn,
+        string $defaultSortDirection,
+    ): SortCollection {
+        if ($request->sorts->isNotEmpty()) {
+            return $request->sorts;
+        }
+
+        if ($defaultSortColumn === null) {
+            return $request->sorts;
+        }
+
+        return SortCollection::make([
+            Sort::make($defaultSortColumn, $defaultSortDirection),
+        ]);
+    }
+
     /**
      * @param  EloquentBuilder<TModel>|QueryBuilder  $query
      * @return EloquentBuilder<TModel>|QueryBuilder
@@ -312,12 +339,37 @@ final readonly class QueryProcessor
         throw InvalidColumnException::notFound($name);
     }
 
-    private function resolvePerPage(DataTableRequest $request, ?int $override): int
-    {
-        /** @var int $maxPerPage */
-        $maxPerPage = config('inertia-datatables.max_per_page', 100);
-        $perPage = $override ?? $request->perPage;
+    private function resolvePerPage(
+        DataTableRequest $request,
+        ?int $defaultPerPage,
+        int $maxPerPage,
+    ): int {
+        $perPage = $request->perPageProvided
+            ? $request->perPage
+            : ($defaultPerPage ?? $request->perPage);
 
         return min(max(1, $perPage), $maxPerPage);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolvePerPageOptions(int $perPage, int $maxPerPage): array
+    {
+        /** @var array<int, int> $configuredOptions */
+        $configuredOptions = config('inertia-datatables.per_page_options', [10, 25, 50, 100]);
+
+        $options = array_values(array_unique(array_filter(
+            $configuredOptions,
+            fn (int $option): bool => $option >= 1 && $option <= $maxPerPage,
+        )));
+
+        if (! in_array($perPage, $options, true)) {
+            $options[] = $perPage;
+        }
+
+        sort($options);
+
+        return $options;
     }
 }

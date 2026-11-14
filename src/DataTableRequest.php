@@ -19,6 +19,7 @@ final readonly class DataTableRequest implements JsonSerializable
         public SortCollection $sorts,
         public SearchCollection $searches,
         public FilterCollection $filters,
+        public bool $perPageProvided = true,
     ) {}
 
     public static function fromRequest(Request $request, ?QueryConfig $queryConfig = null): self
@@ -34,7 +35,11 @@ final readonly class DataTableRequest implements JsonSerializable
         $maxPerPage = config('inertia-datatables.max_per_page', 100);
 
         $perPageQuery = $request->query($queryConfig->perPage);
-        $perPage = max(1, min($maxPerPage, is_scalar($perPageQuery) ? (int) $perPageQuery : $defaultPerPage));
+        $perPageProvided = is_scalar($perPageQuery);
+        $perPage = max(1, min(
+            $maxPerPage,
+            is_scalar($perPageQuery) ? (int) $perPageQuery : $defaultPerPage,
+        ));
 
         $searchQuery = $request->query($queryConfig->search);
         $search = is_scalar($searchQuery) ? (string) $searchQuery : '';
@@ -66,6 +71,7 @@ final readonly class DataTableRequest implements JsonSerializable
             sorts: $sorts,
             searches: $searches,
             filters: $filters,
+            perPageProvided: $perPageProvided,
         );
     }
 

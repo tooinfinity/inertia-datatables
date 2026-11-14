@@ -267,7 +267,10 @@ describe('QueryProcessor', function (): void {
 
         $result = $processor->process($query, $request, 'name', 'asc');
 
-        expect($result->paginator->first()->name)->toBe('Alpha');
+        expect($result->paginator->first()->name)->toBe('Alpha')
+            ->and($result->query['sort'])->toBe([
+                ['column' => 'name', 'direction' => 'asc'],
+            ]);
     });
 
     it('resolves perPage from request when no override', function () use ($processor): void {
@@ -285,7 +288,7 @@ describe('QueryProcessor', function (): void {
         expect($result->paginator->perPage())->toBe(10);
     });
 
-    it('uses perPage override when provided', function () use ($processor): void {
+    it('uses the perPage default when the client does not provide a value', function () use ($processor): void {
         createUser(['name' => 'User 1']);
         createUser(['name' => 'User 2']);
         createUser(['name' => 'User 3']);
@@ -293,11 +296,22 @@ describe('QueryProcessor', function (): void {
         createUser(['name' => 'User 5']);
 
         $query = User::query();
-        $request = new DataTableRequest(1, 10, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, new TooInfinity\InertiaDataTables\Filtering\FilterCollection);
+        $request = DataTableRequest::fromRequest(Request::create('/test'));
 
         $result = $processor->process($query, $request, null, 'desc', 3);
 
-        expect($result->paginator->perPage())->toBe(3);
+        expect($result->paginator->perPage())->toBe(3)
+            ->and($result->query['per_page'])->toBe(3);
+    });
+
+    it('prefers a client per-page value over the default', function () use ($processor): void {
+        $query = User::query();
+        $request = DataTableRequest::fromRequest(Request::create('/test?per_page=10'));
+
+        $result = $processor->process($query, $request, null, 'desc', 3);
+
+        expect($result->paginator->perPage())->toBe(10)
+            ->and($result->query['per_page'])->toBe(10);
     });
 
     it('clamps perPage to max_per_page config', function () use ($processor): void {
