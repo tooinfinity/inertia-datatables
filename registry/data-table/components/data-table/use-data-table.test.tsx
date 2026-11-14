@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { useDataTable } from './use-data-table';
 
 vi.mock('@inertiajs/react', () => ({
@@ -135,10 +135,10 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handlePageChange(2);
+        act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenCalledWith(
-            '/?page=3',
+            '/?page=2',
             expect.objectContaining({ only: ['data'] })
         );
     });
@@ -154,7 +154,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handlePerPageChange(50);
+        act(() => capturedResult!.handlePerPageChange(50));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?per_page=50&page=1',
@@ -173,7 +173,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSortChange([{ id: 'name', desc: true }]);
+        act(() => capturedResult!.handleSortChange([{ id: 'name', desc: true }]));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?sort=-name',
@@ -192,7 +192,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('john');
+        act(() => capturedResult!.handleSearchChange('john'));
 
         // Should not immediately call router.visit due to debounce
         expect(router.visit).not.toHaveBeenCalled();
@@ -216,7 +216,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleColumnSearchChange('name', 'john');
+        act(() => capturedResult!.handleColumnSearchChange('name', 'john'));
 
         vi.advanceTimersByTime(300);
 
@@ -226,7 +226,7 @@ describe('useDataTable', () => {
         );
     });
 
-    it('handles filter change without debounce', () => {
+    it('handles filter change with debounce', () => {
         const initialData = createMockData();
 
         let capturedResult: ReturnType<typeof useDataTable> | null = null;
@@ -237,7 +237,11 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', 'active');
+        act(() => capturedResult!.handleFilterChange('status', 'active'));
+
+        expect(router.visit).not.toHaveBeenCalled();
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bstatus%5D=active&page=1',
@@ -265,7 +269,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleColumnSearchChange('name', '');
+        act(() => capturedResult!.handleColumnSearchChange('name', ''));
 
         vi.advanceTimersByTime(300);
 
@@ -296,7 +300,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', '');
+        act(() => capturedResult!.handleFilterChange('status', ''));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?page=1',
@@ -315,10 +321,10 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handlePageChange(2);
+        act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenCalledWith(
-            '/?page=3',
+            '/?page=2',
             expect.objectContaining({ only: ['users'] })
         );
     });
@@ -334,7 +340,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('is_admin', true);
+        act(() => capturedResult!.handleFilterChange('is_admin', true));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bis_admin%5D=true&page=1',
@@ -353,7 +361,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('is_admin', false);
+        act(() => capturedResult!.handleFilterChange('is_admin', false));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bis_admin%5D=false&page=1',
@@ -384,7 +394,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('is_admin', true);
+        act(() => capturedResult!.handleFilterChange('is_admin', true));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bstatus%5D=active&filters%5Bis_admin%5D=true&page=1',
@@ -412,7 +424,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', 'inactive');
+        act(() => capturedResult!.handleFilterChange('status', 'inactive'));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bstatus%5D=inactive&page=1',
@@ -440,7 +454,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', null);
+        act(() => capturedResult!.handleFilterChange('status', null));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?page=1',
@@ -468,7 +484,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', undefined);
+        act(() => capturedResult!.handleFilterChange('status', undefined));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?page=1',
@@ -496,7 +514,11 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('status', 'active');
+        act(() => capturedResult!.handleFilterChange('status', 'active'));
+
+        expect(router.visit).not.toHaveBeenCalled();
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bstatus%5D=active&page=1',
@@ -547,7 +569,9 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleFilterChange('name', 'john*doe');
+        act(() => capturedResult!.handleFilterChange('name', 'john*doe'));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?filters%5Bname%5D=john*doe&page=1',
@@ -566,10 +590,12 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('j');
-        capturedResult!.handleSearchChange('jo');
-        capturedResult!.handleSearchChange('joh');
-        capturedResult!.handleSearchChange('john');
+        act(() => {
+            capturedResult!.handleSearchChange('j');
+            capturedResult!.handleSearchChange('jo');
+            capturedResult!.handleSearchChange('joh');
+            capturedResult!.handleSearchChange('john');
+        });
 
         vi.advanceTimersByTime(300);
 
@@ -591,10 +617,12 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleColumnSearchChange('name', 'j');
-        capturedResult!.handleColumnSearchChange('name', 'jo');
-        capturedResult!.handleColumnSearchChange('name', 'joh');
-        capturedResult!.handleColumnSearchChange('name', 'john');
+        act(() => {
+            capturedResult!.handleColumnSearchChange('name', 'j');
+            capturedResult!.handleColumnSearchChange('name', 'jo');
+            capturedResult!.handleColumnSearchChange('name', 'joh');
+            capturedResult!.handleColumnSearchChange('name', 'john');
+        });
 
         vi.advanceTimersByTime(300);
 
@@ -616,16 +644,16 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('a');
+        act(() => capturedResult!.handleSearchChange('a'));
         vi.advanceTimersByTime(100);
 
-        capturedResult!.handleSearchChange('ab');
+        act(() => capturedResult!.handleSearchChange('ab'));
         vi.advanceTimersByTime(100);
 
-        capturedResult!.handleSearchChange('abc');
+        act(() => capturedResult!.handleSearchChange('abc'));
         vi.advanceTimersByTime(100);
 
-        capturedResult!.handleSearchChange('abcd');
+        act(() => capturedResult!.handleSearchChange('abcd'));
         vi.advanceTimersByTime(300);
 
         expect(router.visit).toHaveBeenCalledTimes(1);
@@ -646,9 +674,11 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('global');
-        capturedResult!.handleColumnSearchChange('name', 'column1');
-        capturedResult!.handleColumnSearchChange('email', 'column2');
+        act(() => {
+            capturedResult!.handleSearchChange('global');
+            capturedResult!.handleColumnSearchChange('name', 'column1');
+            capturedResult!.handleColumnSearchChange('email', 'column2');
+        });
 
         vi.advanceTimersByTime(300);
 
@@ -674,7 +704,7 @@ describe('useDataTable', () => {
         };
         const { unmount } = render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('test');
+        act(() => capturedResult!.handleSearchChange('test'));
 
         unmount();
 
@@ -703,7 +733,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('');
+        act(() => capturedResult!.handleSearchChange(''));
 
         vi.advanceTimersByTime(300);
 
@@ -733,7 +763,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('test');
+        act(() => capturedResult!.handleSearchChange('test'));
 
         vi.advanceTimersByTime(300);
 
@@ -765,7 +795,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('test');
+        act(() => capturedResult!.handleSearchChange('test'));
 
         vi.advanceTimersByTime(300);
 
@@ -806,7 +836,7 @@ describe('useDataTable', () => {
         };
         render(<TestWrapper />);
 
-        capturedResult!.handleSearchChange('test');
+        act(() => capturedResult!.handleSearchChange('test'));
 
         vi.advanceTimersByTime(300);
 
@@ -868,7 +898,9 @@ describe('useDataTable', () => {
 
         expect(capturedResult!.state.filters).toEqual({ name: 'john' });
 
-        capturedResult!.handleFilterChange('name', '');
+        act(() => capturedResult!.handleFilterChange('name', ''));
+
+        act(() => vi.advanceTimersByTime(300));
 
         expect(router.visit).toHaveBeenCalledWith(
             '/?page=1',

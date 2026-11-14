@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace TooInfinity\InertiaDataTables;
 
 use Illuminate\Support\ServiceProvider;
+use Override;
 
 final class InertiaDataTablesServiceProvider extends ServiceProvider
 {
+    #[Override]
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/inertia-datatables.php', 'inertia-datatables');
