@@ -292,8 +292,6 @@ it('rejects column search on non-searchable column', function (): void {
 
     $response = $this->get('/test-users-reject-colsearch?searches[email]=john');
 
-    error_log('Response status: '.$response->getStatusCode());
-    error_log('Response content: '.$response->getContent());
     $response->assertStatus(500);
 });
 
