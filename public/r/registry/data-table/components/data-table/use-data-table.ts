@@ -29,6 +29,16 @@ export function useDataTable<TData extends Record<string, unknown>>({
     const mountedRef = useRef(false);
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const sortingRef = useRef<SortingState>([]);
+    // Track the last value sent to the server for each debounced field
+    const lastSentRef = useRef<{
+        search: string;
+        searches: Record<string, string>;
+        filters: Record<string, unknown>;
+    }>({
+        search: initialData.query.search,
+        searches: Object.fromEntries(initialData.query.searches.map((s) => [s.column, s.value])),
+        filters: Object.fromEntries(initialData.query.filters.map((f) => [f.column, f.value])),
+    });
 
     const [state, setState] = useState<DataTableState>({
         page: initialData.query.page,
@@ -143,6 +153,24 @@ export function useDataTable<TData extends Record<string, unknown>>({
                 clearTimeout(debounceTimersRef.current[key]);
             }
             debounceTimersRef.current[key] = setTimeout(() => {
+                // Update last sent values when request is actually sent
+                if (key === 'search' && 'search' in params) {
+                    lastSentRef.current.search = String(params.search);
+                } else if (key.startsWith('searches.') && 'search' in params) {
+                    const column = key.replace('searches.', '');
+                    const value = params[`searches[${column}]`];
+                    lastSentRef.current.searches = {
+                        ...lastSentRef.current.searches,
+                        [column]: value === undefined ? '' : String(value),
+                    };
+                } else if (key.startsWith('filters.') && 'filters' in params) {
+                    const column = key.replace('filters.', '');
+                    const value = params[`filters[${column}]`];
+                    lastSentRef.current.filters = {
+                        ...lastSentRef.current.filters,
+                        [column]: value,
+                    };
+                }
                 visitWithParams(params);
                 delete debounceTimersRef.current[key];
             }, debounceMs);
@@ -248,21 +276,42 @@ export function useDataTable<TData extends Record<string, unknown>>({
     );
 
     useEffect(() => {
-        setState({
+        const incomingSearch = initialData.query.search;
+        const incomingSearches = Object.fromEntries(
+            initialData.query.searches.map((s) => [s.column, s.value])
+        );
+        const incomingFilters = Object.fromEntries(
+            initialData.query.filters.map((f) => [f.column, f.value])
+        );
+
+        // Check if there's a pending debounce timer for each field type
+        // If a timer is pending, the user has typed something new since the last request was sent
+        // so we should keep the local draft and not overwrite with the server response
+        const searchTimerPending = 'search' in debounceTimersRef.current;
+        const searchesTimersPending = Object.keys(debounceTimersRef.current).some((k) =>
+            k.startsWith('searches.')
+        );
+        const filtersTimersPending = Object.keys(debounceTimersRef.current).some((k) =>
+            k.startsWith('filters.')
+        );
+
+        // Only sync when no pending timer (user has stopped typing or server initiated change)
+        const shouldSyncSearch = !searchTimerPending;
+        const shouldSyncSearches = !searchesTimersPending;
+        const shouldSyncFilters = !filtersTimersPending;
+
+        setState((prev) => ({
             page: initialData.query.page,
             perPage: initialData.query.per_page,
-            search: initialData.query.search,
+            search: shouldSyncSearch ? incomingSearch : prev.search,
             sort: initialData.query.sort.map((s) => ({
                 column: s.column,
                 direction: s.direction as 'asc' | 'desc',
             })),
-            searches: Object.fromEntries(
-                initialData.query.searches.map((s) => [s.column, s.value])
-            ),
-            filters: Object.fromEntries(
-                initialData.query.filters.map((f) => [f.column, f.value])
-            ),
-        });
+            searches: shouldSyncSearches ? incomingSearches : prev.searches,
+            filters: shouldSyncFilters ? incomingFilters : prev.filters,
+        }));
+
         setSorting(
             initialData.query.sort.map((s) => ({
                 id: s.column,
@@ -273,15 +322,18 @@ export function useDataTable<TData extends Record<string, unknown>>({
             pageIndex: initialData.query.page - 1,
             pageSize: initialData.query.per_page,
         });
-        setGlobalFilter(initialData.query.search);
-        setColumnFilters(
-            Object.entries(
-                Object.fromEntries(initialData.query.filters.map((f) => [f.column, f.value]))
-            ).map(([id, value]) => ({ id, value })) as ColumnFiltersState
-        );
-        setColumnSearches(
-            Object.fromEntries(initialData.query.searches.map((s) => [s.column, s.value]))
-        );
+
+        if (shouldSyncSearch) {
+            setGlobalFilter(incomingSearch);
+        }
+        if (shouldSyncFilters) {
+            setColumnFilters(
+                Object.entries(incomingFilters).map(([id, value]) => ({ id, value })) as ColumnFiltersState
+            );
+        }
+        if (shouldSyncSearches) {
+            setColumnSearches(incomingSearches);
+        }
     }, [initialData.query]);
 
     useEffect(() => {
