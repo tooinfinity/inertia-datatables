@@ -25,21 +25,24 @@ final readonly class DataTableRequest implements JsonSerializable
     {
         $queryConfig ??= QueryConfig::fromConfig();
 
-        $page = max(1, (int) $request->query($queryConfig->page, 1));
+        $pageQuery = $request->query($queryConfig->page);
+        $page = max(1, is_scalar($pageQuery) ? (int) $pageQuery : 1);
 
         /** @var int $defaultPerPage */
         $defaultPerPage = config('inertia-datatables.default_per_page', 25);
         /** @var int $maxPerPage */
         $maxPerPage = config('inertia-datatables.max_per_page', 100);
 
-        $perPage = max(1, min($maxPerPage, (int) $request->query($queryConfig->perPage, $defaultPerPage)));
+        $perPageQuery = $request->query($queryConfig->perPage);
+        $perPage = max(1, min($maxPerPage, is_scalar($perPageQuery) ? (int) $perPageQuery : $defaultPerPage));
 
-        $searchQuery = $request->query($queryConfig->search, '');
-        $search = is_array($searchQuery) ? '' : (string) $searchQuery;
+        $searchQuery = $request->query($queryConfig->search);
+        $search = is_scalar($searchQuery) ? (string) $searchQuery : '';
         $search = self::sanitizeSearch($search, $queryConfig->maxSearchLength);
 
+        $sortQuery = $request->query($queryConfig->sort);
         $sorts = SortCollection::fromQueryString(
-            (string) $request->query($queryConfig->sort, ''),
+            is_scalar($sortQuery) ? (string) $sortQuery : '',
         );
         $sorts = $sorts->limit($queryConfig->maxSorts);
 

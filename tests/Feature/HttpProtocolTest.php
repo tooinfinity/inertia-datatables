@@ -115,6 +115,28 @@ it('ignores integer-keyed query parameters', function (string $query): void {
     'array' => '1[]=a',
 ]);
 
+it('ignores array-valued scalar query parameters', function (string $query): void {
+    makeTestRoute('/test-users-array-query', [
+        Column::make('name')->searchable()->sortable(),
+        Column::make('email')->searchable()->sortable(),
+    ]);
+
+    createUser(['name' => 'John Doe', 'email' => 'john@example.com']);
+
+    $response = $this->get('/test-users-array-query?'.$query)->assertOk();
+
+    expect($response->json('query.page'))->toBe(1)
+        ->and($response->json('query.per_page'))->toBe(25)
+        ->and($response->json('query.search'))->toBe('')
+        ->and($response->json('query.sort'))->toBe([]);
+})->with([
+    'sort list' => 'sort[]=name',
+    'sort map' => 'sort[a]=b',
+    'page list' => 'page[]=2',
+    'per page map' => 'per_page[x]=5',
+    'search list' => 'search[]=john',
+]);
+
 it('handles sorting via sort parameter', function (): void {
     makeTestRoute('/test-users-sort', [
         Column::make('name')->searchable()->sortable(),
