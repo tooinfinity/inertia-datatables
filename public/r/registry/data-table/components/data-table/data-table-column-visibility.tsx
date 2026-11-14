@@ -10,11 +10,11 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface DataTableColumnVisibilityProps<TData extends Record<string, unknown>> {
+interface DataTableColumnVisibilityProps<TData extends object> {
     table: Table<TData>;
 }
 
-export function DataTableColumnVisibility<TData extends Record<string, unknown>>({
+export function DataTableColumnVisibility<TData extends object>({
     table,
 }: DataTableColumnVisibilityProps<TData>) {
     const columns = table.getAllLeafColumns();

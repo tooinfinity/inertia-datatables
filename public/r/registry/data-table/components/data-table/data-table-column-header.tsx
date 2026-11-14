@@ -20,7 +20,7 @@ interface DataTableColumnMeta extends ColumnMeta<unknown, unknown> {
     filter_options?: Array<{ value: string; label: string }>;
 }
 
-interface DataTableColumnHeaderProps<TData extends Record<string, unknown>> {
+interface DataTableColumnHeaderProps<TData extends object> {
     header: Header<TData, unknown>;
     column: Column<TData, unknown>;
     onColumnSearchChange: (_column: string, _value: string) => void;
@@ -29,7 +29,7 @@ interface DataTableColumnHeaderProps<TData extends Record<string, unknown>> {
     currentFilterValue?: unknown;
 }
 
-export function DataTableColumnHeader<TData extends Record<string, unknown>>({
+export function DataTableColumnHeader<TData extends object>({
     header,
     column,
     onColumnSearchChange,

@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, forwardRef } from 'react';
+import { type ReactNode, forwardRef, type ReactElement, type Ref } from 'react';
 import { flexRender } from '@tanstack/react-table';
 import { type DataTableResponse } from './types';
 import {
@@ -18,13 +18,13 @@ import { DataTableColumnVisibility } from './data-table-column-visibility';
 import { DataTableEmpty } from './data-table-empty';
 import { useDataTable } from './use-data-table';
 
-interface DataTableProps<TData extends Record<string, unknown>> {
+interface DataTableProps<TData extends object> {
     data: DataTableResponse<TData>;
     children?: ReactNode;
     dataPropName?: string;
 }
 
-export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<string, unknown>>>(
+const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<object>>(
     ({ data, children, dataPropName = 'data', ...props }, ref) => {
         const {
             table,
@@ -36,7 +36,7 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
             state,
             perPageOptions,
             columnSearches,
-        } = useDataTable<Record<string, unknown>>({ data, dataPropName });
+        } = useDataTable<object>({ data, dataPropName });
 
         return (
             <div className="space-y-4">
@@ -99,4 +99,9 @@ export const DataTable = forwardRef<HTMLTableElement, DataTableProps<Record<stri
     }
 );
 
-DataTable.displayName = 'DataTable';
+export const DataTable = Object.assign(
+    DataTableComponent as <TData extends object>(
+        props: DataTableProps<TData> & { ref?: Ref<HTMLTableElement> }
+    ) => ReactElement | null,
+    { displayName: 'DataTable' }
+);
