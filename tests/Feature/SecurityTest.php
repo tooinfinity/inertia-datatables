@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Schema;
 use TooInfinity\InertiaDataTables\Column;
+use TooInfinity\InertiaDataTables\DataTable;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
@@ -54,7 +55,7 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-sort-unknown?sort=unknown_column');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects filter on unknown column', function (): void {
@@ -67,7 +68,7 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-filter-unknown?filters[unknown_column]=value');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects column search on unknown column', function (): void {
@@ -80,7 +81,7 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-colsearch-unknown?searches[unknown_column]=john');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects global search when no searchable columns defined', function (): void {
@@ -107,7 +108,7 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-sort-not-allowed?sort=email');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects filter on non-filterable column even if column exists', function (): void {
@@ -120,7 +121,7 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-filter-not-allowed?filters[name]=john');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects column search on non-searchable column even if column exists', function (): void {
@@ -133,32 +134,23 @@ describe('Security: Unknown/Invalid Column Rejection', function (): void {
 
         $response = $this->get('/security-colsearch-not-allowed?searches[email]=john');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects default sort on non-sortable column', function (): void {
-        makeTestRoute('/security-default-sort-not-allowed', [
-            Column::make('name')->searchable(),
-            Column::make('email')->sortable(),
-        ], 'name'); // name is not sortable
-
-        createUser(['name' => 'John']);
-
-        $response = $this->get('/security-default-sort-not-allowed');
-
-        $response->assertStatus(500);
+        expect(fn (): DataTable => DataTable::query(User::query())
+            ->columns([
+                Column::make('name')->searchable(),
+                Column::make('email')->sortable(),
+            ])
+            ->defaultSort('name'))
+            ->toThrow(InvalidSortException::class, 'Column [name] is not sortable.');
     });
 
     it('rejects default sort with invalid direction', function (): void {
-        makeTestRoute('/security-invalid-default-direction', [
-            Column::make('name')->sortable(),
-        ], 'name', 'invalid');
-
-        createUser(['name' => 'John']);
-
-        $response = $this->get('/security-invalid-default-direction');
-
-        $response->assertStatus(500);
+        expect(fn (): DataTable => DataTable::query(User::query())
+            ->defaultSort('name', 'invalid'))
+            ->toThrow(InvalidSortException::class, 'Invalid sort direction [invalid]. Expected "asc" or "desc".');
     });
 });
 
@@ -224,7 +216,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
         // Attempt SQL injection via sort parameter
         $response = $this->get('/security-sql-inject-sort?sort=name;DROP TABLE users;--');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects SQL injection in filter column', function (): void {
@@ -237,7 +229,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
 
         $response = $this->get('/security-sql-inject-filter?filters[name;DROP TABLE users;--]=active');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('neutralizes SQL injection in column search via query parser', function (): void {
@@ -266,7 +258,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
 
         $response = $this->get('/security-backticks?sort=`name`');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects column with dots (table.column)', function (): void {
@@ -278,7 +270,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
 
         $response = $this->get('/security-dot-notation?sort=users.name');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('rejects column with spaces', function (): void {
@@ -290,7 +282,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
 
         $response = $this->get('/security-spaces?sort=name%20desc');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 
     it('handles null bytes stripped by PHP', function (): void {
@@ -331,7 +323,7 @@ describe('Security: Malicious Column Identifiers', function (): void {
         $longColumn = str_repeat('a', 1000);
         $response = $this->get('/security-long-column?sort='.$longColumn);
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 });
 
@@ -405,7 +397,7 @@ describe('Security: Malicious Query Values', function (): void {
 
         $response = $this->get('/security-path-traversal?sort=../../../etc/passwd');
 
-        $response->assertStatus(500);
+        $response->assertStatus(422);
     });
 });
 

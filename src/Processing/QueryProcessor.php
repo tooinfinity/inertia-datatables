@@ -79,7 +79,7 @@ final readonly class QueryProcessor
             $column = $this->findColumn($filter->column);
 
             if (! $column->filterable) {
-                throw InvalidFilterException::notAllowed($filter->column);
+                throw InvalidFilterException::notAllowed($filter->column)->forRequest();
             }
 
             $query = $this->applyFilter($query, $column, $filter->value);
@@ -162,7 +162,7 @@ final readonly class QueryProcessor
             $column = $this->findColumn($search->column);
 
             if (! $column->searchable) {
-                throw InvalidColumnException::notAllowed($search->column, 'search');
+                throw InvalidColumnException::notAllowed($search->column, 'search')->forRequest();
             }
 
             $escaped = addcslashes($search->value, '%_\\');
@@ -200,12 +200,12 @@ final readonly class QueryProcessor
             $column = $this->findColumn($sort->column);
 
             if (! $column->sortable) {
-                throw InvalidSortException::notAllowed($sort->column);
+                throw InvalidSortException::notAllowed($sort->column)->forRequest();
             }
 
             $direction = strtolower($sort->direction);
             if (! in_array($direction, ['asc', 'desc'], true)) {
-                throw InvalidSortException::invalidDirection($sort->direction);
+                throw InvalidSortException::invalidDirection($sort->direction)->forRequest();
             }
 
             /** @var 'asc'|'desc' $direction */
@@ -221,19 +221,19 @@ final readonly class QueryProcessor
 
         foreach ($request->sorts->all() as $sort) {
             if (! isset($allowedColumns[$sort->column])) {
-                throw InvalidSortException::notAllowed($sort->column);
+                throw InvalidSortException::notAllowed($sort->column)->forRequest();
             }
         }
 
         foreach ($request->filters->all() as $filter) {
             if (! isset($allowedColumns[$filter->column])) {
-                throw InvalidFilterException::notAllowed($filter->column);
+                throw InvalidFilterException::notAllowed($filter->column)->forRequest();
             }
         }
 
         foreach ($request->searches->all() as $search) {
             if (! isset($allowedColumns[$search->column])) {
-                throw InvalidColumnException::notAllowed($search->column, 'search');
+                throw InvalidColumnException::notAllowed($search->column, 'search')->forRequest();
             }
         }
     }

@@ -7,6 +7,8 @@ return [
 
     'max_per_page' => 100,
 
+    'handle_exceptions' => true,
+
     'per_page_options' => [
         10,
         25,

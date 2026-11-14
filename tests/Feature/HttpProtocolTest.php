@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Schema;
 use TooInfinity\InertiaDataTables\Column;
+use TooInfinity\InertiaDataTables\DataTable;
+use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
+use Workbench\App\Models\User;
 
 beforeEach(function (): void {
     Schema::create('users', function ($table): void {
@@ -266,7 +269,7 @@ it('rejects sort on non-sortable column', function (): void {
 
     $response = $this->get('/test-users-reject-sort?sort=email');
 
-    $response->assertStatus(500);
+    $response->assertStatus(422);
 });
 
 it('rejects filter on non-filterable column', function (): void {
@@ -279,7 +282,7 @@ it('rejects filter on non-filterable column', function (): void {
 
     $response = $this->get('/test-users-reject-filter?filters[name]=john');
 
-    $response->assertStatus(500);
+    $response->assertStatus(422);
 });
 
 it('rejects column search on non-searchable column', function (): void {
@@ -292,7 +295,7 @@ it('rejects column search on non-searchable column', function (): void {
 
     $response = $this->get('/test-users-reject-colsearch?searches[email]=john');
 
-    $response->assertStatus(500);
+    $response->assertStatus(422);
 });
 
 it('enforces max per page', function (): void {
@@ -377,15 +380,9 @@ it('applies column filtering with QueryBuilder', function (): void {
 });
 
 it('validates default sort direction', function (): void {
-    makeTestRoute('/test-users-invalid-default', [
-        Column::make('name')->sortable(),
-    ], 'name', 'invalid');
-
-    createUser(['name' => 'John']);
-
-    $response = $this->get('/test-users-invalid-default');
-
-    $response->assertStatus(500);
+    expect(fn (): DataTable => DataTable::query(User::query())
+        ->defaultSort('name', 'invalid'))
+        ->toThrow(InvalidSortException::class, 'Invalid sort direction [invalid]. Expected "asc" or "desc".');
 });
 
 it('returns correct query state in response', function (): void {

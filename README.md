@@ -65,6 +65,7 @@ The package uses `config/inertia-datatables.php`:
 return [
     'default_per_page' => 25,
     'max_per_page' => 100,
+    'handle_exceptions' => true,
     'per_page_options' => [10, 25, 50, 100],
     'search' => [
         'debounce' => 300,
@@ -98,6 +99,18 @@ The `validation` configuration protects your application against excessive paylo
 | `max_sorts` | `10` | Maximum number of sort columns permitted per request |
 | `max_filters` | `20` | Maximum number of column filters permitted per request |
 | `max_searches` | `20` | Maximum number of column-specific searches permitted per request |
+
+### Exception Handling
+
+Invalid client-supplied sort, filter, and search parameters are handled automatically; no application exception-handler wiring is required:
+
+- JSON requests receive `422 Unprocessable Entity` with a `message` and an `errors.query` validation error bag.
+- Inertia requests redirect back with the same validation error available under the `query` error key.
+- These client errors are not reported to the application logger or error tracker by default.
+
+Developer misconfiguration remains an exception. For example, an invalid `defaultSort()` column or direction still throws `InvalidSortException` and is handled by Laravel's normal exception reporting.
+
+To opt out of the package's request handling, set `handle_exceptions` to `false` in `config/inertia-datatables.php`. Laravel will then use its default exception rendering and reporting behavior.
 
 ## Backend Usage
 
@@ -297,7 +310,7 @@ The `dataPropName` option specifies which Inertia page prop contains the DataTab
 
 ## Security
 
-The package implements a strict column allow-list. Only columns explicitly defined with `->searchable()`, `->sortable()`, or `->filterable()` can be used in requests. Malicious requests like `sort=users.password` or `filters[email]=admin@example.com` are rejected with clear exceptions.
+The package implements a strict column allow-list. Only columns explicitly defined with `->searchable()`, `->sortable()`, or `->filterable()` can be used in requests. Malicious requests like `sort=users.password` or `filters[email]=admin@example.com` are rejected with clear validation errors instead of server errors.
 
 ## Query/Response Contract
 

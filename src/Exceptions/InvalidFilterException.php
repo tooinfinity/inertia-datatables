@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Exceptions;
 
-use InvalidArgumentException;
-
-final class InvalidFilterException extends InvalidArgumentException
+final class InvalidFilterException extends InvalidDataTableException
 {
     public static function notAllowed(string $column): self
     {
