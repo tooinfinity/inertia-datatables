@@ -16,3 +16,16 @@
 /AGENTS.md          export-ignore
 /AGENTS_PACKAGE.md  export-ignore
 /CODE_REVIEW_PROMPT.md export-ignore
+/public             export-ignore
+/registry           export-ignore
+/registry.json      export-ignore
+/package.json       export-ignore
+/package-lock.json  export-ignore
+/bun.lock           export-ignore
+/eslint.config.js   export-ignore
+/vite.config.ts     export-ignore
+/vitest.config.ts   export-ignore
+/vitest.setup.tsx   export-ignore
+/tsconfig.json      export-ignore
+/tsconfig.test.json export-ignore
+/rector.php         export-ignore
