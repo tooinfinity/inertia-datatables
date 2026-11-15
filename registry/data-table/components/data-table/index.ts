@@ -6,6 +6,7 @@ export { DataTableColumnVisibility } from './data-table-column-visibility';
 export { DataTableEmpty } from './data-table-empty';
 export { useDataTable } from './use-data-table';
 export { formatCellValue, defaultCellFormatter } from './cell-formatters';
+export { dataTableFeatures } from './table-features';
 export type {
   DataTableColumn,
   DataTableMeta,
@@ -14,3 +15,4 @@ export type {
   DataTableState,
   DataTableOptions,
 } from './types';
+export type { DataTableColumnMeta, DataTableFeatures } from './table-features';

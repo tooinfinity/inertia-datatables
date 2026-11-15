@@ -1,12 +1,14 @@
 'use client';
 
-import type { CellContext } from '@tanstack/react-table';
+import type { ReactNode } from 'react';
+import type { CellContext, RowData } from '@tanstack/react-table';
+import type { DataTableFeatures } from './table-features';
 
 /**
  * Default cell value formatter.
  * Handles booleans, null/undefined, objects, arrays, and other types.
  */
-export function formatCellValue(value: unknown): React.ReactNode {
+export function formatCellValue(value: unknown): ReactNode {
     if (value === null || value === undefined) {
         return '—';
     }
@@ -18,6 +20,9 @@ export function formatCellValue(value: unknown): React.ReactNode {
     if (typeof value === 'object') {
         try {
             const json = JSON.stringify(value);
+            if (json === undefined) {
+                return String(value);
+            }
             // Truncate long JSON strings
             return json.length > 100 ? json.slice(0, 100) + '…' : json;
         } catch {
@@ -26,13 +31,15 @@ export function formatCellValue(value: unknown): React.ReactNode {
     }
 
     // Primitives (string, number, bigint, symbol) are valid React nodes
-    return value as React.ReactNode;
+    return value as ReactNode;
 }
 
 /**
  * Default cell renderer that uses formatCellValue.
  * Can be overridden by providing a custom cell formatter in the column definition.
  */
-export function defaultCellFormatter<TData>(info: CellContext<TData, unknown>): React.ReactNode {
+export function defaultCellFormatter<TData extends RowData>(
+    info: CellContext<DataTableFeatures, TData, unknown>
+): ReactNode {
     return formatCellValue(info.getValue());
 }

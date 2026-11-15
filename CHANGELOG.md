@@ -10,6 +10,11 @@
 - Nested arrays and objects in filter values are rejected with `422` error
 - String values in filter arrays are truncated to `max_filter_value_length`
 
+### Changed
+
+- Upgraded the frontend registry to TanStack Table v9 with explicit table features and v9-compatible types
+- Standardized package and registry metadata on TanStack Table v9
+
 ### Fixed
 
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors
@@ -27,7 +32,7 @@ Initial pre-release.
 
 Initial pre-release of inertia-datatables.
 
-Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v8, and shadcn/ui.
+Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v9, and shadcn/ui.
 
 **Features**
 

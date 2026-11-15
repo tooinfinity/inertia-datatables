@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { type Table, type Column } from '@tanstack/react-table';
+import { type ReactTable, type Column, type RowData } from '@tanstack/react-table';
+import type { DataTableFeatures } from './table-features';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenu,
@@ -10,11 +11,11 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface DataTableColumnVisibilityProps<TData extends object> {
-    table: Table<TData>;
+interface DataTableColumnVisibilityProps<TData extends RowData> {
+    table: ReactTable<DataTableFeatures, TData>;
 }
 
-export function DataTableColumnVisibility<TData extends object>({
+export function DataTableColumnVisibility<TData extends RowData>({
     table,
 }: DataTableColumnVisibilityProps<TData>) {
     const columns = table.getAllLeafColumns();
@@ -31,7 +32,7 @@ export function DataTableColumnVisibility<TData extends object>({
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 p-2" sideOffset={8} align="end">
                 <div className="space-y-1">
-                    {columns.map((column: Column<TData, unknown>) => (
+                    {columns.map((column: Column<DataTableFeatures, TData, unknown>) => (
                         <DropdownMenuItem
                             key={column.id}
                             className="flex items-center gap-2 px-2 py-1.5 text-sm"

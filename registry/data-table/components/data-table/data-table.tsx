@@ -16,14 +16,15 @@ import { DataTableColumnHeader } from './data-table-column-header';
 import { DataTableColumnVisibility } from './data-table-column-visibility';
 import { DataTableEmpty } from './data-table-empty';
 import { useDataTable } from './use-data-table';
+import type { RowData } from '@tanstack/react-table';
 
-interface DataTableProps<TData extends object> {
+interface DataTableProps<TData extends RowData> {
     data: DataTableResponse<TData>;
     children?: ReactNode;
     dataPropName?: string;
 }
 
-const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<object>>(
+const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<string, unknown>>>(
     ({ data, children, dataPropName = 'data', ...props }, ref) => {
         const {
             table,
@@ -35,7 +36,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<object>>(
             state,
             perPageOptions,
             columnSearches,
-        } = useDataTable<object>({ data, dataPropName });
+        } = useDataTable<Record<string, unknown>>({ data, dataPropName });
 
         return (
             <div className="space-y-4">
@@ -48,23 +49,23 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<object>>(
                 />
                 <div className="rounded-md border">
                     <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
-<TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                            <DataTableColumnHeader
-                                key={header.id}
-                                header={header}
-                                column={header.column}
-                                onColumnSearchChange={handleColumnSearchChange}
-                                onFilterChange={handleFilterChange}
-                                columnSearchValue={columnSearches[header.column.id] ?? ''}
-                                currentFilterValue={state.filters[header.column.id]}
-                            />
-                        ))}
-                    </TableRow>
-                ))}
-            </TableHeader>
+                        <TableHeader>
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header) => (
+                                        <DataTableColumnHeader
+                                            key={header.id}
+                                            header={header}
+                                            column={header.column}
+                                            onColumnSearchChange={handleColumnSearchChange}
+                                            onFilterChange={handleFilterChange}
+                                            columnSearchValue={columnSearches[header.column.id] ?? ''}
+                                            currentFilterValue={state.filters[header.column.id]}
+                                        />
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
                         <TableBody>
                             {table.getRowModel().rows.length === 0 ? (
                                 <DataTableEmpty columns={table.getAllLeafColumns().length} />
@@ -97,7 +98,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<object>>(
 );
 
 export const DataTable = Object.assign(
-    DataTableComponent as <TData extends object>(
+    DataTableComponent as <TData extends RowData>(
         props: DataTableProps<TData> & { ref?: Ref<HTMLTableElement> }
     ) => ReactElement | null,
     { displayName: 'DataTable' }

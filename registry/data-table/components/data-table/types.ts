@@ -1,7 +1,16 @@
-import type { ColumnDef, SortingState, PaginationState, ColumnFiltersState } from '@tanstack/react-table';
-import type { CellContext } from '@tanstack/react-table';
+import type { ReactNode } from 'react';
+import type {
+    CellContext,
+    ColumnDef,
+    ColumnFiltersState,
+    ColumnVisibilityState,
+    PaginationState,
+    RowData,
+    SortingState,
+} from '@tanstack/react-table';
+import type { DataTableFeatures } from './table-features';
 
-export interface DataTableColumn<TData = unknown> {
+export interface DataTableColumn<TData extends RowData = Record<string, unknown>> {
     name: string;
     label: string;
     sortable: boolean;
@@ -11,7 +20,7 @@ export interface DataTableColumn<TData = unknown> {
     filter_type?: 'text' | 'select' | 'boolean' | null;
     filter_options?: Array<{ value: string; label: string }>;
     /** Custom cell formatter. Receives the cell context and returns a React node. */
-    cell?: (info: CellContext<TData, unknown>) => React.ReactNode;
+    cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }
 
 export interface DataTableMeta {
@@ -37,7 +46,7 @@ export interface DataTableConfig {
     per_page_options: number[];
 }
 
-export interface DataTableResponse<TData = unknown> {
+export interface DataTableResponse<TData extends RowData = Record<string, unknown>> {
     data: TData[];
     meta: DataTableMeta;
     query: DataTableQuery;
@@ -54,14 +63,19 @@ export interface DataTableState {
     filters: Record<string, unknown>;
 }
 
-export interface DataTableOptions<TData = unknown> {
+export interface DataTableOptions<TData extends RowData = Record<string, unknown>> {
     data: DataTableResponse<TData>;
     onDataChange?: (_data: DataTableResponse<TData>) => void;
     dataPropName?: string;
 }
 
-export type DataTableColumnDef<TData = unknown> = ColumnDef<TData, unknown>;
+export type DataTableColumnDef<TData extends RowData = Record<string, unknown>> = ColumnDef<
+    DataTableFeatures,
+    TData,
+    unknown
+>;
 
 export type DataTableSortingState = SortingState;
 export type DataTablePaginationState = PaginationState;
 export type DataTableColumnFiltersState = ColumnFiltersState;
+export type DataTableVisibilityState = ColumnVisibilityState;

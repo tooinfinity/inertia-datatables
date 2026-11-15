@@ -26,26 +26,26 @@ vi.mock('@inertiajs/react', () => ({
 
 vi.mock('@tanstack/react-table', () => ({
     createColumnHelper: () => ({
-        accessor: (key: string, options: Record<string, unknown>) => ({ ...options, id: key, accessorKey: key }),
+        accessor: (key: unknown, options: Record<string, unknown>) => ({
+            ...options,
+            id: options.id ?? 'column',
+            accessorFn: typeof key === 'function' ? key : undefined,
+        }),
     }),
     flexRender: (render: (props: unknown) => React.ReactNode, props: unknown) => render?.(props) ?? null,
-    getCoreRowModel: () => () => ({ rows: [] }),
-    createCoreRowModel: () => () => ({ rows: [] }),
-    useReactTable: (options: Record<string, unknown>) => ({
-        ...options,
-        getHeaderGroups: () => [],
-        getRowModel: () => ({ rows: [] }),
-        getAllLeafColumns: () => options.columns ?? [],
-        getState: () => options.state ?? {},
-        setState: vi.fn(),
-    }),
+    tableFeatures: (features: Record<string, unknown>) => features,
+    columnFilteringFeature: {},
+    columnVisibilityFeature: {},
+    globalFilteringFeature: {},
+    rowPaginationFeature: {},
+    rowSortingFeature: {},
+    metaHelper: () => ({}),
     useTable: (options: Record<string, unknown>) => ({
         ...options,
         getHeaderGroups: () => [],
         getRowModel: () => ({ rows: [] }),
         getAllLeafColumns: () => options.columns ?? [],
-        getState: () => options.state ?? {},
+        state: options.state ?? {},
         setState: vi.fn(),
     }),
-    getColumnFromId: (columns: Record<string, unknown>[], id: string) => columns.find((c) => c.id === id),
 }));

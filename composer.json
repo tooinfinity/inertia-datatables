@@ -1,14 +1,25 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "name": "tooinfinity/inertia-datatables",
-    "description": "Server-side DataTables for Laravel + Inertia 3 with React, TanStack Table v8, and shadcn/ui",
+    "description": "Server-side DataTables for Laravel + Inertia 3 with React, TanStack Table v9, and shadcn/ui",
     "type": "library",
     "keywords": [
         "laravel",
         "tooinfinity",
-        "inertia-datatables"
+        "inertia-datatables",
+        "inertia",
+        "inertiajs",
+        "datatable",
+        "datatables",
+        "react",
+        "tanstack-table",
+        "server-side"
     ],
     "homepage": "https://github.com/tooinfinity/inertia-datatables",
+    "support": {
+        "issues": "https://github.com/tooinfinity/inertia-datatables/issues",
+        "source": "https://github.com/tooinfinity/inertia-datatables"
+    },
     "license": "MIT",
     "authors": [
         {

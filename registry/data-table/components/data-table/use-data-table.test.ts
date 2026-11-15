@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ColumnDef } from '@tanstack/react-table';
 
 // Mock Inertia router
 vi.mock('@inertiajs/react', () => ({
@@ -14,18 +13,27 @@ vi.mock('@inertiajs/react', () => ({
 // Mock TanStack Table v9
 vi.mock('@tanstack/react-table', () => ({
   createColumnHelper: () => ({
-    accessor: (key: string, options: Record<string, unknown>) => ({ ...options, id: key, accessorKey: key }),
+    accessor: (key: unknown, options: Record<string, unknown>) => ({
+      ...options,
+      id: options.id ?? 'column',
+      accessorFn: typeof key === 'function' ? key : undefined,
+    }),
   }),
   flexRender: (render: ((props: unknown) => React.ReactNode) | null, props: unknown) => render?.(props) ?? null,
-  createCoreRowModel: () => () => ({ rows: [] }),
+  tableFeatures: (features: Record<string, unknown>) => features,
+  columnFilteringFeature: {},
+  columnVisibilityFeature: {},
+  globalFilteringFeature: {},
+  rowPaginationFeature: {},
+  rowSortingFeature: {},
+  metaHelper: () => ({}),
   useTable: () => ({
     getHeaderGroups: () => [],
     getRowModel: () => ({ rows: [] }),
     getAllLeafColumns: () => [],
-    getState: () => ({}),
+    state: {},
     setState: vi.fn(),
   }),
-  getColumnFromId: (columns: ColumnDef<unknown, unknown>[], id: string) => columns.find((c) => c.id === id),
 }));
 
 // Mock window.location

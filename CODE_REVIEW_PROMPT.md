@@ -3,7 +3,7 @@
 ## Package Overview
 
 **Package:** `tooinfinity/inertia-datatables`
-**Purpose:** Server-side DataTables for Laravel + Inertia 3 with React, TanStack Table v8, and shadcn/ui
+**Purpose:** Server-side DataTables for Laravel + Inertia 3 with React, TanStack Table v9, and shadcn/ui
 **Architecture:** Immutable/read-only value objects, fluent builder pattern, query processor with capability-based allowlists
 
 ---
@@ -294,7 +294,7 @@ User-controlled `*` becomes `%`. This is **intentional feature** (wildcard searc
 }
 ```
 
-- **Check:** Matches TanStack Table v8 expectations?
+- **Check:** Matches TanStack Table v9 expectations?
 - **Check:** `from`/`to` can be `null` — handled in frontend?
 
 ---

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { type Column, type Header, type ColumnMeta, flexRender } from '@tanstack/react-table';
+import { type Column, type Header, type RowData, flexRender } from '@tanstack/react-table';
+import type { DataTableFeatures, DataTableColumnMeta } from './table-features';
 import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
@@ -13,23 +14,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 
-interface DataTableColumnMeta extends ColumnMeta<unknown, unknown> {
-    searchable?: boolean;
-    filterable?: boolean;
-    filter_type?: 'text' | 'select' | 'boolean' | null;
-    filter_options?: Array<{ value: string; label: string }>;
-}
-
-interface DataTableColumnHeaderProps<TData extends object> {
-    header: Header<TData, unknown>;
-    column: Column<TData, unknown>;
+interface DataTableColumnHeaderProps<TData extends RowData> {
+    header: Header<DataTableFeatures, TData, unknown>;
+    column: Column<DataTableFeatures, TData, unknown>;
     onColumnSearchChange: (_column: string, _value: string) => void;
     onFilterChange: (_column: string, _value: unknown) => void;
     columnSearchValue: string;
     currentFilterValue?: unknown;
 }
 
-export function DataTableColumnHeader<TData extends object>({
+export function DataTableColumnHeader<TData extends RowData>({
     header,
     column,
     onColumnSearchChange,
@@ -37,7 +31,7 @@ export function DataTableColumnHeader<TData extends object>({
     columnSearchValue,
     currentFilterValue,
 }: DataTableColumnHeaderProps<TData>) {
-    const canSort = column.columnDef.enableSorting;
+    const canSort = column.columnDef.enableSorting === true;
     const meta = column.columnDef.meta as DataTableColumnMeta | undefined;
     const canSearch = meta?.searchable === true;
     const canFilter = meta?.filterable === true;

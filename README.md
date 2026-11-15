@@ -43,6 +43,7 @@ This will install the complete DataTable feature into your Laravel application:
 - `resources/js/components/data-table/data-table-empty.tsx`
 - `resources/js/components/data-table/use-data-table.ts`
 - `resources/js/components/data-table/types.ts`
+- `resources/js/components/data-table/table-features.ts`
 - `resources/js/components/data-table/cell-formatters.ts`
 - `resources/js/components/ui/table.tsx`
 
@@ -56,7 +57,7 @@ Required shadcn primitives (auto-installed as registry dependencies):
 - `skeleton`
 
 Required npm dependency (auto-installed):
-- `@tanstack/react-table`
+- `@tanstack/react-table@^9.3.1` (TanStack Table v9)
 
 ## Configuration
 
@@ -246,6 +247,7 @@ The DataTable accepts these query parameters:
 
 ```tsx
 import { DataTable } from '@/components/data-table/data-table';
+import type { DataTableResponse } from '@/components/data-table/types';
 
 type User = {
     id: number;
@@ -262,7 +264,7 @@ export default function Index({ users }: { users: DataTableResponse<User> }) {
 }
 ```
 
-> **Note:** The `@/` alias maps to `resources/js/` in Laravel projects. Components are installed to `resources/js/components/` via the shadcn registry.
+> **Note:** The `@/` alias maps to `resources/js/` in Laravel projects. Components are installed to `resources/js/components/` via the shadcn registry. The registry components use the TanStack Table v9 `useTable` API with an explicit feature set.
 
 The `dataPropName` prop specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes. If omitted, it defaults to `'data'`.
 
@@ -271,7 +273,9 @@ The `dataPropName` prop specifies which Inertia page prop contains the DataTable
 The package exports these types from `components/data-table/types.ts`:
 
 ```typescript
-interface DataTableColumn {
+import type { RowData } from '@tanstack/react-table';
+
+interface DataTableColumn<TData extends RowData = Record<string, unknown>> {
     name: string;
     label: string;
     sortable: boolean;
@@ -305,11 +309,11 @@ interface DataTableConfig {
     per_page_options: number[];
 }
 
-interface DataTableResponse<TData = unknown> {
+interface DataTableResponse<TData extends RowData = Record<string, unknown>> {
     data: TData[];
     meta: DataTableMeta;
     query: DataTableQuery;
-    columns: DataTableColumn[];
+    columns: DataTableColumn<TData>[];
     config: DataTableConfig;
 }
 ```
@@ -319,7 +323,7 @@ interface DataTableResponse<TData = unknown> {
 The `useDataTable` hook accepts the following options:
 
 ```typescript
-interface DataTableOptions<TData = unknown> {
+interface DataTableOptions<TData extends RowData = Record<string, unknown>> {
     data: DataTableResponse<TData>;
     dataPropName?: string;  // Inertia prop name for partial reloads (default: 'data')
 }
@@ -410,6 +414,7 @@ For projects with multiple user tables, extract a reusable component:
 ```tsx
 // resources/js/components/data-table/users-data-table.tsx
 import { DataTable } from './data-table';
+import type { DataTableResponse } from './types';
 
 interface User {
     id: number;
@@ -420,15 +425,6 @@ interface User {
     is_admin: boolean;
     created_at: string;
 }
-
-const columns = [
-    { name: 'name', label: 'Name', searchable: true, sortable: true },
-    { name: 'email', label: 'Email', searchable: true, sortable: true },
-    { name: 'status', label: 'Status', filterable: true, sortable: true },
-    { name: 'role', label: 'Role', filterable: true, sortable: true },
-    { name: 'is_admin', label: 'Admin', filterable: true, filter_type: 'boolean', sortable: true },
-    { name: 'created_at', label: 'Created', sortable: true },
-] as const;
 
 export function UsersDataTable({ users }: { users: DataTableResponse<User> }) {
     return <DataTable data={users} dataPropName="users" />;

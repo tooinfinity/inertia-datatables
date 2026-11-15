@@ -15,6 +15,11 @@
           "target": "@components/data-table/types.ts"
         },
         {
+          "path": "registry/data-table/components/data-table/table-features.ts",
+          "type": "registry:lib",
+          "target": "@components/data-table/table-features.ts"
+        },
+        {
           "path": "registry/data-table/components/data-table/data-table.tsx",
           "type": "registry:component",
           "target": "@components/data-table/data-table.tsx"
@@ -56,7 +61,7 @@
         }
       ],
       "dependencies": [
-        "@tanstack/react-table",
+        "@tanstack/react-table@^9.3.1",
         "@inertiajs/react"
       ],
       "registryDependencies": [

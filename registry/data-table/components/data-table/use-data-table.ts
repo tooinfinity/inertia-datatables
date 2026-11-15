@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createColumnHelper,
-    getCoreRowModel,
-    useReactTable,
-    type SortingState,
-    type PaginationState,
-    type ColumnFiltersState,
+    useTable,
     type ColumnDef,
-    type FilterFnOption,
-    type VisibilityState,
+    type ColumnFiltersState,
+    type ColumnVisibilityState,
+    type PaginationState,
+    type RowData,
+    type SortingState,
 } from '@tanstack/react-table';
 import { router } from '@inertiajs/react';
 import type {
@@ -18,11 +17,12 @@ import type {
     DataTableOptions,
     DataTableColumn,
 } from './types';
+import { dataTableFeatures, type DataTableFeatures } from './table-features';
 import { defaultCellFormatter } from './cell-formatters';
 
 type ColumnSearchesState = Record<string, string>;
 
-export function useDataTable<TData extends object>({
+export function useDataTable<TData extends RowData = Record<string, unknown>>({
     data: initialData,
     dataPropName = 'data',
 }: DataTableOptions<TData>) {
@@ -67,41 +67,27 @@ export function useDataTable<TData extends object>({
         return visibility;
     }, [initialData.columns]);
 
-    const columnHelper = useMemo(() => createColumnHelper<TData>(), []);
+    const columnHelper = useMemo(() => createColumnHelper<DataTableFeatures, TData>(), []);
 
-    const columns = useMemo<ColumnDef<TData, unknown>[]>(() => {
+    const columns = useMemo<ColumnDef<DataTableFeatures, TData, unknown>[]>(() => {
         return initialData.columns.map((col: DataTableColumn<TData>) => {
-            const column = columnHelper.accessor(
+            return columnHelper.accessor(
                 (row: TData) => row[col.name as keyof TData] as unknown,
                 {
                     header: col.label,
                     id: col.name,
-                    cell: col.cell ?? defaultCellFormatter,
+                    cell: (info) => col.cell ? col.cell(info) : defaultCellFormatter(info),
+                    enableSorting: col.sortable,
+                    enableGlobalFilter: col.searchable,
+                    enableColumnFilter: col.filterable,
+                    meta: {
+                        searchable: col.searchable,
+                        filterable: col.filterable,
+                        filter_type: col.filter_type,
+                        filter_options: col.filter_options,
+                    },
                 }
             );
-
-            if (col.sortable) {
-                column.enableSorting = true;
-            }
-
-            if (col.searchable) {
-                column.meta = {
-                    ...column.meta,
-                    searchable: true,
-                };
-            }
-
-            if (col.filterable) {
-                column.meta = {
-                    ...column.meta,
-                    filterable: true,
-                    filter_type: col.filter_type,
-                    filter_options: col.filter_options,
-                };
-                column.filterFn = 'includes' as FilterFnOption<TData>;
-            }
-
-            return column;
         });
     }, [initialData.columns, columnHelper]);
 
@@ -122,7 +108,7 @@ export function useDataTable<TData extends object>({
 
     const [columnSearches, setColumnSearches] = useState<ColumnSearchesState>(state.searches);
 
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
+    const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
 
     useEffect(() => {
         sortingRef.current = sorting;
@@ -268,7 +254,7 @@ export function useDataTable<TData extends object>({
     );
 
     const handleColumnVisibilityChange = useCallback(
-        (updater: VisibilityState | ((_old: VisibilityState) => VisibilityState)) => {
+        (updater: ColumnVisibilityState | ((_old: ColumnVisibilityState) => ColumnVisibilityState)) => {
             const newVisibility = typeof updater === 'function' ? updater(columnVisibility) : updater;
             setColumnVisibility(newVisibility);
         },
@@ -347,8 +333,9 @@ export function useDataTable<TData extends object>({
         mountedRef.current = true;
     }
 
-    const table = useReactTable({
-        data: initialData.data as TData[],
+    const table = useTable<DataTableFeatures, TData>({
+        features: dataTableFeatures,
+        data: initialData.data,
         columns,
         state: {
             sorting,
@@ -362,7 +349,6 @@ export function useDataTable<TData extends object>({
         onGlobalFilterChange: setGlobalFilter,
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: handleColumnVisibilityChange,
-        getCoreRowModel: getCoreRowModel(),
         manualPagination: true,
         manualSorting: true,
         manualFiltering: true,
