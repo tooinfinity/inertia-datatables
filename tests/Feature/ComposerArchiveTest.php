@@ -10,9 +10,13 @@ it('ships only runtime package files in the composer archive', function (): void
         $this->markTestSkipped('The composer archive test requires a Git checkout.');
     }
 
+    if (! extension_loaded('zip')) {
+        $this->markTestSkipped('The zip extension is required to inspect the composer archive.');
+    }
+
     $pipes = [];
     $process = proc_open(
-        ['git', 'archive', '--format=tar', '--worktree-attributes', 'HEAD'],
+        ['git', 'archive', '--format=zip', '--worktree-attributes', 'HEAD'],
         [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -40,31 +44,38 @@ it('ships only runtime package files in the composer archive', function (): void
         throw new RuntimeException('Unable to read the git archive.');
     }
 
-    $archivePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'inertia-datatables-'.bin2hex(random_bytes(8)).'.tar';
-    file_put_contents($archivePath, $archive);
+    $archivePath = sys_get_temp_dir().DIRECTORY_SEPARATOR.'inertia-datatables-'.bin2hex(random_bytes(8)).'.zip';
 
-    try {
-        $phar = new PharData($archivePath);
-        $prefix = 'phar://'.str_replace('\\', '/', $archivePath).'/';
-        $topLevelEntries = [];
+    if (file_put_contents($archivePath, $archive) === false) {
+        throw new RuntimeException('Unable to write the git archive to disk.');
+    }
 
-        foreach (new RecursiveIteratorIterator($phar) as $file) {
-            $path = $file->getPathname();
+    $zip = new ZipArchive;
+    $opened = $zip->open($archivePath);
 
-            if (! str_starts_with($path, $prefix)) {
-                throw new RuntimeException("Unexpected archive path: {$path}");
-            }
+    if ($opened !== true) {
+        unlink($archivePath);
 
-            $relativePath = substr($path, strlen($prefix));
-            $topLevelEntries[] = explode('/', $relativePath)[0];
+        throw new RuntimeException("Unable to open the git archive: {$opened}");
+    }
+
+    $topLevelEntries = [];
+
+    for ($index = 0; $index < $zip->numFiles; $index++) {
+        $entry = $zip->getNameIndex($index);
+
+        if ($entry === false) {
+            continue;
         }
 
-        $topLevelEntries = array_values(array_unique($topLevelEntries));
-        sort($topLevelEntries);
-    } finally {
-        unset($phar);
-        unlink($archivePath);
+        $topLevelEntries[] = explode('/', $entry)[0];
     }
+
+    $zip->close();
+    unlink($archivePath);
+
+    $topLevelEntries = array_values(array_unique($topLevelEntries));
+    sort($topLevelEntries);
 
     expect($topLevelEntries)->toBe([
         'CHANGELOG.md',
