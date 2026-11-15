@@ -25,6 +25,8 @@ final readonly class DataTable
         private ?string $defaultSortColumn = null,
         private string $defaultSortDirection = 'desc',
         private ?int $perPage = null,
+        private bool $exposeAll = false,
+        private ?string $responseKey = null,
     ) {}
 
     /**
@@ -50,6 +52,8 @@ final readonly class DataTable
             defaultSortColumn: $this->defaultSortColumn,
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $this->perPage,
+            exposeAll: $this->exposeAll,
+            responseKey: $this->responseKey,
         );
 
         if ($newTable->defaultSortColumn !== null) {
@@ -75,6 +79,8 @@ final readonly class DataTable
             defaultSortColumn: $column,
             defaultSortDirection: $normalizedDirection,
             perPage: $this->perPage,
+            exposeAll: $this->exposeAll,
+            responseKey: $this->responseKey,
         );
 
         if ($newTable->columns !== []) {
@@ -95,6 +101,44 @@ final readonly class DataTable
             defaultSortColumn: $this->defaultSortColumn,
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $perPage,
+            exposeAll: $this->exposeAll,
+            responseKey: $this->responseKey,
+        );
+    }
+
+    /**
+     * Expose every selected attribute in the response data.
+     *
+     * @return self<TModel>
+     */
+    public function exposeAll(): self
+    {
+        return new self(
+            query: $this->query,
+            columns: $this->columns,
+            defaultSortColumn: $this->defaultSortColumn,
+            defaultSortDirection: $this->defaultSortDirection,
+            perPage: $this->perPage,
+            exposeAll: true,
+            responseKey: $this->responseKey,
+        );
+    }
+
+    /**
+     * Include an additional attribute in the response data.
+     *
+     * @return self<TModel>
+     */
+    public function responseKey(string $column): self
+    {
+        return new self(
+            query: $this->query,
+            columns: $this->columns,
+            defaultSortColumn: $this->defaultSortColumn,
+            defaultSortDirection: $this->defaultSortDirection,
+            perPage: $this->perPage,
+            exposeAll: $this->exposeAll,
+            responseKey: $column,
         );
     }
 
@@ -106,7 +150,7 @@ final readonly class DataTable
         $request ??= app(DataTableRequest::class);
 
         /** @var QueryProcessor<TModel> $processor */
-        $processor = new QueryProcessor($this->columns);
+        $processor = new QueryProcessor($this->columns, $this->exposeAll, $this->responseKey);
 
         return $processor->process($this->query, $request, $this->defaultSortColumn, $this->defaultSortDirection, $this->perPage);
     }

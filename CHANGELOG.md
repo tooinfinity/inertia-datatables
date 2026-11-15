@@ -2,8 +2,14 @@
 
 ## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...HEAD)
 
+### Breaking Changes
+
+- Response `data` now contains only declared columns by default. Add every client-required field to `columns()`, use `->responseKey('id')` to include one additional row key, or use `->exposeAll()` to restore the previous unrestricted response behavior (fixes #29)
+
 ### Added
 
+- `->responseKey('id')` for including one additional attribute in response data without exposing every undeclared attribute
+- `->exposeAll()` escape hatch for restoring the previous unrestricted response data behavior
 - Multi-value filter support: `filters[column][]=value1&filters[column][]=value2` now uses `WHERE IN` for all filterable columns
 - `max_filter_values` validation config (default: 20) to limit array size in multi-value filters
 - `select` filter type validates array values against `filter_options`

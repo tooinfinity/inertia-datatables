@@ -27,6 +27,8 @@ final readonly class QueryProcessor
      */
     public function __construct(
         private array $columns,
+        private bool $exposeAll = false,
+        private ?string $responseKey = null,
     ) {}
 
     /**
@@ -76,6 +78,8 @@ final readonly class QueryProcessor
             columns: $columnsArray,
             query: $queryState,
             config: $config,
+            exposeAll: $this->exposeAll,
+            responseKey: $this->responseKey,
         );
     }
 

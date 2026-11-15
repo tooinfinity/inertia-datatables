@@ -146,6 +146,7 @@ public function index()
                 ->label('Created')
                 ->sortable(),
         ])
+        ->responseKey('id')
         ->defaultSort('created_at', 'desc')
         ->handle();
 
@@ -171,6 +172,7 @@ public function index()
             Column::make('status')->filterable()->sortable(),
             Column::make('created_at')->sortable(),
         ])
+        ->responseKey('id')
         ->defaultSort('created_at', 'desc')
         ->handle();
 
@@ -213,14 +215,43 @@ The default applies when the request does not include a `per_page` parameter. A 
 
 The effective page size is returned in both `query.per_page` and `meta.per_page`, so the frontend always reflects the number of rows actually loaded. The effective value is also included in `config.per_page_options`; options above `max_per_page` are excluded.
 
+### Response Data Exposure
+
+By default, each response row contains only the attributes declared in `columns()`. Undeclared attributes are removed from Eloquent and Query Builder results before the payload is returned, even when the underlying query uses `select *`.
+
+Declare every attribute the frontend needs. To include a row key such as `id` without declaring it as a visible table column, use `->responseKey('id')`:
+
+```php
+$users = DataTable::query(User::query())
+    ->columns([
+        Column::make('name')->sortable(),
+        Column::make('email')->sortable(),
+    ])
+    ->responseKey('id')
+    ->handle();
+```
+
+Use `->exposeAll()` only when the response intentionally needs every selected attribute:
+
+```php
+$users = DataTable::query(User::query())
+    ->columns([
+        Column::make('name')->sortable(),
+    ])
+    ->exposeAll()
+    ->handle();
+```
+
+> **Warning:** `->exposeAll()` restores the legacy behavior and can disclose undeclared attributes. Prefer declaring the required fields or configuring a single response key.
+
 ### Hidden Columns
 
 The `->hidden()` option marks a column as hidden in the **UI only**. It does **not** restrict API access:
 
-- Hidden columns are still included in the response data
+- Hidden columns are still included in the response data when they are declared
 - Hidden columns can still be searched, sorted, and filtered if their capabilities are enabled
 - The `hidden` flag is a UI hint for the frontend to not display the column by default
-- For true security restrictions, simply don't enable `->searchable()`, `->sortable()`, or `->filterable()` on sensitive columns
+- For true security restrictions, do not declare sensitive columns in `columns()`
 
 ### Filter Types
 
@@ -333,7 +364,12 @@ The `dataPropName` option specifies which Inertia page prop contains the DataTab
 
 ## Security
 
-The package implements a strict column allow-list. Only columns explicitly defined with `->searchable()`, `->sortable()`, or `->filterable()` can be used in requests. Malicious requests like `sort=users.password` or `filters[email]=admin@example.com` are rejected with clear validation errors instead of server errors.
+The package implements strict allow-lists for both requests and response data:
+
+- Only columns explicitly defined with `->searchable()`, `->sortable()`, or `->filterable()` can be used in requests. Malicious requests like `sort=users.password` or `filters[email]=admin@example.com` are rejected with clear validation errors instead of server errors.
+- Response rows contain only declared columns by default. Undeclared database attributes are not serialized into the Inertia payload.
+- `->responseKey('id')` explicitly permits one additional row attribute. `->exposeAll()` disables response projection and should only be used when all selected attributes are safe to disclose.
+- Eloquent model `$hidden` and `$visible` attributes continue to apply. Query Builder results do not have model-level visibility rules, so declared columns must be reviewed carefully.
 
 ## Query/Response Contract
 
@@ -407,6 +443,8 @@ The package implements a strict column allow-list. Only columns explicitly defin
 
 The `query` object reflects the effective table state. In particular, `query.per_page` always matches `meta.per_page`, and an applied `defaultSort()` is included in `query.sort` even when the client did not send a sort parameter.
 
+Each item in `data` contains only the declared columns, plus an optional attribute configured with `->responseKey()`. The `->exposeAll()` escape hatch restores the previous behavior of returning every selected attribute.
+
 ## Optional: Reusable UsersDataTable Component
 
 For projects with multiple user tables, extract a reusable component:
@@ -444,6 +482,7 @@ public function index()
             Column::make('is_admin')->filterable()->filterType('boolean')->sortable(),
             Column::make('created_at')->sortable(),
         ])
+        ->responseKey('id')
         ->defaultSort('created_at', 'desc')
         ->handle();
 

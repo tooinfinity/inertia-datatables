@@ -48,7 +48,7 @@ it('returns deterministic JSON response structure with Eloquent', function (): v
     // Verify data structure
     expect($array['data'])->toBeArray();
     expect($array['data'])->toHaveCount(1);
-    expect($array['data'][0])->toHaveKeys(['id', 'name', 'email', 'status', 'created_at', 'updated_at']);
+    expect($array['data'][0])->toHaveKeys(['name', 'email', 'status', 'created_at']);
 
     // Verify meta structure
     expect($array['meta'])->toHaveKeys(['current_page', 'per_page', 'from', 'to', 'total', 'last_page']);
@@ -162,7 +162,7 @@ it('returns deterministic JSON response structure with QueryBuilder', function (
     // Verify data structure
     expect($array['data'])->toBeArray();
     expect($array['data'])->toHaveCount(1);
-    expect($array['data'][0])->toHaveKeys(['id', 'name', 'email', 'password', 'status', 'created_at', 'updated_at']);
+    expect($array['data'][0])->toHaveKeys(['name', 'email', 'status', 'created_at']);
 
     // Verify meta structure
     expect($array['meta'])->toHaveKeys(['current_page', 'per_page', 'from', 'to', 'total', 'last_page']);
