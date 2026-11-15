@@ -43,6 +43,7 @@ This will install the complete DataTable feature into your Laravel application:
 - `resources/js/components/data-table/data-table-empty.tsx`
 - `resources/js/components/data-table/use-data-table.ts`
 - `resources/js/components/data-table/types.ts`
+- `resources/js/components/data-table/cell-formatters.ts`
 - `resources/js/components/ui/table.tsx`
 
 Required shadcn primitives (auto-installed as registry dependencies):
@@ -466,6 +467,20 @@ public function index()
 ```bash
 composer test
 ```
+
+### Registry artifacts
+
+The root `registry.json` is the single source of truth for the shadcn registry. The JSON files under `public/r` are generated artifacts and must not be edited manually.
+
+Rebuild them after changing the manifest or any distributed source file:
+
+```bash
+npm ci
+npm run registry:validate
+npm run registry:build
+```
+
+CI rebuilds the registry and fails if `public/r` differs from the committed output.
 
 ## Changelog
 

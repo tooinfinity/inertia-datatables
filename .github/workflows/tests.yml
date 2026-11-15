@@ -63,6 +63,13 @@ jobs:
       - name: Run frontend tests
         run: npm ci && npm run typecheck && npm test
 
+      - name: Verify registry artifacts
+        run: |
+          npm run registry:validate
+          npm run registry:build
+          git diff --exit-code public/r
+          test -z "$(git ls-files --others --exclude-standard -- public/r)"
+
   tests:
     runs-on: ${{ matrix.os }}
 
