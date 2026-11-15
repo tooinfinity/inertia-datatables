@@ -17,6 +17,7 @@
 - Remove the obsolete `HandlesInertiaDataTablesExceptions` trait; exception handling now works without app-side wiring
 - Boolean filter values (`"true"`, `"false"`, `"1"`, `"0"`) are now automatically detected and converted for any filterable column, not just those with `filterType('boolean')` (fixes #22)
 - Generate shadcn registry artifacts from the canonical root manifest and reject stale output in CI (fixes #24)
+- Composer dist archives now exclude the frontend registry, raw GitHub artifacts, lockfiles, and TypeScript tooling, reducing the downloaded package size by roughly 80% (fixes #26)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 
