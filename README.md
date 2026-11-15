@@ -458,11 +458,37 @@ public function index()
 | 12.x | 8.4+ | 10.x | ✅ Supported |
 | 13.x | 8.4+ | 11.x | ✅ Supported |
 
+### Databases
+
+| Database | Status |
+|----------|--------|
+| SQLite | ✅ Supported |
+| MySQL 8 | ✅ Supported |
+| PostgreSQL 16 | ✅ Supported |
+
+The package generates portable SQL, so search, filtering and sorting behave identically on every driver. In particular, global and column searches are case-insensitive everywhere, including PostgreSQL, where `LIKE` alone would be case-sensitive.
+
 ## Testing
 
 ```bash
 composer test
 ```
+
+### Databases
+
+The test suite runs against SQLite by default. Point it at another driver with the standard Laravel environment variables:
+
+```bash
+DB_CONNECTION=mysql \
+DB_HOST=127.0.0.1 \
+DB_PORT=3306 \
+DB_DATABASE=inertia_datatables \
+DB_USERNAME=root \
+DB_PASSWORD=secret \
+composer test:unit
+```
+
+Use `DB_CONNECTION=pgsql` for PostgreSQL. CI runs the suite against all three drivers, and `tests/Integration/DialectTest.php` pins the behaviour that differs between them.
 
 ### Registry artifacts
 

@@ -417,7 +417,7 @@ describe('Integration: Complex Queries', function (): void {
                 ->select('users.*')
                 ->selectSub(function ($query): void {
                     $query->from('posts')
-                        ->whereRaw('posts.user_id = users.id')
+                        ->whereColumn('posts.user_id', 'users.id')
                         ->selectRaw('count(*)');
                 }, 'posts_count')
         )

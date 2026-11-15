@@ -9,6 +9,7 @@
 - `select` filter type validates array values against `filter_options`
 - Nested arrays and objects in filter values are rejected with `422` error
 - String values in filter arrays are truncated to `max_filter_value_length`
+- The test suite now runs against MySQL 8 and PostgreSQL 16 in CI, in addition to SQLite, and the database connection is driven by the standard `DB_*` environment variables (fixes #27)
 
 ### Changed
 
@@ -23,6 +24,7 @@
 - Boolean filter values (`"true"`, `"false"`, `"1"`, `"0"`) are now automatically detected and converted for any filterable column, not just those with `filterType('boolean')` (fixes #22)
 - Generate shadcn registry artifacts from the canonical root manifest and reject stale output in CI (fixes #24)
 - Composer dist archives now exclude the frontend registry, raw GitHub artifacts, lockfiles, and TypeScript tooling, reducing the downloaded package size by roughly 80% (fixes #26)
+- Global and column searches are now case-insensitive on PostgreSQL, matching the existing behaviour on SQLite and MySQL (fixes #27)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 

@@ -114,3 +114,68 @@ jobs:
       - name: Test Suite (Windows)
         if: runner.os == 'Windows'
         run: vendor/bin/pest
+
+  databases:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql
+            image: mysql:8
+            port: 3306
+            username: root
+            health_cmd: mysqladmin ping
+          - database: pgsql
+            image: postgres:16
+            port: 5432
+            username: postgres
+            health_cmd: pg_isready
+
+    name: DB ${{ matrix.database }}
+
+    services:
+      database:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: inertia_datatables
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: inertia_datatables
+        ports:
+          - ${{ matrix.port }}:${{ matrix.port }}
+        options: >-
+          --health-cmd="${{ matrix.health_cmd }}"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_CONNECTION: ${{ matrix.database }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: ${{ matrix.port }}
+      DB_DATABASE: inertia_datatables
+      DB_USERNAME: ${{ matrix.username }}
+      DB_PASSWORD: ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: 8.4
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, pdo_mysql, pdo_pgsql, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: Test Suite
+        run: composer test:unit

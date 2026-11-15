@@ -6,6 +6,7 @@ namespace TooInfinity\InertiaDataTables\Processing;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\PostgresConnection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Query\Expression;
 use TooInfinity\InertiaDataTables\Column;
@@ -236,11 +237,25 @@ final readonly class QueryProcessor
         // Keep the pattern bound while placing the portable escape clause after its placeholder.
         $queryBuilder->where(
             $column,
-            'LIKE',
+            $this->likeOperator($queryBuilder),
             new Expression("? ESCAPE '!'"),
             $boolean,
         );
         $queryBuilder->addBinding($pattern);
+    }
+
+    /**
+     * Resolve the case-insensitive LIKE operator for the underlying connection.
+     *
+     * SQLite and MySQL compare LIKE case-insensitively by default, while
+     * PostgreSQL's LIKE is case-sensitive. Using ILIKE on PostgreSQL keeps
+     * search results identical across every supported driver.
+     */
+    private function likeOperator(QueryBuilder $queryBuilder): string
+    {
+        return $queryBuilder->getConnection() instanceof PostgresConnection
+            ? 'ilike'
+            : 'like';
     }
 
     private function escapeLikeValue(string $value, bool $allowWildcards = false): string
