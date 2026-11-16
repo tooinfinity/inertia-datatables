@@ -533,6 +533,43 @@ describe('Stable pagination', function (): void {
             ->and($queries)->toBeEmpty();
     });
 
+    it('does not add a tiebreaker to query builder joins whose table has no id column', function (): void {
+        Schema::create('sessions', function ($table): void {
+            $table->string('token')->primary();
+            $table->string('payload');
+        });
+
+        DB::table('sessions')->insert(['token' => 'First', 'payload' => 'payload']);
+        DB::table('accounts')->insert(['user_id' => 1, 'label' => 'First']);
+
+        $queries = captureOrderedQueries();
+
+        $result = DataTable::query(
+            DB::table('sessions')
+                ->join('accounts', 'sessions.token', '=', 'accounts.label')
+                ->select('accounts.*'),
+        )
+            ->columns([Column::make('id'), Column::make('label')])
+            ->handle(stablePaginationRequest(1, 25));
+
+        expect($result->paginator->items())->toHaveCount(1)
+            ->and($queries)->toBeEmpty();
+    });
+
+    it('adds a tiebreaker to query builder sources with an alias', function (): void {
+        UserFactory::new()->count(2)->create();
+
+        $queries = captureOrderedQueries();
+
+        $result = DataTable::query(DB::table('users as u'))
+            ->columns([Column::make('id'), Column::make('status')])
+            ->handle(stablePaginationRequest(1, 25));
+
+        expect($result->paginator->items())->toHaveCount(2)
+            ->and($queries)->toHaveCount(1)
+            ->and(normalizedSql($queries[0]))->toMatch('/order by id asc limit \d+(?: offset \d+)?$/');
+    });
+
     it('does not add a tiebreaker when the eloquent key is missing from the source table', function (): void {
         Schema::create('sessions', function ($table): void {
             $table->string('token')->primary();
