@@ -24,6 +24,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
      * @param  array<int, array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}>  $columns
      * @param  array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>}  $query
      * @param  array{debounce: int, per_page_options: array<int, int>}  $config
+     * @param  array<int, array<string, mixed>>  $computedValues
      */
     public function __construct(
         public LengthAwarePaginator $paginator,
@@ -32,6 +33,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
         public array $config,
         private bool $exposeAll = false,
         private ?string $responseKey = null,
+        private array $computedValues = [],
     ) {
         $this->data = $this->projectData();
     }
@@ -85,10 +87,6 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
         /** @var array<int, T> $items */
         $items = array_values($this->paginator->items());
 
-        if ($this->exposeAll) {
-            return $items;
-        }
-
         /** @var array<int, string> $responseColumns */
         $responseColumns = array_column($this->columns, 'name');
 
@@ -98,10 +96,44 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
 
         $responseColumns = array_values(array_unique($responseColumns));
 
-        return array_map(
-            fn (object $row): object => $this->projectRow($row, $responseColumns),
-            $items,
-        );
+        $data = [];
+
+        foreach ($items as $index => $item) {
+            $row = $this->exposeAll ? $item : $this->projectRow($item, $responseColumns);
+
+            $computed = $this->computedValues[$index] ?? [];
+
+            if ($computed !== []) {
+                $row = $this->applyComputedValues($row, $computed);
+            }
+
+            $data[] = $row;
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  T  $row
+     * @param  array<string, mixed>  $computed
+     * @return T
+     */
+    private function applyComputedValues(object $row, array $computed): object
+    {
+        if ($row instanceof Model) {
+            $model = clone $row;
+            $model->setRawAttributes(array_merge($model->getAttributes(), $computed));
+
+            return $model;
+        }
+
+        $projected = clone $row;
+
+        foreach ($computed as $attribute => $value) {
+            $projected->{$attribute} = $value;
+        }
+
+        return $projected;
     }
 
     /**

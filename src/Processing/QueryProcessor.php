@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Processing;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\PostgresConnection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Query\Expression;
+use ReflectionMethod;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTableRequest;
 use TooInfinity\InertiaDataTables\DataTableResult;
@@ -44,6 +49,9 @@ final readonly class QueryProcessor
         ?int $perPageOverride = null,
     ): DataTableResult {
         $this->validateColumns($request);
+
+        $query = $this->applyColumnFields($query);
+        $query = $this->applyRelationLoads($query);
 
         $query = $this->applyFilters($query, $request);
         $query = $this->applyGlobalSearch($query, $request);
@@ -81,7 +89,66 @@ final readonly class QueryProcessor
             config: $config,
             exposeAll: $this->exposeAll,
             responseKey: $this->responseKey,
+            computedValues: $this->computeColumnValues($paginator->items(), $query),
         );
+    }
+
+    /**
+     * Select the database expression of every column that declares one.
+     *
+     * The expression is selected under the column name so the value is exposed
+     * with the same key the frontend uses to read the cell.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applyColumnFields(EloquentBuilder|QueryBuilder $query): EloquentBuilder|QueryBuilder
+    {
+        foreach ($this->columns as $column) {
+            if ($column->field === null || $column->relation !== null || $column->value !== null) {
+                continue;
+            }
+
+            $queryBuilder = $query instanceof EloquentBuilder ? $query->getQuery() : $query;
+            $table = $this->plainTable($queryBuilder->from);
+
+            if ($queryBuilder->columns === null && $table !== null) {
+                $queryBuilder->select($table.'.*');
+            }
+
+            $queryBuilder->addSelect($this->aliasedField($column));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Eager load every relationship a column reads its value from.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applyRelationLoads(EloquentBuilder|QueryBuilder $query): EloquentBuilder|QueryBuilder
+    {
+        $relations = [];
+        $relationColumn = null;
+
+        foreach ($this->columns as $column) {
+            if ($column->relation === null) {
+                continue;
+            }
+
+            $relations[$column->relation] = $column->relation;
+            $relationColumn ??= $column;
+        }
+
+        if ($relations === [] || $relationColumn === null) {
+            return $query;
+        }
+
+        $this->eloquentQuery($query, $relationColumn)->with(array_values($relations));
+
+        return $query;
     }
 
     /**
@@ -109,6 +176,29 @@ final readonly class QueryProcessor
      */
     private function applyFilter(EloquentBuilder|QueryBuilder $query, Column $column, mixed $value): EloquentBuilder|QueryBuilder
     {
+        if ($column->filterUsing instanceof Closure) {
+            return $this->applyCallback($column->filterUsing, $query, $value);
+        }
+
+        if ($column->relation !== null) {
+            return $this->applyRelationFilter($query, $column, $value);
+        }
+
+        return $this->applyFilterToColumn($query, $column, $this->fieldExpression($column), $value);
+    }
+
+    /**
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TQueryModel>|QueryBuilder
+     */
+    private function applyFilterToColumn(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        string $target,
+        mixed $value,
+    ): EloquentBuilder|QueryBuilder {
         // Handle array values - use whereIn for multi-value filtering
         if (is_array($value)) {
             // For select filter type, validate against allowed options
@@ -127,7 +217,7 @@ final readonly class QueryProcessor
                 return $query->whereRaw('1 = 0');
             }
 
-            return $query->whereIn($column->name, $value);
+            return $query->whereIn($target, $value);
         }
 
         // Handle boolean string values ("true"/"false"/"1"/"0") for any filterable column
@@ -135,10 +225,10 @@ final readonly class QueryProcessor
         if (is_string($value)) {
             $lowerValue = strtolower($value);
             if (in_array($lowerValue, ['true', '1'], true)) {
-                return $query->where($column->name, true);
+                return $query->where($target, true);
             }
             if (in_array($lowerValue, ['false', '0'], true)) {
-                return $query->where($column->name, false);
+                return $query->where($target, false);
             }
         }
 
@@ -146,34 +236,56 @@ final readonly class QueryProcessor
         // (kept for backward compatibility with explicit filterType('boolean'))
         if ($column->filterType === 'boolean') {
             if (in_array($value, ['true', 'True', '1'], true)) {
-                return $query->where($column->name, true);
+                return $query->where($target, true);
             }
             if (in_array($value, ['false', 'False', '0'], true)) {
-                return $query->where($column->name, false);
+                return $query->where($target, false);
             }
         }
 
         if (is_bool($value)) {
-            return $query->where($column->name, $value);
+            return $query->where($target, $value);
         }
 
         if ($value === 'null' || $value === 'NULL') {
-            return $query->whereNull($column->name);
+            return $query->whereNull($target);
         }
 
         if ($value === 'not_null' || $value === 'NOT_NULL') {
-            return $query->whereNotNull($column->name);
+            return $query->whereNotNull($target);
         }
 
         if (is_string($value) && str_contains($value, '*')) {
             $pattern = $this->escapeLikeValue($value, allowWildcards: true);
 
-            $this->applyLike($query, $column->name, $pattern);
+            $this->applyLike($query, $target, $pattern);
 
             return $query;
         }
 
-        return $query->where($column->name, $value);
+        return $query->where($target, $value);
+    }
+
+    /**
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TQueryModel>|QueryBuilder
+     */
+    private function applyRelationFilter(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        mixed $value,
+    ): EloquentBuilder|QueryBuilder {
+        $eloquent = $this->eloquentQuery($query, $column);
+        $relation = $this->relationFor($eloquent, $column);
+        $metadata = $this->relationMetadata($relation, $column);
+
+        $eloquent->has($this->relationName($column), '>=', 1, 'and', function (EloquentBuilder $related) use ($column, $metadata, $value): void {
+            $this->applyFilterToColumn($related, $column, $metadata['relatedColumn'], $value);
+        });
+
+        return $query;
     }
 
     /**
@@ -194,11 +306,11 @@ final readonly class QueryProcessor
             return $query;
         }
 
-        $search = $this->escapeLikeValue($search);
+        $escaped = $this->escapeLikeValue($search);
 
-        return $query->where(function (EloquentBuilder|QueryBuilder $q) use ($search, $searchableColumns): void {
+        return $query->where(function (EloquentBuilder|QueryBuilder $q) use ($escaped, $searchableColumns): void {
             foreach ($searchableColumns as $column) {
-                $this->applyLike($q, $column->name, "%{$search}%", 'or');
+                $this->applySearchToColumn($q, $column, $escaped, 'or');
             }
         });
     }
@@ -218,7 +330,7 @@ final readonly class QueryProcessor
 
             $escaped = $this->escapeLikeValue($search->value);
 
-            $this->applyLike($query, $column->name, "%{$escaped}%");
+            $this->applySearchToColumn($query, $column, $escaped, 'and');
         }
 
         return $query;
@@ -226,6 +338,52 @@ final readonly class QueryProcessor
 
     /**
      * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @param  'and'|'or'  $boolean
+     */
+    private function applySearchToColumn(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        string $term,
+        string $boolean,
+    ): void {
+        if ($column->searchUsing instanceof Closure) {
+            $this->applyCallback($column->searchUsing, $query, $term, $boolean);
+
+            return;
+        }
+
+        if ($column->relation !== null) {
+            $this->applyRelationSearch($query, $column, $term, $boolean);
+
+            return;
+        }
+
+        $this->applyLike($query, $this->fieldExpression($column), "%{$term}%", $boolean);
+    }
+
+    /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @param  'and'|'or'  $boolean
+     */
+    private function applyRelationSearch(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        string $term,
+        string $boolean,
+    ): void {
+        $eloquent = $this->eloquentQuery($query, $column);
+        $relation = $this->relationFor($eloquent, $column);
+        $metadata = $this->relationMetadata($relation, $column);
+
+        $eloquent->has($this->relationName($column), '>=', 1, $boolean, function (EloquentBuilder $related) use ($metadata, $term): void {
+            $this->applyLike($related, $metadata['relatedColumn'], "%{$term}%");
+        });
+    }
+
+    /**
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
      * @param  'and'|'or'  $boolean
      */
     private function applyLike(
@@ -311,8 +469,7 @@ final readonly class QueryProcessor
             if ($defaultSortColumn !== null) {
                 $defaultColumn = $this->findColumn($defaultSortColumn);
 
-                /** @var 'asc'|'desc' $defaultSortDirection */
-                return $query->orderBy($defaultColumn->name, $defaultSortDirection);
+                return $this->applySortToColumn($query, $defaultColumn, $this->normalizeDirection($defaultSortDirection));
             }
 
             return $query;
@@ -330,11 +487,56 @@ final readonly class QueryProcessor
                 throw InvalidSortException::invalidDirection($sort->direction)->forRequest();
             }
 
-            /** @var 'asc'|'desc' $direction */
-            $query->orderBy($column->name, $direction);
+            $query = $this->applySortToColumn($query, $column, $direction);
         }
 
         return $query;
+    }
+
+    /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @param  'asc'|'desc'  $direction
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applySortToColumn(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        string $direction,
+    ): EloquentBuilder|QueryBuilder {
+        if ($column->sortUsing instanceof Closure) {
+            return $this->applyCallback($column->sortUsing, $query, $direction);
+        }
+
+        if ($column->relation !== null) {
+            return $this->applyRelationSort($query, $column, $direction);
+        }
+
+        return $query->orderBy($this->fieldExpression($column), $direction);
+    }
+
+    /**
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @param  'asc'|'desc'  $direction
+     * @return EloquentBuilder<TModel>
+     */
+    private function applyRelationSort(
+        EloquentBuilder|QueryBuilder $query,
+        Column $column,
+        string $direction,
+    ): EloquentBuilder {
+        $eloquent = $this->eloquentQuery($query, $column);
+        $relation = $this->relationFor($eloquent, $column);
+        $metadata = $this->relationMetadata($relation, $column);
+
+        $subquery = $relation->getRelated()->newQuery()
+            ->select($metadata['relatedColumn'])
+            ->whereColumn(
+                $metadata['relatedTable'].'.'.$metadata['relatedKey'],
+                $metadata['parentTable'].'.'.$metadata['parentKey'],
+            )
+            ->limit(1);
+
+        return $eloquent->orderBy($subquery, $direction);
     }
 
     private function validateColumns(DataTableRequest $request): void
@@ -369,6 +571,269 @@ final readonly class QueryProcessor
         }
 
         throw InvalidColumnException::notFound($name);
+    }
+
+    /**
+     * The database expression a column is searched, sorted and filtered with.
+     */
+    private function fieldExpression(Column $column): string
+    {
+        $field = $column->field ?? $column->name;
+
+        return $this->withoutAlias($field);
+    }
+
+    /**
+     * The select expression that exposes the database expression of a column.
+     */
+    private function aliasedField(Column $column): string
+    {
+        $field = $column->field ?? $column->name;
+
+        if ($this->hasAlias($field)) {
+            return $field;
+        }
+
+        return $field.' as '.$column->name;
+    }
+
+    /**
+     * The table every column can be selected from.
+     */
+    private function plainTable(mixed $from): ?string
+    {
+        if (! is_string($from) || $this->hasAlias($from)) {
+            return null;
+        }
+
+        return $from;
+    }
+
+    private function hasAlias(string $expression): bool
+    {
+        return stripos($expression, ' as ') !== false;
+    }
+
+    /**
+     * Remove the alias of an expression so it can be used in a constraint.
+     */
+    private function withoutAlias(string $expression): string
+    {
+        $position = stripos($expression, ' as ');
+
+        if ($position === false) {
+            return $expression;
+        }
+
+        return substr($expression, 0, $position);
+    }
+
+    /**
+     * Run a custom column callback on the query builder.
+     *
+     * The callback works on the given builder and may return it, but the builder
+     * that was handed over is always the one that is used.
+     *
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TQueryModel>|QueryBuilder
+     */
+    private function applyCallback(
+        Closure $callback,
+        EloquentBuilder|QueryBuilder $query,
+        mixed ...$arguments,
+    ): EloquentBuilder|QueryBuilder {
+        $callback($query, ...$arguments);
+
+        return $query;
+    }
+
+    /**
+     * Normalize a sort direction into a value the database understands.
+     *
+     * @return 'asc'|'desc'
+     */
+    private function normalizeDirection(string $direction): string
+    {
+        $normalized = strtolower($direction);
+
+        if (! in_array($normalized, ['asc', 'desc'], true)) {
+            throw InvalidSortException::invalidDirection($direction);
+        }
+
+        /** @var 'asc'|'desc' $normalized */
+        return $normalized;
+    }
+
+    /**
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TQueryModel>
+     */
+    private function eloquentQuery(EloquentBuilder|QueryBuilder $query, Column $column): EloquentBuilder
+    {
+        if ($query instanceof EloquentBuilder) {
+            return $query;
+        }
+
+        throw InvalidColumnException::relationRequiresEloquent($column->name);
+    }
+
+    /**
+     * Resolve the relationship a column reads its value from.
+     *
+     * @template TQueryModel of Model
+     *
+     * @param  EloquentBuilder<TQueryModel>  $query
+     * @return Relation<Model, Model, mixed>
+     */
+    private function relationFor(EloquentBuilder $query, Column $column): Relation
+    {
+        $name = $column->relation ?? '';
+
+        $instance = $query->getModel()->newInstance();
+
+        if ($name === '' || ! method_exists($instance, $name)) {
+            throw InvalidColumnException::unknownRelation($column->name, $name);
+        }
+
+        $method = new ReflectionMethod($instance, $name);
+
+        if (! $method->isPublic()) {
+            throw InvalidColumnException::unknownRelation($column->name, $name);
+        }
+
+        $relation = $method->invoke($instance);
+
+        if (! $relation instanceof Relation) {
+            throw InvalidColumnException::unknownRelation($column->name, $name);
+        }
+
+        return $relation;
+    }
+
+    /**
+     * Describe how the related row is linked to the parent row.
+     *
+     * @param  Relation<Model, Model, mixed>  $relation
+     * @return array{relatedTable: string, relatedColumn: string, relatedKey: string, parentTable: string, parentKey: string}
+     */
+    private function relationMetadata(Relation $relation, Column $column): array
+    {
+        $parent = $relation->getParent();
+        $related = $relation->getRelated();
+
+        if ($relation instanceof BelongsTo) {
+            return [
+                'relatedTable' => $related->getTable(),
+                'relatedColumn' => $column->relationColumn ?? $relation->getOwnerKeyName(),
+                'relatedKey' => $relation->getOwnerKeyName(),
+                'parentTable' => $parent->getTable(),
+                'parentKey' => $relation->getForeignKeyName(),
+            ];
+        }
+
+        if ($relation instanceof HasOne) {
+            return [
+                'relatedTable' => $related->getTable(),
+                'relatedColumn' => $column->relationColumn ?? $related->getKeyName(),
+                'relatedKey' => $relation->getForeignKeyName(),
+                'parentTable' => $parent->getTable(),
+                'parentKey' => $relation->getLocalKeyName(),
+            ];
+        }
+
+        throw InvalidColumnException::unsupportedRelation($column->name, $column->relation ?? '');
+    }
+
+    /**
+     * The relationship a column reads its value from.
+     */
+    private function relationName(Column $column): string
+    {
+        $relation = $column->relation;
+
+        if ($relation === null) {
+            throw InvalidColumnException::unknownRelation($column->name, '');
+        }
+
+        return $relation;
+    }
+
+    /**
+     * Compute the values that are not read from a plain database attribute.
+     *
+     * @param  array<array-key, TModel>  $items
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return array<int, array<string, mixed>>
+     */
+    private function computeColumnValues(array $items, EloquentBuilder|QueryBuilder $query): array
+    {
+        $columns = array_values(array_filter(
+            $this->columns,
+            fn (Column $column): bool => $column->value instanceof Closure || $column->relation !== null,
+        ));
+
+        if ($columns === []) {
+            return [];
+        }
+
+        $relatedColumns = [];
+
+        foreach ($columns as $column) {
+            if ($column->value !== null || $column->relation === null) {
+                continue;
+            }
+
+            $eloquent = $this->eloquentQuery($query, $column);
+            $relation = $this->relationFor($eloquent, $column);
+
+            $relatedColumns[$column->name] = $this->relationMetadata($relation, $column)['relatedColumn'];
+        }
+
+        $values = [];
+
+        foreach (array_values($items) as $index => $row) {
+            $rowValues = [];
+
+            foreach ($columns as $column) {
+                $rowValues[$column->name] = $this->resolveColumnValue($column, $row, $relatedColumns[$column->name] ?? null);
+            }
+
+            $values[$index] = $rowValues;
+        }
+
+        return $values;
+    }
+
+    /**
+     * Resolve the value a column exposes for the given row.
+     */
+    private function resolveColumnValue(Column $column, object $row, ?string $relatedColumn): mixed
+    {
+        if ($column->value instanceof Closure) {
+            return ($column->value)($row);
+        }
+
+        $relation = $column->relation;
+
+        if ($relation === null || $relatedColumn === null || ! $row instanceof Model) {
+            return null;
+        }
+
+        if (! $row->relationLoaded($relation)) {
+            return null;
+        }
+
+        $related = $row->getRelationValue($relation);
+
+        if (! $related instanceof Model) {
+            return null;
+        }
+
+        return $related->getAttribute($relatedColumn);
     }
 
     private function resolvePerPage(

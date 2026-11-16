@@ -4,10 +4,18 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables;
 
+use Closure;
 use JsonSerializable;
 
 final readonly class Column implements JsonSerializable
 {
+    /**
+     * @param  array<int, array{value: string, label: string}>  $filterOptions
+     * @param  Closure|null  $searchUsing  Receives the query builder, the search term and the boolean operator.
+     * @param  Closure|null  $sortUsing  Receives the query builder and the sort direction.
+     * @param  Closure|null  $filterUsing  Receives the query builder and the filter value.
+     * @param  Closure|null  $value  Receives the row and returns the value exposed for this column.
+     */
     public function __construct(
         public string $name,
         public string $label,
@@ -18,6 +26,13 @@ final readonly class Column implements JsonSerializable
         public ?string $filterType = null,
         /** @var array<int, array{value: string, label: string}> */
         public array $filterOptions = [],
+        public ?string $field = null,
+        public ?string $relation = null,
+        public ?string $relationColumn = null,
+        public ?Closure $searchUsing = null,
+        public ?Closure $sortUsing = null,
+        public ?Closure $filterUsing = null,
+        public ?Closure $value = null,
     ) {}
 
     public static function make(string $name): self
@@ -30,72 +45,27 @@ final readonly class Column implements JsonSerializable
 
     public function label(string $label): self
     {
-        return new self(
-            name: $this->name,
-            label: $label,
-            searchable: $this->searchable,
-            sortable: $this->sortable,
-            filterable: $this->filterable,
-            hidden: $this->hidden,
-            filterType: $this->filterType,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['label' => $label]);
     }
 
     public function searchable(bool $value = true): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $value,
-            sortable: $this->sortable,
-            filterable: $this->filterable,
-            hidden: $this->hidden,
-            filterType: $this->filterType,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['searchable' => $value]);
     }
 
     public function sortable(bool $value = true): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $this->searchable,
-            sortable: $value,
-            filterable: $this->filterable,
-            hidden: $this->hidden,
-            filterType: $this->filterType,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['sortable' => $value]);
     }
 
     public function filterable(bool $value = true): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $this->searchable,
-            sortable: $this->sortable,
-            filterable: $value,
-            hidden: $this->hidden,
-            filterType: $this->filterType,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['filterable' => $value]);
     }
 
     public function filterType(string $type): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $this->searchable,
-            sortable: $this->sortable,
-            filterable: $this->filterable,
-            hidden: $this->hidden,
-            filterType: $type,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['filterType' => $type]);
     }
 
     /**
@@ -103,30 +73,82 @@ final readonly class Column implements JsonSerializable
      */
     public function filterOptions(array $options): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $this->searchable,
-            sortable: $this->sortable,
-            filterable: $this->filterable,
-            hidden: $this->hidden,
-            filterType: $this->filterType ?? 'select',
-            filterOptions: $options,
-        );
+        return $this->with([
+            'filterType' => $this->filterType ?? 'select',
+            'filterOptions' => $options,
+        ]);
     }
 
     public function hidden(bool $value = true): self
     {
-        return new self(
-            name: $this->name,
-            label: $this->label,
-            searchable: $this->searchable,
-            sortable: $this->sortable,
-            filterable: $this->filterable,
-            hidden: $value,
-            filterType: $this->filterType,
-            filterOptions: $this->filterOptions,
-        );
+        return $this->with(['hidden' => $value]);
+    }
+
+    /**
+     * Use a different database expression than the response key.
+     *
+     * The expression is used when searching, sorting and filtering the column and
+     * is selected for you, so the value is exposed under the column name.
+     */
+    public function field(string $field): self
+    {
+        return $this->with(['field' => $field]);
+    }
+
+    /**
+     * Read the column value from an Eloquent relationship.
+     *
+     * The relationship is searched with `whereHas()`, sorted with a correlated
+     * subquery and its attribute is exposed under the column name.
+     */
+    public function relation(string $relation, ?string $column = null): self
+    {
+        return $this->with([
+            'relation' => $relation,
+            'relationColumn' => $column,
+        ]);
+    }
+
+    /**
+     * Search the column with a custom query callback.
+     *
+     * The callback receives the query builder, the search term and the boolean
+     * operator that has to be applied to the constraint.
+     */
+    public function searchUsing(Closure $callback): self
+    {
+        return $this->with(['searchUsing' => $callback]);
+    }
+
+    /**
+     * Sort the column with a custom query callback.
+     *
+     * The callback receives the query builder and the sort direction.
+     */
+    public function sortUsing(Closure $callback): self
+    {
+        return $this->with(['sortUsing' => $callback]);
+    }
+
+    /**
+     * Filter the column with a custom query callback.
+     *
+     * The callback receives the query builder and the filter value.
+     */
+    public function filterUsing(Closure $callback): self
+    {
+        return $this->with(['filterUsing' => $callback]);
+    }
+
+    /**
+     * Compute the value exposed for this column from the row.
+     *
+     * The callback receives the row and returns the value that is added to the
+     * response under the column name.
+     */
+    public function value(Closure $callback): self
+    {
+        return $this->with(['value' => $callback]);
     }
 
     /**
@@ -157,5 +179,47 @@ final readonly class Column implements JsonSerializable
     private static function formatLabel(string $name): string
     {
         return ucwords(str_replace(['_', '.'], ' ', $name));
+    }
+
+    /**
+     * Create a copy of the column with the given properties replaced.
+     *
+     * @param  array{
+     *     name?: string,
+     *     label?: string,
+     *     searchable?: bool,
+     *     sortable?: bool,
+     *     filterable?: bool,
+     *     hidden?: bool,
+     *     filterType?: string|null,
+     *     filterOptions?: array<int, array{value: string, label: string}>,
+     *     field?: string|null,
+     *     relation?: string|null,
+     *     relationColumn?: string|null,
+     *     searchUsing?: Closure|null,
+     *     sortUsing?: Closure|null,
+     *     filterUsing?: Closure|null,
+     *     value?: Closure|null,
+     * }  $changes
+     */
+    private function with(array $changes): self
+    {
+        return new self(
+            name: $changes['name'] ?? $this->name,
+            label: $changes['label'] ?? $this->label,
+            searchable: $changes['searchable'] ?? $this->searchable,
+            sortable: $changes['sortable'] ?? $this->sortable,
+            filterable: $changes['filterable'] ?? $this->filterable,
+            hidden: $changes['hidden'] ?? $this->hidden,
+            filterType: $changes['filterType'] ?? $this->filterType,
+            filterOptions: $changes['filterOptions'] ?? $this->filterOptions,
+            field: $changes['field'] ?? $this->field,
+            relation: $changes['relation'] ?? $this->relation,
+            relationColumn: $changes['relationColumn'] ?? $this->relationColumn,
+            searchUsing: $changes['searchUsing'] ?? $this->searchUsing,
+            sortUsing: $changes['sortUsing'] ?? $this->sortUsing,
+            filterUsing: $changes['filterUsing'] ?? $this->filterUsing,
+            value: $changes['value'] ?? $this->value,
+        );
     }
 }

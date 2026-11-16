@@ -19,4 +19,25 @@ final class InvalidColumnException extends InvalidDataTableException
             sprintf('Column [%s] not found in column definitions.', $column),
         );
     }
+
+    public static function unknownRelation(string $column, string $relation): self
+    {
+        return new self(
+            sprintf('Column [%s] declares an unknown relationship [%s].', $column, $relation),
+        );
+    }
+
+    public static function unsupportedRelation(string $column, string $relation): self
+    {
+        return new self(
+            sprintf('Column [%s] cannot read a value from the relationship [%s]. Only belongs to and has one relationships are supported.', $column, $relation),
+        );
+    }
+
+    public static function relationRequiresEloquent(string $column): self
+    {
+        return new self(
+            sprintf('Column [%s] reads its value from a relationship and requires an Eloquent query.', $column),
+        );
+    }
 }

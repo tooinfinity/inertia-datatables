@@ -198,6 +198,97 @@ Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
 ```
 
+### Relation, Aliased and Computed Columns
+
+A column name is both the response key and the database column. When they differ,
+declare the database expression with `->field()`, read the value from a relationship
+with `->relation()` or compute the value with `->value()`.
+
+#### `->field()` — a different database expression
+
+`->field()` keeps the response key separate from the database expression. The
+expression is used to search, sort and filter the column and is selected for you,
+so the value is exposed under the column name:
+
+```php
+$posts = DataTable::query(
+    Post::query()->leftJoin('users', 'users.id', 'posts.user_id')
+)
+    ->columns([
+        Column::make('title')->searchable()->sortable(),
+        Column::make('author_name')->field('users.name')->searchable()->sortable(),
+    ])
+    ->handle();
+```
+
+The response row contains `author_name` with the joined value, while searching and
+sorting happen on `users.name`. The join itself stays under your control, the
+package never adds one for you.
+
+#### `->relation()` — a value from a relationship
+
+`->relation()` reads the column value from an Eloquent relationship. The
+relationship is searched with `whereHas()`, sorted with a correlated subquery and
+the related attribute is exposed under the column name:
+
+```php
+$posts = DataTable::query(Post::query())
+    ->columns([
+        Column::make('title')->searchable()->sortable(),
+        Column::make('author_name')->relation('user', 'name')->searchable()->sortable()->filterable(),
+    ])
+    ->handle();
+```
+
+- The relationship is eager loaded for the current page
+- `belongsTo` and `hasOne` relationships are supported
+- The related attribute defaults to the related key when no column is given
+- Relationship columns require an Eloquent query, they are not available for the
+  query builder
+
+#### `->value()` — a computed value
+
+`->value()` computes the value of a column from the row:
+
+```php
+$posts = DataTable::query(Post::query())
+    ->columns([
+        Column::make('title')->sortable(),
+        Column::make('summary')->value(fn (Post $post): string => $post->title.' ('.$post->status.')'),
+    ])
+    ->handle();
+```
+
+The computed value is added to the response under the column name. The computed
+value is not part of the query, so searching and sorting a computed column needs
+a custom callback.
+
+#### Custom search, sort and filter callbacks
+
+`->searchUsing()`, `->sortUsing()` and `->filterUsing()` take over the query
+constraint of a column. The callback receives the query builder and the value it
+should constrain:
+
+```php
+Column::make('title_length')
+    ->searchable()
+    ->searchUsing(fn (Builder $query, string $term, string $boolean): Builder => $query->where('title', 'like', $term.'%', $boolean))
+    ->sortable()
+    ->sortUsing(fn (Builder $query, string $direction): Builder => $query->orderByRaw('LENGTH(title) '.$direction))
+    ->filterable()
+    ->filterUsing(fn (Builder $query, mixed $value): Builder => $query->whereRaw('LENGTH(title) = ?', [(int) $value]))
+    ->value(fn (Post $post): int => strlen($post->title));
+```
+
+- The search callback receives the search term and the boolean operator (`and` or
+  `or`) that has to be applied to the constraint
+- The sort callback receives the validated sort direction (`asc` or `desc`)
+- The filter callback receives the filter value
+- The callback works on the given query builder, so the constraint is added to the
+  table query
+
+Unknown columns are still rejected, no matter which options a column declares.
+
 ### Per-page Defaults
 
 Use `->perPage(15)` to set the table's default page size:

@@ -8,6 +8,10 @@
 
 ### Added
 
+- `->field()` for columns whose database expression differs from the response key, e.g. joined or aliased columns
+- `->relation()` for columns that read their value from a `belongsTo` or `hasOne` relationship, searched with `whereHas()` and sorted with a correlated subquery
+- `->value()` for columns whose value is computed from the row
+- `->searchUsing()`, `->sortUsing()` and `->filterUsing()` for custom search, sort and filter constraints (fixes #31)
 - `->responseKey('id')` for including one additional attribute in response data without exposing every undeclared attribute
 - `->exposeAll()` escape hatch for restoring the previous unrestricted response data behavior
 - Multi-value filter support: `filters[column][]=value1&filters[column][]=value2` now uses `WHERE IN` for all filterable columns
@@ -19,6 +23,7 @@
 
 ### Changed
 
+- The `Column` value object now copies its properties through a single `with()` helper instead of re-instantiating itself with every argument in each fluent method
 - Upgraded the frontend registry to TanStack Table v9 with explicit table features and v9-compatible types
 - Standardized package and registry metadata on TanStack Table v9
 

@@ -122,4 +122,81 @@ describe('Column', function (): void {
         expect($modified->searchable)->toBeTrue();
         expect($original)->not->toBe($modified);
     });
+
+    it('keeps every property when another property is changed', function (): void {
+        $column = Column::make('name')
+            ->searchable()
+            ->sortable()
+            ->filterable()
+            ->filterType('select')
+            ->filterOptions([['value' => 'a', 'label' => 'A']])
+            ->hidden()
+            ->label('Full Name');
+
+        expect($column->name)->toBe('name');
+        expect($column->label)->toBe('Full Name');
+        expect($column->searchable)->toBeTrue();
+        expect($column->sortable)->toBeTrue();
+        expect($column->filterable)->toBeTrue();
+        expect($column->hidden)->toBeTrue();
+        expect($column->filterType)->toBe('select');
+        expect($column->filterOptions)->toBe([['value' => 'a', 'label' => 'A']]);
+    });
+
+    it('allows setting a database field', function (): void {
+        $column = Column::make('author_name')->field('users.name');
+
+        expect($column->field)->toBe('users.name');
+        expect($column->name)->toBe('author_name');
+    });
+
+    it('allows setting a relationship', function (): void {
+        $column = Column::make('author_name')->relation('author', 'name');
+
+        expect($column->relation)->toBe('author');
+        expect($column->relationColumn)->toBe('name');
+    });
+
+    it('allows setting a relationship without a column', function (): void {
+        $column = Column::make('author')->relation('author');
+
+        expect($column->relation)->toBe('author');
+        expect($column->relationColumn)->toBeNull();
+    });
+
+    it('allows setting custom search, sort and filter callbacks', function (): void {
+        $search = fn ($query, string $term) => $query;
+        $sort = fn ($query, string $direction) => $query;
+        $filter = fn ($query, $value) => $query;
+        $value = fn ($row) => $row;
+
+        $column = Column::make('full_name')
+            ->searchUsing($search)
+            ->sortUsing($sort)
+            ->filterUsing($filter)
+            ->value($value);
+
+        expect($column->searchUsing)->toBe($search);
+        expect($column->sortUsing)->toBe($sort);
+        expect($column->filterUsing)->toBe($filter);
+        expect($column->value)->toBe($value);
+    });
+
+    it('does not expose the internal column details in the array representation', function (): void {
+        $column = Column::make('author_name')
+            ->field('users.name')
+            ->relation('author', 'name')
+            ->value(fn ($row) => $row);
+
+        expect($column->toArray())->toBe([
+            'name' => 'author_name',
+            'label' => 'Author Name',
+            'searchable' => false,
+            'sortable' => false,
+            'filterable' => false,
+            'hidden' => false,
+            'filter_type' => null,
+            'filter_options' => [],
+        ]);
+    });
 });
