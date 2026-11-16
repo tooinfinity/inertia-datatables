@@ -29,6 +29,7 @@
 
 ### Fixed
 
+- Pagination now appends a unique tiebreaker to Eloquent and Query Builder ordering, preventing tied rows from appearing on multiple pages or disappearing between pages. Distinct, grouped and union queries are ordered by their projected row key, grouping columns or key alias whenever the query shape allows it (fixes #30)
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors
 - Suppress default reporting for handled client input errors and add the `handle_exceptions` opt-out configuration
 - Remove the obsolete `HandlesInertiaDataTablesExceptions` trait; exception handling now works without app-side wiring

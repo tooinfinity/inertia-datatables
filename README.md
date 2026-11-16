@@ -306,6 +306,27 @@ The default applies when the request does not include a `per_page` parameter. A 
 
 The effective page size is returned in both `query.per_page` and `meta.per_page`, so the frontend always reflects the number of rows actually loaded. The effective value is also included in `config.per_page_options`; options above `max_per_page` are excluded.
 
+### Stable Pagination
+
+Sorting by a column with duplicate values does not define a stable order, so rows can
+appear on two pages or on none. The package therefore appends a unique tiebreaker to
+the generated `ORDER BY`:
+
+- Eloquent queries are ordered by the model's primary key, qualified with the table or
+  alias of the query (`users.id`).
+- Query Builder queries are ordered by `id`, qualified with the table or alias when the
+  query joins other tables.
+
+The tiebreaker is skipped when it is already part of the requested sort, and when the
+query shape cannot reference a row key safely:
+
+- Distinct queries are ordered by the projected key, its alias, or the base table
+  wildcard. Projections that omit the key keep their original order.
+- Grouped queries are ordered by their grouping columns, or by the projected alias of a
+  grouping column in distinct queries.
+- Union queries are ordered by the projected row key of the union output.
+- Aggregate-only queries, which do not represent rows, keep their original order.
+
 ### Response Data Exposure
 
 By default, each response row contains only the attributes declared in `columns()`. Undeclared attributes are removed from Eloquent and Query Builder results before the payload is returned, even when the underlying query uses `select *`.

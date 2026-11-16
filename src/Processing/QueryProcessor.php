@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TooInfinity\InertiaDataTables\Processing;
 
 use Closure;
+use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -469,28 +470,26 @@ final readonly class QueryProcessor
             if ($defaultSortColumn !== null) {
                 $defaultColumn = $this->findColumn($defaultSortColumn);
 
-                return $this->applySortToColumn($query, $defaultColumn, $this->normalizeDirection($defaultSortDirection));
+                $query = $this->applySortToColumn($query, $defaultColumn, $this->normalizeDirection($defaultSortDirection));
             }
+        } else {
+            foreach ($sorts as $sort) {
+                $column = $this->findColumn($sort->column);
 
-            return $query;
+                if (! $column->sortable) {
+                    throw InvalidSortException::notAllowed($sort->column)->forRequest();
+                }
+
+                $direction = strtolower($sort->direction);
+                if (! in_array($direction, ['asc', 'desc'], true)) {
+                    throw InvalidSortException::invalidDirection($sort->direction)->forRequest();
+                }
+
+                $query = $this->applySortToColumn($query, $column, $direction);
+            }
         }
 
-        foreach ($sorts as $sort) {
-            $column = $this->findColumn($sort->column);
-
-            if (! $column->sortable) {
-                throw InvalidSortException::notAllowed($sort->column)->forRequest();
-            }
-
-            $direction = strtolower($sort->direction);
-            if (! in_array($direction, ['asc', 'desc'], true)) {
-                throw InvalidSortException::invalidDirection($sort->direction)->forRequest();
-            }
-
-            $query = $this->applySortToColumn($query, $column, $direction);
-        }
-
-        return $query;
+        return $this->applyTiebreaker($query);
     }
 
     /**
@@ -537,6 +536,641 @@ final readonly class QueryProcessor
             ->limit(1);
 
         return $eloquent->orderBy($subquery, $direction);
+    }
+
+    /**
+     * Append a unique ordering column so pagination remains deterministic.
+     *
+     * Rows that share the sorted values may otherwise move between pages
+     * because SQL does not guarantee a stable order. The tiebreaker is only
+     * applied when the query shape allows a unique row key to be referenced.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applyTiebreaker(EloquentBuilder|QueryBuilder $query): EloquentBuilder|QueryBuilder
+    {
+        $queryBuilder = $query instanceof EloquentBuilder
+            ? $query->getQuery()
+            : $query;
+
+        if (($queryBuilder->unions ?? []) !== []) {
+            return $this->applyUnionTiebreaker($query, $queryBuilder);
+        }
+
+        if (($queryBuilder->groups ?? []) !== []) {
+            return $this->applyGroupedTiebreaker($query, $queryBuilder);
+        }
+
+        if (($queryBuilder->havings ?? []) !== []) {
+            return $query;
+        }
+
+        $tiebreaker = $query instanceof EloquentBuilder
+            ? $this->resolveEloquentTiebreaker($query, $queryBuilder)
+            : $this->resolveQueryBuilderTiebreaker($queryBuilder);
+
+        if ($tiebreaker === null) {
+            return $query;
+        }
+
+        if ($this->isOrderedBy($queryBuilder, ...$tiebreaker['equivalents'])) {
+            return $query;
+        }
+
+        return $query->orderBy($tiebreaker['column'], 'asc');
+    }
+
+    /**
+     * Resolve the Eloquent row key that makes the ordering unique.
+     *
+     * @param  EloquentBuilder<TModel>  $query
+     * @return array{column: string, equivalents: array<int, string>}|null
+     */
+    private function resolveEloquentTiebreaker(
+        EloquentBuilder $query,
+        QueryBuilder $queryBuilder,
+    ): ?array {
+        $qualifier = $this->resolveTableQualifier($queryBuilder);
+
+        if ($qualifier === null) {
+            return null;
+        }
+
+        $keyName = $query->getModel()->getKeyName();
+        $qualifiedKeyName = $qualifier.'.'.$keyName;
+
+        if ($queryBuilder->distinct !== false) {
+            if ($queryBuilder->distinct !== true) {
+                return null;
+            }
+
+            return $this->findProjectedKey($queryBuilder, $keyName, $qualifier, $qualifiedKeyName);
+        }
+
+        if ($this->isAggregateOnlyProjection($queryBuilder)) {
+            return null;
+        }
+
+        return [
+            'column' => $qualifiedKeyName,
+            'equivalents' => array_values(array_unique([$qualifiedKeyName, $keyName])),
+        ];
+    }
+
+    /**
+     * Resolve the Query Builder row key that makes the ordering unique.
+     *
+     * @return array{column: string, equivalents: array<int, string>}|null
+     */
+    private function resolveQueryBuilderTiebreaker(QueryBuilder $queryBuilder): ?array
+    {
+        $keyName = 'id';
+        $qualifier = $this->resolveTableQualifier($queryBuilder);
+
+        if ($qualifier === null) {
+            return null;
+        }
+
+        $hasJoins = ($queryBuilder->joins ?? []) !== [];
+
+        if ($queryBuilder->distinct !== false) {
+            if ($queryBuilder->distinct !== true) {
+                return null;
+            }
+
+            $wildcardKey = $hasJoins ? $qualifier.'.'.$keyName : $keyName;
+
+            return $this->findProjectedKey($queryBuilder, $keyName, $qualifier, $wildcardKey);
+        }
+
+        if ($this->isAggregateOnlyProjection($queryBuilder)) {
+            return null;
+        }
+
+        if ($hasJoins) {
+            $qualifiedKeyName = $qualifier.'.'.$keyName;
+
+            return [
+                'column' => $qualifiedKeyName,
+                'equivalents' => array_values(array_unique([$qualifiedKeyName, $keyName])),
+            ];
+        }
+
+        return [
+            'column' => $keyName,
+            'equivalents' => [$keyName],
+        ];
+    }
+
+    /**
+     * Order union results by the projected row key.
+     *
+     * A union is ordered by the column names of its output, so the row key is
+     * referenced without a table qualifier.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applyUnionTiebreaker(
+        EloquentBuilder|QueryBuilder $query,
+        QueryBuilder $queryBuilder,
+    ): EloquentBuilder|QueryBuilder {
+        $keyName = $query instanceof EloquentBuilder
+            ? $query->getModel()->getKeyName()
+            : 'id';
+
+        $qualifier = $this->resolveTableQualifier($queryBuilder);
+        $outputKey = $this->findProjectedKeyOutput($queryBuilder, $keyName, $qualifier);
+
+        if ($outputKey === null) {
+            return $query;
+        }
+
+        if ($this->isOrderedBy($queryBuilder, $outputKey, $keyName)) {
+            return $query;
+        }
+
+        return $query->orderBy($outputKey, 'asc');
+    }
+
+    /**
+     * Order grouped rows by their grouping columns.
+     *
+     * Raw group expressions cannot be reused as ordering terms because their
+     * bindings and dialect specific semantics may differ.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     * @return EloquentBuilder<TModel>|QueryBuilder
+     */
+    private function applyGroupedTiebreaker(
+        EloquentBuilder|QueryBuilder $query,
+        QueryBuilder $queryBuilder,
+    ): EloquentBuilder|QueryBuilder {
+        $groups = $queryBuilder->groups ?? [];
+
+        foreach ($groups as $group) {
+            if (! is_string($group)) {
+                return $query;
+            }
+        }
+
+        if ($queryBuilder->distinct !== false && $queryBuilder->distinct !== true) {
+            return $query;
+        }
+
+        $qualifier = $this->resolveTableQualifier($queryBuilder);
+        $candidates = [];
+
+        foreach ($groups as $group) {
+            if (! $queryBuilder->distinct) {
+                $candidates[] = ['column' => $group, 'equivalents' => [$group]];
+
+                continue;
+            }
+
+            $candidate = $this->findProjectedGroup($queryBuilder, $group, $qualifier);
+
+            if ($candidate === null) {
+                return $query;
+            }
+
+            $candidates[] = $candidate;
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->isOrderedBy($queryBuilder, ...$candidate['equivalents'])) {
+                continue;
+            }
+
+            $query->orderBy($candidate['column'], 'asc');
+        }
+
+        return $query;
+    }
+
+    /**
+     * Find the grouping column in the projection of a distinct query.
+     *
+     * Distinct queries may only be ordered by expressions that are projected,
+     * so the projected expression is used instead of the grouping column.
+     *
+     * @return array{column: string, equivalents: array<int, string>}|null
+     */
+    private function findProjectedGroup(
+        QueryBuilder $queryBuilder,
+        string $group,
+        ?string $qualifier,
+    ): ?array {
+        foreach ($this->projectionItems($queryBuilder) as $item) {
+            if ($this->isBaseWildcard($item['source'], $qualifier)) {
+                return ['column' => $group, 'equivalents' => [$group]];
+            }
+
+            if (! $this->projectionMatchesGroup($item['source'], $group, $qualifier)) {
+                continue;
+            }
+
+            $column = $item['alias'] ?? $item['source'];
+
+            return [
+                'column' => $column,
+                'equivalents' => array_values(array_unique([$column, $group, $item['source']])),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the row key in a selected projection.
+     *
+     * @return array{column: string, equivalents: array<int, string>}|null
+     */
+    private function findProjectedKey(
+        QueryBuilder $queryBuilder,
+        string $keyName,
+        ?string $qualifier,
+        string $wildcardKey,
+    ): ?array {
+        $columns = $queryBuilder->columns;
+
+        if ($columns === null) {
+            return $this->tiebreakerCandidate($wildcardKey, $keyName, $qualifier);
+        }
+
+        foreach ($this->projectionItems($queryBuilder) as $item) {
+            if ($this->isBaseWildcard($item['source'], $qualifier)) {
+                return $this->tiebreakerCandidate($wildcardKey, $keyName, $qualifier);
+            }
+
+            if (! $this->projectionMatchesKey($item['source'], $keyName, $qualifier)) {
+                continue;
+            }
+
+            $projectedKey = $item['alias'] ?? $item['source'];
+
+            return $this->tiebreakerCandidate($projectedKey, $keyName, $qualifier, $item['source']);
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the name of the row key in the output of a union.
+     */
+    private function findProjectedKeyOutput(
+        QueryBuilder $queryBuilder,
+        string $keyName,
+        ?string $qualifier,
+    ): ?string {
+        $columns = $queryBuilder->columns;
+
+        if ($columns === null) {
+            return $keyName;
+        }
+
+        foreach ($this->projectionItems($queryBuilder) as $item) {
+            if ($this->isBaseWildcard($item['source'], $qualifier)) {
+                return $keyName;
+            }
+
+            if (! $this->projectionMatchesKey($item['source'], $keyName, $qualifier)) {
+                continue;
+            }
+
+            return $item['alias'] ?? $keyName;
+        }
+
+        return null;
+    }
+
+    /**
+     * Build a tiebreaker and the equivalent columns that prevent duplication.
+     *
+     * @return array{column: string, equivalents: array<int, string>}
+     */
+    private function tiebreakerCandidate(
+        string $column,
+        string $keyName,
+        ?string $qualifier,
+        string ...$additionalEquivalents
+    ): array {
+        $equivalents = [$column, $keyName, ...$additionalEquivalents];
+
+        if ($qualifier !== null) {
+            $equivalents[] = $qualifier.'.'.$keyName;
+        }
+
+        return [
+            'column' => $column,
+            'equivalents' => array_values(array_unique($equivalents)),
+        ];
+    }
+
+    /**
+     * Resolve the individual select items of a projection.
+     *
+     * Raw projections may contain multiple comma separated items, while plain
+     * projections always describe a single item.
+     *
+     * @return array<int, array{source: string, alias: string|null}>
+     */
+    private function projectionItems(QueryBuilder $queryBuilder): array
+    {
+        $columns = $queryBuilder->columns;
+
+        if ($columns === null) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach ($columns as $column) {
+            if ($column instanceof ExpressionContract) {
+                $value = (string) $column->getValue($queryBuilder->getGrammar());
+
+                foreach ($this->splitProjectionList($value) as $part) {
+                    [$source, $alias] = $this->parseProjection($part);
+
+                    $items[] = ['source' => $source, 'alias' => $alias];
+                }
+
+                continue;
+            }
+
+            [$source, $alias] = $this->parseProjection($column);
+
+            $items[] = ['source' => $source, 'alias' => $alias];
+        }
+
+        return $items;
+    }
+
+    /**
+     * Split a raw projection into its individual select items.
+     *
+     * @return array<int, string>
+     */
+    private function splitProjectionList(string $projection): array
+    {
+        $items = [];
+        $current = '';
+        $depth = 0;
+        $quote = null;
+        $length = strlen($projection);
+
+        for ($index = 0; $index < $length; $index++) {
+            $character = $projection[$index];
+
+            if ($quote !== null) {
+                $current .= $character;
+
+                if ($character === '\\' && $quote !== '`' && $index + 1 < $length) {
+                    $index++;
+                    $current .= $projection[$index];
+
+                    continue;
+                }
+
+                if ($character === $quote) {
+                    if ($index + 1 < $length && $projection[$index + 1] === $quote) {
+                        $index++;
+                        $current .= $projection[$index];
+
+                        continue;
+                    }
+
+                    $quote = null;
+                }
+
+                continue;
+            }
+
+            if (in_array($character, ["'", '"', '`'], true)) {
+                $quote = $character;
+                $current .= $character;
+
+                continue;
+            }
+
+            if ($character === '(') {
+                $depth++;
+            } elseif ($character === ')') {
+                $depth--;
+            } elseif ($character === ',' && $depth === 0) {
+                $items[] = $current;
+                $current = '';
+
+                continue;
+            }
+
+            $current .= $character;
+        }
+
+        $items[] = $current;
+
+        return array_values(array_filter(
+            array_map(trim(...), $items),
+            fn (string $item): bool => $item !== '',
+        ));
+    }
+
+    /**
+     * Parse a projected expression and its optional alias.
+     *
+     * @return array{0: string, 1: string|null}
+     */
+    private function parseProjection(string $value): array
+    {
+        $value = trim($value);
+
+        $pattern = '/^(.*?)\s+as\s+(?:"(?<quoted>[^"]+)"|`(?<ticked>[^`]+)`|(?<plain>[a-z_][a-z0-9_]*))$/i';
+
+        if (preg_match($pattern, $value, $matches, PREG_UNMATCHED_AS_NULL) !== 1) {
+            return [$value, null];
+        }
+
+        $alias = $matches['quoted'] ?? $matches['ticked'] ?? $matches['plain'] ?? null;
+
+        return [trim($matches[1]), $alias];
+    }
+
+    private function normalizeIdentifier(string $identifier): string
+    {
+        return strtolower(str_replace(['`', '"'], '', trim($identifier)));
+    }
+
+    /**
+     * Determine whether a projection selects every column of the base table.
+     */
+    private function isBaseWildcard(string $projection, ?string $qualifier): bool
+    {
+        $projection = $this->normalizeIdentifier($projection);
+
+        if ($projection === '*') {
+            return true;
+        }
+
+        if ($qualifier === null) {
+            return false;
+        }
+
+        return $projection === strtolower($qualifier).'.*';
+    }
+
+    private function projectionMatchesKey(string $projection, string $keyName, ?string $qualifier): bool
+    {
+        $projection = $this->normalizeIdentifier($projection);
+
+        if ($projection === strtolower($keyName)) {
+            return true;
+        }
+
+        return $qualifier !== null
+            && $projection === strtolower($qualifier).'.'.strtolower($keyName);
+    }
+
+    /**
+     * Determine whether a projection selects the given grouping column.
+     */
+    private function projectionMatchesGroup(string $projection, string $group, ?string $qualifier): bool
+    {
+        $projection = $this->normalizeIdentifier($projection);
+        $group = $this->normalizeIdentifier($group);
+
+        if ($projection === $group) {
+            return true;
+        }
+
+        $projectionParts = explode('.', $projection);
+        $groupParts = explode('.', $group);
+
+        $projectionColumn = $projectionParts[count($projectionParts) - 1];
+        $groupColumn = $groupParts[count($groupParts) - 1];
+
+        if ($projectionColumn !== $groupColumn) {
+            return false;
+        }
+
+        $projectionTable = count($projectionParts) > 1 ? $projectionParts[count($projectionParts) - 2] : null;
+        $groupTable = count($groupParts) > 1 ? $groupParts[count($groupParts) - 2] : null;
+
+        if ($projectionTable !== null && $groupTable !== null) {
+            return $projectionTable === $groupTable;
+        }
+
+        $baseTable = $qualifier === null ? null : strtolower($qualifier);
+
+        return $projectionTable === $baseTable || $groupTable === $baseTable;
+    }
+
+    /**
+     * Determine whether the projection only contains aggregate expressions.
+     *
+     * Aggregate only queries do not represent rows and therefore cannot be
+     * ordered by a row key.
+     */
+    private function isAggregateOnlyProjection(QueryBuilder $queryBuilder): bool
+    {
+        $columns = $queryBuilder->columns;
+
+        if ($columns === null || $columns === []) {
+            return false;
+        }
+
+        $items = $this->projectionItems($queryBuilder);
+
+        if ($items === []) {
+            return false;
+        }
+
+        return array_all($items, $this->isAggregateProjectionItem(...));
+    }
+
+    /**
+     * Determine whether a projected item aggregates rows.
+     *
+     * @param  array{source: string, alias: string|null}  $item
+     */
+    private function isAggregateProjectionItem(array $item): bool
+    {
+        return $this->isAggregateExpression($item['source']);
+    }
+
+    /**
+     * Determine whether a projected expression aggregates rows.
+     */
+    private function isAggregateExpression(string $source): bool
+    {
+        if (preg_match('/\bover\s*\(/i', $source) === 1) {
+            return false;
+        }
+
+        $aggregates = 'array_agg|avg|bit_and|bit_or|bool_and|bool_or|count|every|group_concat|json_agg|json_arrayagg|json_group_array|jsonb_agg|jsonb_arrayagg|max|min|mode|percentile_cont|percentile_disc|stddev|stddev_pop|stddev_samp|string_agg|sum|total|var_pop|var_samp|variance|xmlagg|[a-z_]+_agg(?:reg)?';
+
+        return preg_match('/\b(?:'.$aggregates.')\s*\(/i', $source) === 1;
+    }
+
+    /**
+     * Resolve the table name or alias used by the query.
+     */
+    private function resolveTableQualifier(QueryBuilder $queryBuilder): ?string
+    {
+        $from = $queryBuilder->from;
+
+        if (! is_string($from)) {
+            return null;
+        }
+
+        $from = trim($from);
+
+        if ($from === '') {
+            return null;
+        }
+
+        if (preg_match('/^(.*?)\s+(?:as\s+)?([^\s]+)$/i', $from, $matches) === 1) {
+            return trim($matches[2], '`"');
+        }
+
+        $segments = explode('.', $from);
+        $table = $segments[array_key_last($segments)];
+
+        return trim($table, '`"');
+    }
+
+    /**
+     * Determine whether the query already contains one of the given order columns.
+     */
+    private function isOrderedBy(QueryBuilder $query, string ...$columns): bool
+    {
+        $orders = array_merge($query->orders ?? [], $query->unionOrders ?? []);
+
+        foreach ($orders as $order) {
+            if (! is_array($order)) {
+                continue;
+            }
+
+            $column = $order['column'] ?? null;
+
+            if ($column instanceof ExpressionContract) {
+                $column = $column->getValue($query->getGrammar());
+            }
+
+            if (! is_string($column)) {
+                continue;
+            }
+
+            $normalizedColumn = $this->normalizeIdentifier($column);
+
+            foreach ($columns as $orderedColumn) {
+                if ($normalizedColumn === $this->normalizeIdentifier($orderedColumn)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function validateColumns(DataTableRequest $request): void
