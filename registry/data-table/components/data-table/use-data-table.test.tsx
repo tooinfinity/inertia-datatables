@@ -84,6 +84,11 @@ function createMockData(overrides: Record<string, unknown> = {}) {
     };
 }
 
+/** Reads the column definitions that were handed to the table. */
+function capturedColumns(result: ReturnType<typeof useDataTable>) {
+    return (result.table as unknown as { columns: Array<Record<string, unknown>> }).columns;
+}
+
 describe('useDataTable', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -1306,5 +1311,324 @@ describe('useDataTable', () => {
         rerender(<TestWrapper data={makeData('from-history')} />);
 
         expect(capturedResult!.state.search).toBe('from-history');
+    });
+
+    it('exposes the loading state while a visit is in flight', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        expect(capturedResult!.isLoading).toBe(false);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        const options = (router.visit as ReturnType<typeof vi.fn>).mock.calls[0][1];
+
+        act(() => options.onStart());
+
+        expect(capturedResult!.isLoading).toBe(true);
+
+        act(() => options.onFinish());
+
+        expect(capturedResult!.isLoading).toBe(false);
+    });
+
+    it('reports visit errors and clears the loading state', () => {
+        const initialData = createMockData();
+        const onError = vi.fn();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                visitOptions: { onError },
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        const options = (router.visit as ReturnType<typeof vi.fn>).mock.calls[0][1];
+
+        act(() => options.onStart());
+        act(() => options.onError({ email: 'is invalid' }));
+
+        expect(capturedResult!.error).toEqual({ email: 'is invalid' });
+        expect(capturedResult!.isLoading).toBe(false);
+        expect(onError).toHaveBeenCalledWith({ email: 'is invalid' });
+    });
+
+    it('replaces the history entry for search, filter and sort visits', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleSearchChange('john'));
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?search=john&page=1',
+            expect.objectContaining({ replace: true })
+        );
+
+        act(() => capturedResult!.handleSortChange([{ id: 'name', desc: true }]));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?sort=-name',
+            expect.objectContaining({ replace: true })
+        );
+
+        act(() => capturedResult!.handleFilterChange('status', 'active'));
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?filters%5Bstatus%5D=active&page=1',
+            expect.objectContaining({ replace: true })
+        );
+    });
+
+    it('pushes a new history entry for pagination visits', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?page=2',
+            expect.objectContaining({ replace: false })
+        );
+    });
+
+    it('lets the visit options override the default replace behaviour', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                visitOptions: { replace: false },
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleSearchChange('john'));
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?search=john&page=1',
+            expect.objectContaining({ replace: false })
+        );
+    });
+
+    it('forwards additional visit options to Inertia', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                visitOptions: {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    preserveScroll: false,
+                    showProgress: false,
+                },
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/?page=2',
+            expect.objectContaining({
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                preserveScroll: false,
+                showProgress: false,
+                only: ['data'],
+            })
+        );
+    });
+
+    it('reports http exceptions and clears the loading state', () => {
+        const initialData = createMockData();
+        const onHttpException = vi.fn();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                visitOptions: { onHttpException },
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        const options = (router.visit as ReturnType<typeof vi.fn>).mock.calls[0][1];
+
+        act(() => options.onStart());
+        act(() =>
+            options.onHttpException({
+                status: 500,
+                data: 'Server error',
+                headers: {},
+            })
+        );
+
+        expect(capturedResult!.isLoading).toBe(false);
+        expect(onHttpException).toHaveBeenCalledWith({
+            status: 500,
+            data: 'Server error',
+            headers: {},
+        });
+    });
+
+    it('merges column overrides with the server column meta', () => {
+        const initialData = createMockData({
+            columns: [
+                { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: false, hidden: false },
+            ],
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                columns: [{ id: 'name', meta: { filterable: true } }],
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        const columns = capturedColumns(capturedResult!);
+
+        expect(columns).toHaveLength(1);
+        expect(columns[0].meta).toEqual({ searchable: true, filterable: true });
+    });
+
+    it('keeps the server capabilities authoritative for column overrides', () => {
+        const initialData = createMockData({
+            columns: [
+                { name: 'name', label: 'Name', sortable: false, searchable: false, filterable: false, hidden: false },
+            ],
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                columns: [
+                    {
+                        id: 'name',
+                        enableSorting: true,
+                        enableGlobalFilter: true,
+                        enableColumnFilter: true,
+                    },
+                ],
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        const columns = capturedColumns(capturedResult!);
+
+        expect(columns[0].enableSorting).toBe(false);
+        expect(columns[0].enableGlobalFilter).toBe(false);
+        expect(columns[0].enableColumnFilter).toBe(false);
+    });
+
+    it('allows an override to disable a server capability', () => {
+        const initialData = createMockData({
+            columns: [
+                { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: true, hidden: false },
+            ],
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                columns: [{ id: 'name', enableSorting: false }],
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        const columns = capturedColumns(capturedResult!);
+
+        expect(columns[0].enableSorting).toBe(false);
+        expect(columns[0].enableGlobalFilter).toBe(true);
+    });
+
+    it('appends the row actions column', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                actions: ({ row }) => row.name,
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        const columns = capturedColumns(capturedResult!);
+
+        expect(columns).toHaveLength(4);
+        expect(columns[3].id).toBe('__actions');
+        expect(columns[3].enableSorting).toBe(false);
+    });
+
+    it('appends column overrides that do not match a server column as client side columns', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                columns: [{ id: 'extra', header: 'Extra', cell: () => 'extra' }],
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        const columns = capturedColumns(capturedResult!);
+
+        expect(columns).toHaveLength(4);
+        expect(columns[3].id).toBe('extra');
+        expect(columns[3].enableSorting).toBe(false);
     });
 });

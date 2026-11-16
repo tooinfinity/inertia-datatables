@@ -18,7 +18,9 @@ interface DataTableColumnVisibilityProps<TData extends RowData> {
 export function DataTableColumnVisibility<TData extends RowData>({
     table,
 }: DataTableColumnVisibilityProps<TData>) {
-    const columns = table.getAllLeafColumns();
+    const columns = table
+        .getAllLeafColumns()
+        .filter((column: Column<DataTableFeatures, TData, unknown>) => column.columnDef.meta?.client_only !== true);
 
     return (
         <DropdownMenu>

@@ -1,8 +1,15 @@
 'use client';
 
-import { type ReactNode, forwardRef, type ReactElement, type Ref } from 'react';
+import { type ReactNode, forwardRef, type ReactElement, type Ref, useMemo } from 'react';
 import { flexRender } from '@tanstack/react-table';
-import { type DataTableResponse } from './types';
+import {
+    type DataTableCellRenderers,
+    type DataTableColumnDef,
+    type DataTableErrors,
+    type DataTableResponse,
+    type DataTableRowActions,
+    type DataTableVisitOptions,
+} from './types';
 import {
     Table,
     TableHeader,
@@ -10,6 +17,7 @@ import {
     TableRow,
     TableCell,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DataTableToolbar } from './data-table-toolbar';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableColumnHeader } from './data-table-column-header';
@@ -18,14 +26,63 @@ import { DataTableEmpty } from './data-table-empty';
 import { useDataTable } from './use-data-table';
 import type { RowData } from '@tanstack/react-table';
 
-interface DataTableProps<TData extends RowData> {
+export interface DataTableProps<TData extends RowData> {
     data: DataTableResponse<TData>;
     children?: ReactNode;
     dataPropName?: string;
+    /** Column definition overrides, matched against the server columns by id. */
+    columns?: DataTableColumnDef<TData>[];
+    /** Cell renderers keyed by column name. */
+    cells?: DataTableCellRenderers<TData>;
+    /** Renders a trailing actions cell for every row. */
+    actions?: DataTableRowActions<TData>;
+    /** Extra content rendered next to the search field. */
+    toolbar?: ReactNode;
+    /** Replaces the default empty state. */
+    empty?: ReactNode;
+    /** Derives a stable row id from the row data. */
+    rowKey?: (_row: TData, _index: number) => string;
+    /** Called when a row is clicked. */
+    onRowClick?: (_row: TData, _index: number) => void;
+    /** Options forwarded to the Inertia `router.visit` call. */
+    visitOptions?: DataTableVisitOptions;
+    /** Called when the endpoint answered with validation errors. */
+    onError?: (_errors: DataTableErrors) => void;
+    /** Number of skeleton rows rendered while a visit is in flight. */
+    skeletonRows?: number;
 }
 
 const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<string, unknown>>>(
-    ({ data, children, dataPropName = 'data', ...props }, ref) => {
+    (
+        {
+            data,
+            children,
+            dataPropName = 'data',
+            columns,
+            cells,
+            actions,
+            toolbar,
+            empty,
+            rowKey,
+            onRowClick,
+            visitOptions,
+            onError,
+            skeletonRows = 5,
+            ...props
+        },
+        ref
+    ) => {
+        const mergedVisitOptions = useMemo<DataTableVisitOptions>(
+            () => ({
+                ...visitOptions,
+                onError: (errors: DataTableErrors) => {
+                    visitOptions?.onError?.(errors);
+                    onError?.(errors);
+                },
+            }),
+            [visitOptions, onError]
+        );
+
         const {
             table,
             handlePageChange,
@@ -36,7 +93,21 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             state,
             perPageOptions,
             columnSearches,
-        } = useDataTable<Record<string, unknown>>({ data, dataPropName });
+            isLoading,
+        } = useDataTable<Record<string, unknown>>({
+            data,
+            dataPropName,
+            columns,
+            cells,
+            actions,
+            visitOptions: mergedVisitOptions,
+            rowKey,
+        });
+
+        const rows = table.getRowModel().rows;
+        const visibleColumnCount = table
+            .getAllLeafColumns()
+            .filter((column) => column.getIsVisible()).length;
 
         return (
             <div className="space-y-4">
@@ -46,9 +117,11 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                     perPage={state.perPage}
                     onPerPageChange={handlePerPageChange}
                     perPageOptions={perPageOptions}
-                />
+                >
+                    {toolbar}
+                </DataTableToolbar>
                 <div className="rounded-md border">
-                    <Table ref={ref} className="w-full caption-bottom text-sm" {...props}>
+                    <Table ref={ref} className="w-full caption-bottom text-sm" aria-busy={isLoading} {...props}>
                         <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
                                 <TableRow key={headerGroup.id}>
@@ -67,11 +140,35 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                             ))}
                         </TableHeader>
                         <TableBody>
-                            {table.getRowModel().rows.length === 0 ? (
-                                <DataTableEmpty columns={table.getAllLeafColumns().length} />
+                            {isLoading ? (
+                                Array.from({ length: skeletonRows }).map((_, rowIndex) => (
+                                    <TableRow key={`skeleton-${rowIndex}`}>
+                                        {Array.from({ length: visibleColumnCount }).map((__, cellIndex) => (
+                                            <TableCell key={cellIndex} className="p-4 align-middle">
+                                                <Skeleton className="h-4 w-full" />
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                ))
+                            ) : rows.length === 0 ? (
+                                <DataTableEmpty columns={table.getAllLeafColumns().length}>
+                                    {empty}
+                                </DataTableEmpty>
                             ) : (
-                                table.getRowModel().rows.map((row) => (
-                                    <TableRow key={row.id} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                                rows.map((row) => (
+                                    <TableRow
+                                        key={row.id}
+                                        onClick={
+                                            onRowClick
+                                                ? () => onRowClick(row.original, row.index)
+                                                : undefined
+                                        }
+                                        className={
+                                            onRowClick
+                                                ? 'cursor-pointer border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'
+                                                : 'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'
+                                        }
+                                    >
                                         {row.getVisibleCells().map((cell) => (
                                             <TableCell key={cell.id} className="p-4 align-middle">
                                                 {flexRender(cell.column.columnDef.cell!, cell.getContext())}

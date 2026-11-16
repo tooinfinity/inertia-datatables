@@ -8,6 +8,17 @@
 
 ### Added
 
+- React layer: custom cell renderers through the `cells` prop, keyed by column name (fixes #33)
+- React layer: row actions through the `actions` prop, rendered as a trailing client side column (fixes #33)
+- React layer: column definition overrides through the `columns` prop, merged with the server provided column meta (fixes #33)
+- React layer: `toolbar` and `empty` slots, `rowKey`, and `onRowClick` props (fixes #33)
+- React layer: the `useDataTable` hook returns `isLoading` and `error` (fixes #34)
+- React layer: `visitOptions` prop to forward options to the Inertia `router.visit` call (fixes #34)
+- React layer: search, filter, and sort visits replace the current history entry by default, so typing does not pollute the browser history (fixes #34)
+- React layer: the table renders `aria-busy` and skeleton rows while a visit is in flight, and the `onError` prop handles failed visits (fixes #34)
+- React layer: `visitOptions.onHttpException` and `visitOptions.onNetworkError` handle failed requests without the Inertia error modal (fixes #34)
+- React layer: a development warning is logged when the `dataPropName` does not match any prop of the current Inertia page (fixes #34)
+- The registry now ships a barrel file, so components and types can be imported from `@components/data-table`
 - `->field()` for columns whose database expression differs from the response key, e.g. joined or aliased columns
 - `->relation()` for columns that read their value from a `belongsTo` or `hasOne` relationship, searched with `whereHas()` and sorted with a correlated subquery
 - `->value()` for columns whose value is computed from the row

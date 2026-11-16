@@ -387,6 +387,8 @@ export default function Index({ users }: { users: DataTableResponse<User> }) {
 ```
 
 > **Note:** The `@/` alias maps to `resources/js/` in Laravel projects. Components are installed to `resources/js/components/` via the shadcn registry. The registry components use the TanStack Table v9 `useTable` API with an explicit feature set.
+>
+> The registry also ships a barrel file, so the components and their types can be imported from `@/components/data-table` instead of the individual files.
 
 The `dataPropName` prop specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes. If omitted, it defaults to `'data'`.
 
@@ -406,6 +408,7 @@ interface DataTableColumn<TData extends RowData = Record<string, unknown>> {
     hidden: boolean;
     filter_type?: 'text' | 'select' | 'boolean' | null;
     filter_options?: Array<{ value: string; label: string }>;
+    cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }
 
 interface DataTableMeta {
@@ -448,10 +451,239 @@ The `useDataTable` hook accepts the following options:
 interface DataTableOptions<TData extends RowData = Record<string, unknown>> {
     data: DataTableResponse<TData>;
     dataPropName?: string;  // Inertia prop name for partial reloads (default: 'data')
+    columns?: DataTableColumnDef<TData>[];       // column definition overrides
+    cells?: DataTableCellRenderers<TData>;       // cell renderers keyed by column name
+    actions?: DataTableRowActions<TData>;        // trailing row actions cell
+    visitOptions?: DataTableVisitOptions;        // options for the Inertia visit
+    rowKey?: (row: TData, index: number) => string; // stable row id
 }
 ```
 
 The `dataPropName` option specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes.
+
+The hook returns the table instance, the current state, the handlers, and the loading and error state:
+
+```typescript
+const {
+    table,
+    state,
+    handlePageChange,
+    handlePerPageChange,
+    handleSortChange,
+    handleSearchChange,
+    handleColumnSearchChange,
+    handleFilterChange,
+    perPageOptions,
+    columnSearches,
+    isLoading, // true while an Inertia visit is in flight
+    error,     // validation errors of the last failed visit
+} = useDataTable({ data: users, dataPropName: 'users' });
+```
+
+## Customizing the Table
+
+Everything below is optional. Without any of these props the table renders exactly
+as before, with the default cell formatter and without a loading state.
+
+### Custom Cell Renderers
+
+Use the `cells` prop to render a cell yourself. The renderer receives the TanStack
+cell context, so the raw value is available through `getValue()`:
+
+```tsx
+import { DataTable } from '@/components/data-table/data-table';
+import type { DataTableResponse } from '@/components/data-table/types';
+
+type User = {
+    id: number;
+    name: string;
+    status: string;
+};
+
+export default function Index({ users }: { users: DataTableResponse<User> }) {
+    return (
+        <DataTable
+            data={users}
+            dataPropName="users"
+            cells={{
+                status: ({ getValue }) => {
+                    const status = String(getValue());
+
+                    return (
+                        <span
+                            className={
+                                status === 'active'
+                                    ? 'rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800'
+                                    : 'rounded bg-muted px-2 py-1 text-xs font-medium'
+                            }
+                        >
+                            {status}
+                        </span>
+                    );
+                },
+                name: ({ getValue, row }) => (
+                    <Link href={`/users/${row.original.id}`} className="font-medium underline">
+                        {String(getValue())}
+                    </Link>
+                ),
+            }}
+        />
+    );
+}
+```
+
+### Row Actions
+
+The `actions` prop adds a trailing cell to every row. The renderer receives the
+row and its index:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    actions={({ row }) => (
+        <div className="flex items-center gap-2">
+            <Link href={`/users/${row.id}/edit`}>Edit</Link>
+            <button
+                onClick={() => router.delete(`/users/${row.id}`)}
+                className="text-destructive"
+            >
+                Delete
+            </button>
+        </div>
+    )}
+/>
+```
+
+The actions column is a client side column. It is never sortable, never
+filterable, and it is not listed in the column visibility menu.
+
+### Column Overrides
+
+The `columns` prop accepts TanStack column definitions that are matched against
+the server provided columns by their `id`. Everything that is not overridden
+(header label, cell renderer, column meta) keeps the value of the server:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    columns={[
+        { id: 'name', header: 'Full name' },
+        { id: 'created_at', enableSorting: false },
+    ]}
+/>
+```
+
+The server capabilities stay authoritative: an override may disable sorting,
+searching, or filtering, but it cannot enable a capability the server does not
+support. Overrides that do not match a server column are appended as client side
+columns and behave like the actions column.
+
+> **Note:** When both `cells` and `columns` define a cell renderer for the same
+> column, the `columns` override wins.
+
+### Slots
+
+The `toolbar` prop renders extra content next to the search field, and the
+`empty` prop replaces the empty state:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    toolbar={<Button onClick={() => setShowFilters(true)}>Filters</Button>}
+    empty={<p>No users matched your filters.</p>}
+/>
+```
+
+### Row Keys and Row Clicks
+
+The `rowKey` prop derives a stable row id from the row data, and `onRowClick`
+is called with the clicked row:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    rowKey={(user) => String(user.id)}
+    onRowClick={(user) => router.visit(`/users/${user.id}`)}
+/>
+```
+
+## Loading and Error State
+
+While an Inertia visit is in flight, the table marks itself as `aria-busy` and
+renders skeleton rows instead of the stale rows. The number of skeleton rows can
+be changed with the `skeletonRows` prop (default: `5`).
+
+```tsx
+<DataTable data={users} dataPropName="users" skeletonRows={3} />
+```
+
+The `onError` prop is called when the endpoint answers with validation errors.
+Without a handler, Inertia shows its own error modal:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    onError={(errors) => toast.error(Object.values(errors)[0])}
+/>
+```
+
+A `4xx` or `5xx` response is reported through `visitOptions.onHttpException`, a
+failed request through `visitOptions.onNetworkError`:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    visitOptions={{
+        onHttpException: (response) => toast.error(`Request failed with ${response.status}`),
+    }}
+/>
+```
+
+## Visit Options
+
+The `visitOptions` prop is forwarded to the underlying Inertia `router.visit`
+call:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    visitOptions={{
+        replace: true,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        onStart: () => console.log('visit started'),
+        onFinish: () => console.log('visit finished'),
+    }}
+/>
+```
+
+| Option | Description |
+|--------|-------------|
+| `replace` | Replace the current history entry instead of pushing a new one |
+| `preserveScroll` | Keep the current scroll position (default: `true`) |
+| `preserveState` | Keep the current component state (default: `true`) |
+| `only` / `except` | Props that are requested or skipped on the partial reload |
+| `headers` | Additional headers sent with the request |
+| `showProgress` | Toggle the Inertia progress bar |
+| `onStart` / `onFinish` / `onSuccess` | Lifecycle callbacks of the visit |
+| `onError` | Called with the validation errors of a failed visit |
+| `onHttpException` | Called when the endpoint answered with a 4xx or 5xx status |
+| `onNetworkError` | Called when the request could not be sent at all |
+
+Search, filter, and sort visits replace the current history entry by default, so
+typing in the search field does not fill the browser history. Pagination pushes
+a new entry, which keeps the back button working. Use `visitOptions.replace` to
+change that behaviour for every visit.
+
+> **Note:** When the `dataPropName` does not match any prop of the current
+> Inertia page, the table logs a warning in development. A partial reload then
+> cannot refresh the table.
 
 ## Security
 
@@ -555,10 +787,31 @@ interface User {
     created_at: string;
 }
 
-export function UsersDataTable({ users }: { users: DataTableResponse<User> }) {
-    return <DataTable data={users} dataPropName="users" />;
+interface UsersDataTableProps {
+    users: DataTableResponse<User>;
+    onRowClick?: (user: User) => void;
+}
+
+export function UsersDataTable({ users, onRowClick }: UsersDataTableProps) {
+    return (
+        <DataTable
+            data={users}
+            dataPropName="users"
+            cells={{
+                status: ({ getValue }) => <StatusBadge status={String(getValue())} />,
+            }}
+            actions={({ row }) => (
+                <Link href={`/users/${row.id}/edit`}>Edit</Link>
+            )}
+            rowKey={(user) => String(user.id)}
+            onRowClick={onRowClick}
+        />
+    );
 }
 ```
+
+The customization props can be forwarded, so every table of the project shares
+the same cell renderers and row actions.
 
 ```php
 // In your controller

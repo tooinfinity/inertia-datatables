@@ -11,24 +11,69 @@ import {
     type RowData,
     type SortingState,
 } from '@tanstack/react-table';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import type {
     DataTableState,
     DataTableOptions,
     DataTableColumn,
+    DataTableColumnDef,
+    DataTableErrors,
+    DataTableHttpException,
 } from './types';
 import { dataTableFeatures, type DataTableFeatures } from './table-features';
 import { defaultCellFormatter } from './cell-formatters';
 
 type ColumnSearchesState = Record<string, string>;
 
+/** Id of the client side column that renders the row actions. */
+export const DATA_TABLE_ACTIONS_COLUMN_ID = '__actions';
+
+/**
+ * Reads the current Inertia page props without requiring an Inertia context.
+ *
+ * Returns `null` when the component is rendered outside of an Inertia page.
+ */
+function useInertiaPageProps(): Record<string, unknown> | null {
+    try {
+        const page = usePage();
+        return (page?.props ?? null) as Record<string, unknown> | null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Detects whether the bundle runs in a development environment.
+ *
+ * Vite exposes `import.meta.env.DEV`, every other toolchain is detected
+ * through `process.env.NODE_ENV`.
+ */
+function isDevelopmentEnvironment(): boolean {
+    const viteDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
+
+    if (typeof viteDev === 'boolean') {
+        return viteDev;
+    }
+
+    const nodeEnv = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env
+        ?.NODE_ENV;
+
+    return nodeEnv === 'development';
+}
+
 export function useDataTable<TData extends RowData = Record<string, unknown>>({
     data: initialData,
     dataPropName = 'data',
+    columns: columnOverrides,
+    cells,
+    actions,
+    visitOptions,
+    rowKey,
 }: DataTableOptions<TData>) {
     const mountedRef = useRef(false);
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const sortingRef = useRef<SortingState>([]);
+    const warnedPropRef = useRef<string | null>(null);
     // Track the last value sent to the server for each debounced field
     const lastSentRef = useRef<{
         search: string;
@@ -56,6 +101,9 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         ),
     });
 
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<DataTableErrors | null>(null);
+
     const debounceMs = initialData.config?.debounce ?? 300;
     const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
 
@@ -70,13 +118,24 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const columnHelper = useMemo(() => createColumnHelper<DataTableFeatures, TData>(), []);
 
     const columns = useMemo<ColumnDef<DataTableFeatures, TData, unknown>[]>(() => {
-        return initialData.columns.map((col: DataTableColumn<TData>) => {
-            return columnHelper.accessor(
+        const overrides = new Map<string, DataTableColumnDef<TData>>();
+
+        (columnOverrides ?? []).forEach((override) => {
+            if (override.id) {
+                overrides.set(override.id, override);
+            }
+        });
+
+        const serverColumns = initialData.columns.map((col: DataTableColumn<TData>) => {
+            const override = overrides.get(col.name);
+            const renderer = cells?.[col.name] ?? col.cell ?? defaultCellFormatter;
+
+            const base = columnHelper.accessor(
                 (row: TData) => row[col.name as keyof TData] as unknown,
                 {
                     header: col.label,
                     id: col.name,
-                    cell: (info) => col.cell ? col.cell(info) : defaultCellFormatter(info),
+                    cell: (info) => renderer(info),
                     enableSorting: col.sortable,
                     enableGlobalFilter: col.searchable,
                     enableColumnFilter: col.filterable,
@@ -88,8 +147,68 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     },
                 }
             );
+
+            if (!override) {
+                return base;
+            }
+
+            // The server capabilities stay authoritative, an override may only
+            // disable them. Enabling a capability the server does not support
+            // would produce a rejected request.
+            return {
+                ...base,
+                ...override,
+                enableSorting: col.sortable && override.enableSorting !== false,
+                enableGlobalFilter: col.searchable && override.enableGlobalFilter !== false,
+                enableColumnFilter: col.filterable && override.enableColumnFilter !== false,
+                meta: {
+                    ...(base.meta ?? {}),
+                    ...(override.meta ?? {}),
+                },
+            } as ColumnDef<DataTableFeatures, TData, unknown>;
         });
-    }, [initialData.columns, columnHelper]);
+
+        const serverColumnNames = new Set(initialData.columns.map((col) => col.name));
+
+        // Overrides that do not match a server column become client side columns.
+        const clientColumns = Array.from(overrides.entries())
+            .filter(([id]) => !serverColumnNames.has(id))
+            .map(([id, override]) =>
+                ({
+                    ...override,
+                    id,
+                    enableSorting: false,
+                    enableGlobalFilter: false,
+                    enableColumnFilter: false,
+                    meta: {
+                        ...(override.meta ?? {}),
+                        client_only: true,
+                    },
+                }) as ColumnDef<DataTableFeatures, TData, unknown>
+            );
+
+        if (!actions) {
+            return [...serverColumns, ...clientColumns];
+        }
+
+        const actionsColumn: ColumnDef<DataTableFeatures, TData, unknown> = {
+            id: DATA_TABLE_ACTIONS_COLUMN_ID,
+            header: () => null,
+            cell: (info) =>
+                actions({
+                    row: info.row.original,
+                    rowIndex: info.row.index,
+                }),
+            enableSorting: false,
+            enableGlobalFilter: false,
+            enableColumnFilter: false,
+            meta: {
+                client_only: true,
+            },
+        };
+
+        return [...serverColumns, ...clientColumns, actionsColumn];
+    }, [initialData.columns, columnHelper, columnOverrides, cells, actions]);
 
     const [sorting, setSorting] = useState<SortingState>(
         state.sort.map((s) => ({ id: s.column, desc: s.direction === 'desc' }))
@@ -110,12 +229,35 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
 
     const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
 
+    const pageProps = useInertiaPageProps();
+
+    useEffect(() => {
+        if (!isDevelopmentEnvironment() || !pageProps) {
+            return;
+        }
+
+        if (Object.keys(pageProps).length === 0 || pageProps[dataPropName] !== undefined) {
+            return;
+        }
+
+        if (warnedPropRef.current === dataPropName) {
+            return;
+        }
+
+        warnedPropRef.current = dataPropName;
+
+        console.warn(
+            `[inertia-datatables] The Inertia page prop "${dataPropName}" was not found on the current page. ` +
+                'Partial reloads will not refresh the table. Pass the correct "dataPropName" to <DataTable />.'
+        );
+    }, [pageProps, dataPropName]);
+
     useEffect(() => {
         sortingRef.current = sorting;
     }, [sorting]);
 
     const visitWithParams = useCallback(
-        (params: Record<string, unknown>) => {
+        (params: Record<string, unknown>, overrides: { replace?: boolean } = {}) => {
             const currentParams = new URLSearchParams(window.location.search);
             Object.entries(params).forEach(([key, value]) => {
                 if (value === '' || value === null || value === undefined) {
@@ -124,13 +266,53 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     currentParams.set(key, String(value));
                 }
             });
+
+            const {
+                onStart,
+                onFinish,
+                onSuccess,
+                onError,
+                onHttpException,
+                onNetworkError,
+                replace,
+                only,
+                ...restVisitOptions
+            } = visitOptions ?? {};
+
             router.visit(window.location.pathname + '?' + currentParams.toString(), {
                 preserveScroll: true,
                 preserveState: true,
-                only: [dataPropName],
+                ...restVisitOptions,
+                only: only ?? [dataPropName],
+                replace: replace ?? overrides.replace ?? false,
+                onStart: () => {
+                    setIsLoading(true);
+                    setError(null);
+                    onStart?.();
+                },
+                onFinish: () => {
+                    setIsLoading(false);
+                    onFinish?.();
+                },
+                onSuccess: () => {
+                    onSuccess?.();
+                },
+                onError: (errors: DataTableErrors) => {
+                    setIsLoading(false);
+                    setError(errors);
+                    onError?.(errors);
+                },
+                onHttpException: (response: DataTableHttpException) => {
+                    setIsLoading(false);
+                    onHttpException?.(response);
+                },
+                onNetworkError: (networkError: Error) => {
+                    setIsLoading(false);
+                    onNetworkError?.(networkError);
+                },
             });
         },
-        [dataPropName]
+        [dataPropName, visitOptions]
     );
 
     const debouncedVisit = useCallback(
@@ -157,7 +339,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                         [column]: value,
                     };
                 }
-                visitWithParams(params);
+                visitWithParams(params, { replace: true });
                 delete debounceTimersRef.current[key];
             }, debounceMs);
         },
@@ -175,7 +357,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 ...prev,
                 sort: newSorting.map((s) => ({ column: s.id, direction: s.desc ? 'desc' : 'asc' })),
             }));
-            visitWithParams({ sort: sortString });
+            visitWithParams({ sort: sortString }, { replace: true });
         },
         [visitWithParams]
     );
@@ -353,6 +535,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         manualSorting: true,
         manualFiltering: true,
         pageCount: initialData.meta.last_page,
+        ...(rowKey ? { getRowId: (row: TData, index: number) => rowKey(row, index) } : {}),
     });
 
     return {
@@ -367,5 +550,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         handleFilterChange,
         perPageOptions,
         columnSearches,
+        isLoading,
+        error,
     };
 }

@@ -23,6 +23,80 @@ export interface DataTableColumn<TData extends RowData = Record<string, unknown>
     cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }
 
+/**
+ * Renders the content of a single cell.
+ *
+ * The renderer receives the TanStack cell context, so the raw value is
+ * available through `info.getValue()` and the row through `info.row.original`.
+ */
+export type DataTableCellRenderer<TData extends RowData = Record<string, unknown>> = (
+    info: CellContext<DataTableFeatures, TData, unknown>
+) => ReactNode;
+
+/** Cell renderers keyed by the column name they belong to. */
+export type DataTableCellRenderers<TData extends RowData = Record<string, unknown>> = Record<
+    string,
+    DataTableCellRenderer<TData>
+>;
+
+/** Context handed to the row actions renderer. */
+export interface DataTableRowActionsContext<TData extends RowData = Record<string, unknown>> {
+    /** The row the actions belong to. */
+    row: TData;
+    /** Zero based index of the row inside the current page. */
+    rowIndex: number;
+}
+
+/** Renders the trailing actions cell of a row. */
+export type DataTableRowActions<TData extends RowData = Record<string, unknown>> = (
+    context: DataTableRowActionsContext<TData>
+) => ReactNode;
+
+/** Validation errors reported by the Inertia response. */
+export type DataTableErrors = Record<string, string>;
+
+/** The response of a failed request that answered with a 4xx or 5xx status. */
+export interface DataTableHttpException {
+    status: number;
+    data: string | Record<string, unknown>;
+    headers: Record<string, string>;
+}
+
+/**
+ * Options forwarded to the underlying Inertia `router.visit` call.
+ *
+ * Only the options that make sense for a data table are exposed. Everything
+ * else is intentionally left out to keep the public API small.
+ */
+export interface DataTableVisitOptions {
+    /** Replace the current history entry instead of pushing a new one. */
+    replace?: boolean;
+    /** Keep the current scroll position. Defaults to `true`. */
+    preserveScroll?: boolean;
+    /** Keep the current component state. Defaults to `true`. */
+    preserveState?: boolean;
+    /** Props that should be requested on the partial reload. */
+    only?: string[];
+    /** Props that should be excluded from the partial reload. */
+    except?: string[];
+    /** Additional headers sent with the request. */
+    headers?: Record<string, string>;
+    /** Toggle the Inertia progress bar for these visits. */
+    showProgress?: boolean;
+    /** Called right before the request is sent. */
+    onStart?: () => void;
+    /** Called after the response was processed. */
+    onFinish?: () => void;
+    /** Called after a successful response. */
+    onSuccess?: () => void;
+    /** Called when the endpoint answered with validation errors. */
+    onError?: (_errors: DataTableErrors) => void;
+    /** Called when the endpoint answered with a 4xx or 5xx status. */
+    onHttpException?: (_response: DataTableHttpException) => void;
+    /** Called when the request could not be sent at all. */
+    onNetworkError?: (_error: Error) => void;
+}
+
 export interface DataTableMeta {
     current_page: number;
     per_page: number;
@@ -67,6 +141,22 @@ export interface DataTableOptions<TData extends RowData = Record<string, unknown
     data: DataTableResponse<TData>;
     onDataChange?: (_data: DataTableResponse<TData>) => void;
     dataPropName?: string;
+    /**
+     * Optional column definition overrides.
+     *
+     * Overrides are matched against the server provided columns by their `id`.
+     * The server capabilities (`sortable`, `searchable`, `filterable`) stay
+     * authoritative, an override may only disable them.
+     */
+    columns?: DataTableColumnDef<TData>[];
+    /** Cell renderers keyed by column name. */
+    cells?: DataTableCellRenderers<TData>;
+    /** Renders a trailing actions cell for every row. */
+    actions?: DataTableRowActions<TData>;
+    /** Options forwarded to the Inertia `router.visit` call. */
+    visitOptions?: DataTableVisitOptions;
+    /** Derives a stable row id from the row data. */
+    rowKey?: (_row: TData, _index: number) => string;
 }
 
 export type DataTableColumnDef<TData extends RowData = Record<string, unknown>> = ColumnDef<

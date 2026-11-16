@@ -10,6 +10,11 @@
       "description": "Server-side DataTable with TanStack Table v9, Inertia 3, and shadcn/ui",
       "files": [
         {
+          "path": "registry/data-table/components/data-table/index.ts",
+          "type": "registry:lib",
+          "target": "@components/data-table/index.ts"
+        },
+        {
           "path": "registry/data-table/components/data-table/types.ts",
           "type": "registry:component",
           "target": "@components/data-table/types.ts"
