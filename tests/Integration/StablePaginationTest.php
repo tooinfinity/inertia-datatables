@@ -39,9 +39,15 @@ beforeEach(function (): void {
 afterEach(function (): void {
     Schema::dropIfExists('users');
     Schema::dropIfExists('accounts');
+    Schema::dropIfExists('sessions');
 });
 
 /**
+ * Capture the paginated queries that contain an ordering.
+ *
+ * Schema lookups also contain an ordering, so only queries with a limit are
+ * captured.
+ *
  * @return ArrayObject<int, string>
  */
 function captureOrderedQueries(): ArrayObject
@@ -49,7 +55,9 @@ function captureOrderedQueries(): ArrayObject
     $queries = new ArrayObject;
 
     DB::listen(function (QueryExecuted $query) use ($queries): void {
-        if (str_contains(strtolower($query->sql), 'order by')) {
+        $sql = strtolower($query->sql);
+
+        if (str_contains($sql, 'order by') && str_contains($sql, 'limit')) {
             $queries[] = $query->sql;
         }
     });
@@ -505,5 +513,41 @@ describe('Stable pagination', function (): void {
 
         expect($queries)->toHaveCount(1)
             ->and(normalizedSql($queries[0]))->toMatch('/order by status asc, [a-z0-9_]+\.id asc limit \d+(?: offset \d+)?$/');
+    });
+
+    it('does not add a tiebreaker to query builder tables without an id column', function (): void {
+        Schema::create('sessions', function ($table): void {
+            $table->string('token')->primary();
+            $table->string('payload');
+        });
+
+        DB::table('sessions')->insert(['token' => 'token-1', 'payload' => 'payload']);
+
+        $queries = captureOrderedQueries();
+
+        $result = DataTable::query(DB::table('sessions'))
+            ->columns([Column::make('token'), Column::make('payload')])
+            ->handle(stablePaginationRequest(1, 25));
+
+        expect($result->paginator->items())->toHaveCount(1)
+            ->and($queries)->toBeEmpty();
+    });
+
+    it('does not add a tiebreaker when the eloquent key is missing from the source table', function (): void {
+        Schema::create('sessions', function ($table): void {
+            $table->string('token')->primary();
+            $table->string('payload');
+        });
+
+        DB::table('sessions')->insert(['token' => 'token-1', 'payload' => 'payload']);
+
+        $queries = captureOrderedQueries();
+
+        $result = DataTable::query(StablePaginationUser::query()->from('sessions'))
+            ->columns([Column::make('token'), Column::make('payload')])
+            ->handle(stablePaginationRequest(1, 25));
+
+        expect($result->paginator->items())->toHaveCount(1)
+            ->and($queries)->toBeEmpty();
     });
 });

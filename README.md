@@ -326,6 +326,8 @@ query shape cannot reference a row key safely:
   grouping column in distinct queries.
 - Union queries are ordered by the projected row key of the union output.
 - Aggregate-only queries, which do not represent rows, keep their original order.
+- Query Builder sources without an `id` column keep their original order, because the
+  ordering term would fail for tables without that column.
 
 ### Response Data Exposure
 

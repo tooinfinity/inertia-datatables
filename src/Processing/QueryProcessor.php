@@ -600,6 +600,10 @@ final readonly class QueryProcessor
         $keyName = $query->getModel()->getKeyName();
         $qualifiedKeyName = $qualifier.'.'.$keyName;
 
+        if (! $this->keyIsAvailable($query, $queryBuilder, $keyName, $qualifier)) {
+            return null;
+        }
+
         if ($queryBuilder->distinct !== false) {
             if ($queryBuilder->distinct !== true) {
                 return null;
@@ -640,11 +644,24 @@ final readonly class QueryProcessor
             }
 
             $wildcardKey = $hasJoins ? $qualifier.'.'.$keyName : $keyName;
+            $candidate = $this->findProjectedKey($queryBuilder, $keyName, $qualifier, $wildcardKey);
 
-            return $this->findProjectedKey($queryBuilder, $keyName, $qualifier, $wildcardKey);
+            if ($candidate === null) {
+                return null;
+            }
+
+            if (! $this->keyIsAvailable($queryBuilder, $queryBuilder, $keyName, $qualifier)) {
+                return null;
+            }
+
+            return $candidate;
         }
 
         if ($this->isAggregateOnlyProjection($queryBuilder)) {
+            return null;
+        }
+
+        if (! $this->keyIsAvailable($queryBuilder, $queryBuilder, $keyName, $qualifier)) {
             return null;
         }
 
@@ -661,6 +678,66 @@ final readonly class QueryProcessor
             'column' => $keyName,
             'equivalents' => [$keyName],
         ];
+    }
+
+    /**
+     * Determine whether the row key can safely be referenced by the query.
+     *
+     * The key of an Eloquent model is trusted for the table of the model. Any
+     * other source is checked against the columns of the table, because the
+     * generated ordering term would fail for tables without that column.
+     *
+     * @param  EloquentBuilder<TModel>|QueryBuilder  $query
+     */
+    private function keyIsAvailable(
+        EloquentBuilder|QueryBuilder $query,
+        QueryBuilder $queryBuilder,
+        string $keyName,
+        string $qualifier,
+    ): bool {
+        $baseTable = $this->resolveBaseTable($queryBuilder->from);
+
+        if ($baseTable === null) {
+            return false;
+        }
+
+        if ($query instanceof EloquentBuilder) {
+            if ($this->sameTable($baseTable, $query->getModel()->getTable())) {
+                return true;
+            }
+
+            return $this->tableHasColumn($queryBuilder, $baseTable, $keyName);
+        }
+
+        $hasJoins = ($queryBuilder->joins ?? []) !== [];
+
+        if (! $hasJoins && $this->projectionIncludesKey($queryBuilder, $keyName, $qualifier)) {
+            return true;
+        }
+
+        return $this->tableHasColumn($queryBuilder, $baseTable, $keyName);
+    }
+
+    /**
+     * Determine whether the projection selects the given row key.
+     */
+    private function projectionIncludesKey(QueryBuilder $queryBuilder, string $keyName, string $qualifier): bool
+    {
+        return array_any($this->projectionItems($queryBuilder), fn (array $item): bool => $this->projectionMatchesKey($item['source'], $keyName, $qualifier));
+    }
+
+    /**
+     * Determine whether the given table contains the given column.
+     */
+    private function tableHasColumn(
+        QueryBuilder $queryBuilder,
+        string $table,
+        string $column,
+    ): bool {
+        /** @var TableColumns $tableColumns */
+        $tableColumns = app(TableColumns::class);
+
+        return $tableColumns->hasColumn($queryBuilder->getConnection(), $table, $column);
     }
 
     /**
@@ -684,6 +761,14 @@ final readonly class QueryProcessor
         $outputKey = $this->findProjectedKeyOutput($queryBuilder, $keyName, $qualifier);
 
         if ($outputKey === null) {
+            return $query;
+        }
+
+        if ($qualifier === null) {
+            return $query;
+        }
+
+        if (! $this->keyIsAvailable($query, $queryBuilder, $keyName, $qualifier)) {
             return $query;
         }
 
@@ -1137,6 +1222,47 @@ final readonly class QueryProcessor
         $table = $segments[array_key_last($segments)];
 
         return trim($table, '`"');
+    }
+
+    /**
+     * Resolve the table the query reads from, without its alias.
+     */
+    private function resolveBaseTable(mixed $from): ?string
+    {
+        if (! is_string($from)) {
+            return null;
+        }
+
+        $from = trim($from);
+
+        if ($from === '') {
+            return null;
+        }
+
+        if (preg_match('/^(.*?)\s+(?:as\s+)?([^\s]+)$/i', $from, $matches) === 1) {
+            return trim($matches[1], '`"');
+        }
+
+        return $from;
+    }
+
+    /**
+     * Determine whether two table names refer to the same table.
+     */
+    private function sameTable(string $first, string $second): bool
+    {
+        return $this->tableName($first) === $this->tableName($second);
+    }
+
+    /**
+     * Resolve the name of a table without its schema.
+     */
+    private function tableName(string $table): string
+    {
+        $segments = explode('.', $table);
+        $name = $segments[array_key_last($segments)];
+
+        return strtolower(trim($name, '`"'));
     }
 
     /**

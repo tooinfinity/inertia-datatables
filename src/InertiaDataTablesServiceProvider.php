@@ -6,6 +6,7 @@ namespace TooInfinity\InertiaDataTables;
 
 use Illuminate\Support\ServiceProvider;
 use Override;
+use TooInfinity\InertiaDataTables\Processing\TableColumns;
 
 final class InertiaDataTablesServiceProvider extends ServiceProvider
 {
@@ -15,6 +16,7 @@ final class InertiaDataTablesServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/inertia-datatables.php', 'inertia-datatables');
 
         $this->app->singleton(InertiaDataTables::class);
+        $this->app->singleton(TableColumns::class);
 
         $this->app->bind(DataTableRequest::class, fn (): DataTableRequest => DataTableRequest::fromRequest(request()));
     }
