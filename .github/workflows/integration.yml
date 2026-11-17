@@ -99,7 +99,7 @@ jobs:
         working-directory: ${{ matrix.directory }}
         run: |
           # Tests the generated public/r artifact, not only registry/ sources.
-          npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
+          bunx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
 
       - name: Install frontend dependencies
         working-directory: ${{ matrix.directory }}
