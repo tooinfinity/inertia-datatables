@@ -16,9 +16,7 @@ jobs:
   integration:
     runs-on: ubuntu-latest
 
-    # Each starter kit is pinned to a single upstream commit so CI reports
-    # exactly which revision was tested and failures stay attributable to
-    # either this package or the upstream starter kit.
+    # Pin upstream starter kits so failures remain attributable and repeatable.
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +32,7 @@ jobs:
           - starter-kit: laravel/react-starter-kit
             ref: 012f4248f70e255e32ad93f540aca5fb7e8c96fe
             directory: laravel-kit
-            installer: npm
+            installer: pnpm
             typecheck: types:check
             lint: check
             build: build
@@ -54,8 +52,8 @@ jobs:
           path: ${{ matrix.directory }}
 
       - name: Report pinned upstream commit
+        working-directory: ${{ matrix.directory }}
         run: |
-          cd ${{ matrix.directory }}
           echo "Integration target: ${{ matrix.starter-kit }} @ ${{ matrix.ref }}"
           echo "Resolved commit: $(git rev-parse HEAD) ($(git rev-parse --short HEAD))"
           echo "STARTER_KIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
@@ -73,63 +71,51 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: ${{ matrix.directory }}/package.json
 
-      - name: Install pnpm
+      - name: Setup pnpm
+        if: matrix.installer == 'pnpm'
         run: corepack enable && corepack prepare pnpm@latest --activate
 
-      - name: Install bun
+      - name: Setup Bun
+        if: matrix.installer == 'bun'
         uses: oven-sh/setup-bun@v2
 
       - name: Install the package through Composer
         working-directory: ${{ matrix.directory }}
         run: |
-          # Resolve the package from this repo so the workflow tests the
-          # committed code using the documented consumer command.
-          # Path repositories resolve to a dev branch version, so allow
-          # dev stability for this installation. --no-scripts skips the
-          # starter kit's post-install scripts (bunx, artisan) that are
-          # unrelated to package installation.
           composer config repositories.tooinfinity path ../
           composer config minimum-stability dev
           composer require tooinfinity/inertia-datatables --no-interaction --no-scripts
 
-      - name: Install shadcn CLI globally
-        run: |
-          if [ "${{ matrix.installer }}" = "bun" ]; then
-            bun add -g shadcn@latest
-          else
-            npm install -g shadcn@latest
-          fi
-
       - name: Install the data-table registry artifact
         working-directory: ${{ matrix.directory }}
+        env:
+          REGISTRY_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/r/data-table.json
         run: |
-          # Tests the generated public/r artifact, not only registry/ sources.
-          # Download the artifact directly and install via shadcn CLI to avoid
-          # npm devEngines validation conflicts with bun-based starter kits.
-          curl -sL https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json -o /tmp/data-table.json
-          shadcn add /tmp/data-table.json
+          # Use the package revision under test and run shadcn non-interactively.
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bunx --bun shadcn@latest add "$REGISTRY_URL" --yes --overwrite
+          else
+            pnpm dlx shadcn@latest add "$REGISTRY_URL" --yes --overwrite
+          fi
 
-      - name: Install frontend dependencies (npm-based kits)
-        if: matrix.installer != 'bun'
+      - name: Install frontend dependencies (pnpm workspace)
+        if: matrix.installer == 'pnpm'
         working-directory: ${{ matrix.directory }}
-        run: |
-          npm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
-        run: npm run ${{ matrix.typecheck }}
+        run: ${{ matrix.installer }} run ${{ matrix.typecheck }}
 
       - name: Lint/format check
         working-directory: ${{ matrix.directory }}
-        run: npm run ${{ matrix.lint }}
+        run: ${{ matrix.installer }} run ${{ matrix.lint }}
 
       - name: Production client build
         working-directory: ${{ matrix.directory }}
-        run: npm run ${{ matrix.build }}
+        run: ${{ matrix.installer }} run ${{ matrix.build }}
 
       - name: SSR build smoke test
         working-directory: ${{ matrix.directory }}
-        run: npm run ${{ matrix.ssr }}
+        run: ${{ matrix.installer }} run ${{ matrix.ssr }}
