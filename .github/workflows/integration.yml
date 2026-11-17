@@ -108,18 +108,14 @@ jobs:
             npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
           fi
 
-      - name: Install frontend dependencies
+      - name: Install frontend dependencies (npm-based kits)
+        if: matrix.installer != 'bun'
         working-directory: ${{ matrix.directory }}
         run: |
           # Disable npm engine checks for starter kits that require different
-          # package managers (e.g., bun). This must be set before any npm
-          # command runs in this directory.
+          # package managers.
           npm config set engine-strict=false
-          # For bun-based starter kits, shadcn add already installs deps.
-          # Skip redundant install to avoid devEngines packageManager conflict.
-          if [ "${{ matrix.installer }}" != "bun" ]; then
-            npm install
-          fi
+          npm install
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
