@@ -1,0 +1,109 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    # Each starter kit is pinned to a single upstream commit so CI reports
+    # exactly which revision was tested and failures stay attributable to
+    # either this package or the upstream starter kit.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - starter-kit: nunomaduro/laravel-starter-kit-inertia-react
+            ref: bab1a305363ea7e70e678f270702d75301e1b950
+            directory: nunomaduro-kit
+            typecheck: test:types
+            lint: test:lint
+            build: build
+            ssr: build:ssr
+          - starter-kit: laravel/react-starter-kit
+            ref: 012f4248f70e255e32ad93f540aca5fb7e8c96fe
+            directory: laravel-kit
+            typecheck: types:check
+            lint: check
+            build: build
+            ssr: build:ssr
+
+    name: ${{ matrix.starter-kit }}
+
+    steps:
+      - name: Checkout package
+        uses: actions/checkout@v4
+
+      - name: Checkout starter kit at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.starter-kit }}
+          ref: ${{ matrix.ref }}
+          path: ${{ matrix.directory }}
+
+      - name: Report pinned upstream commit
+        run: |
+          cd ${{ matrix.directory }}
+          echo "Integration target: ${{ matrix.starter-kit }} @ ${{ matrix.ref }}"
+          echo "Resolved commit: $(git rev-parse HEAD) ($(git rev-parse --short HEAD))"
+          echo "STARTER_KIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory }}/package.json
+
+      - name: Install the package through Composer
+        working-directory: ${{ matrix.directory }}
+        run: |
+          # Resolve the package from this repo so the workflow tests the
+          # committed code using the documented consumer command.
+          composer config repositories.tooinfinity path ../
+          composer require tooinfinity/inertia-datatables --no-interaction
+
+      - name: Install the data-table registry artifact
+        working-directory: ${{ matrix.directory }}
+        run: |
+          # Tests the generated public/r artifact, not only registry/ sources.
+          npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
+
+      - name: Install frontend dependencies
+        working-directory: ${{ matrix.directory }}
+        run: npm install
+
+      - name: TypeScript check
+        working-directory: ${{ matrix.directory }}
+        run: npm run ${{ matrix.typecheck }}
+
+      - name: Lint/format check
+        working-directory: ${{ matrix.directory }}
+        run: npm run ${{ matrix.lint }}
+
+      - name: Production client build
+        working-directory: ${{ matrix.directory }}
+        run: npm run ${{ matrix.build }}
+
+      - name: SSR build smoke test
+        working-directory: ${{ matrix.directory }}
+        run: npm run ${{ matrix.ssr }}
