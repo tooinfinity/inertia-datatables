@@ -31,6 +31,11 @@ export function DataTableColumnHeader<TData extends RowData>({
     columnSearchValue,
     currentFilterValue,
 }: DataTableColumnHeaderProps<TData>) {
+    // React Compiler (enabled by default in both official Laravel React starter kits)
+    // memoizes this component against TanStack's stable `column` object, but
+    // `column.getIsSorted()` changes during render. Opt out so the sort arrow
+    // re-renders when the sort state changes.
+    "use no memo";
     const canSort = column.columnDef.enableSorting === true;
     const meta = column.columnDef.meta as DataTableColumnMeta | undefined;
     const canSearch = meta?.searchable === true;

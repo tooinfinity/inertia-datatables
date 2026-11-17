@@ -18,6 +18,11 @@ interface DataTableColumnVisibilityProps<TData extends RowData> {
 export function DataTableColumnVisibility<TData extends RowData>({
     table,
 }: DataTableColumnVisibilityProps<TData>) {
+    // React Compiler (enabled by default in both official Laravel React starter kits)
+    // memoizes this component against TanStack's stable `column` object, but
+    // `column.getIsVisible()` changes during render. Opt out so the visibility
+    // checkbox re-renders when column visibility changes.
+    "use no memo";
     const columns = table
         .getAllLeafColumns()
         .filter((column: Column<DataTableFeatures, TData, unknown>) => column.columnDef.meta?.client_only !== true);

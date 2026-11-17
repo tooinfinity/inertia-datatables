@@ -260,9 +260,15 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         (params: Record<string, unknown>, overrides: { replace?: boolean } = {}) => {
             const currentParams = new URLSearchParams(window.location.search);
             Object.entries(params).forEach(([key, value]) => {
-                if (value === '' || value === null || value === undefined) {
-                    currentParams.delete(key);
-                } else {
+                // Remove any leftover scalar or array form of this key so
+                // multi-value filters (`filters[col][]=a&filters[col][]=b`) are
+                // written correctly and can be fully cleared.
+                currentParams.delete(key);
+                currentParams.delete(`${key}[]`);
+
+                if (Array.isArray(value)) {
+                    value.forEach((item) => currentParams.append(`${key}[]`, String(item)));
+                } else if (value !== '' && value !== null && value !== undefined) {
                     currentParams.set(key, String(value));
                 }
             });

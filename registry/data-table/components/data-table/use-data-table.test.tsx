@@ -411,6 +411,123 @@ describe('useDataTable', () => {
         );
     });
 
+    it('sends array filter values as repeated filters[col][] params', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleFilterChange('status', ['active', 'inactive']));
+
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D%5B%5D=active&filters%5Bstatus%5D%5B%5D=inactive&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('clears an array filter that arrived as repeated filters[col][] params', () => {
+        const initialData = createMockData({
+            query: {
+                page: 2,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: ['active', 'inactive'] }],
+            },
+        });
+
+        global.location.search = '?filters%5Bstatus%5D%5B%5D=active&filters%5Bstatus%5D%5B%5D=inactive&page=2';
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleFilterChange('status', ''));
+
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('replaces a scalar filter with an array filter, removing the scalar form', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: 'active' }],
+            },
+        });
+
+        global.location.search = '?filters%5Bstatus%5D=active';
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleFilterChange('status', ['active', 'inactive']));
+
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D%5B%5D=active&filters%5Bstatus%5D%5B%5D=inactive&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('replaces an array filter with a scalar filter, removing the array form', () => {
+        const initialData = createMockData({
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [{ column: 'status', value: ['active', 'inactive'] }],
+            },
+        });
+
+        global.location.search = '?filters%5Bstatus%5D%5B%5D=active&filters%5Bstatus%5D%5B%5D=inactive&page=1';
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleFilterChange('status', 'active'));
+
+        act(() => vi.advanceTimersByTime(300));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/?filters%5Bstatus%5D=active&page=1',
+            expect.any(Object)
+        );
+    });
+
     it('updates existing filter value', () => {
         const initialData = createMockData({
             query: {
