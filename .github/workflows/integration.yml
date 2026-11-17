@@ -79,7 +79,10 @@ jobs:
         run: |
           # Resolve the package from this repo so the workflow tests the
           # committed code using the documented consumer command.
+          # Path repositories resolve to a dev branch version, so allow
+          # dev stability for this installation.
           composer config repositories.tooinfinity path ../
+          composer config minimum-stability dev
           composer require tooinfinity/inertia-datatables --no-interaction
 
       - name: Install the data-table registry artifact
