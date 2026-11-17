@@ -99,7 +99,9 @@ jobs:
         working-directory: ${{ matrix.directory }}
         run: |
           # Tests the generated public/r artifact, not only registry/ sources.
-          bunx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
+          # Disable npm engine checks since starter kits may require different package managers.
+          npm config set engine-strict=false
+          npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
 
       - name: Install frontend dependencies
         working-directory: ${{ matrix.directory }}
