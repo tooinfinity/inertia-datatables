@@ -86,10 +86,12 @@ jobs:
           # Resolve the package from this repo so the workflow tests the
           # committed code using the documented consumer command.
           # Path repositories resolve to a dev branch version, so allow
-          # dev stability for this installation.
+          # dev stability for this installation. --no-scripts skips the
+          # starter kit's post-install scripts (bunx, artisan) that are
+          # unrelated to package installation.
           composer config repositories.tooinfinity path ../
           composer config minimum-stability dev
-          composer require tooinfinity/inertia-datatables --no-interaction
+          composer require tooinfinity/inertia-datatables --no-interaction --no-scripts
 
       - name: Install the data-table registry artifact
         working-directory: ${{ matrix.directory }}
