@@ -169,7 +169,7 @@ describe('Column API: database fields', function (): void {
         createPost('Aliased post', 'Ada Lovelace');
 
         $result = DataTable::query(
-            Post::query()->from('posts as p')
+            DB::table('posts as p')
         )
             ->columns([
                 Column::make('title'),
