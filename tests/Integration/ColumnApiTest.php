@@ -164,6 +164,44 @@ describe('Column API: database fields', function (): void {
         expect($result->paginator->total())->toBe(1);
         expect($result->paginator->first()->title)->toBe('Second post');
     });
+
+    it('preserves ordinary columns on aliased tables when a field is added', function (): void {
+        createPost('Aliased post', 'Ada Lovelace');
+
+        $result = DataTable::query(
+            Post::query()->from('posts as p')
+        )
+            ->columns([
+                Column::make('title'),
+                Column::make('custom_field')->field('p.status as custom_field'),
+            ])
+            ->handle(datatableRequest());
+
+        $row = $result->toArray()['data'][0];
+
+        expect($row->title)->toBe('Aliased post');
+        expect($row->custom_field)->toBe('draft');
+    });
+
+    it('preserves ordinary columns when the from clause is a subquery expression', function (): void {
+        createPost('Subquery post', 'Ada Lovelace');
+
+        $sub = Post::query()->select(['title', 'status']);
+
+        $result = DataTable::query(
+            DB::table('posts')->fromSub($sub, 'sub')
+        )
+            ->columns([
+                Column::make('title'),
+                Column::make('custom_field')->field('sub.status as custom_field'),
+            ])
+            ->handle(datatableRequest());
+
+        $row = $result->toArray()['data'][0];
+
+        expect($row->title)->toBe('Subquery post');
+        expect($row->custom_field)->toBe('draft');
+    });
 });
 
 describe('Column API: relationships', function (): void {
@@ -242,6 +280,71 @@ describe('Column API: relationships', function (): void {
             ->handle(datatableRequest('', [new Sort('author_name', 'asc')]));
 
         expect($result->paginator->first()->title)->toBe('Second post');
+    });
+
+    it('sorts a self-referencing relation with a separate table alias', function (): void {
+        Schema::table('users', function ($table): void {
+            $table->foreignId('manager_id')->nullable();
+        });
+
+        $manager1 = createUser(['name' => 'Bob Manager']);
+        $manager2 = createUser(['name' => 'Alice Manager']);
+
+        $user1 = createUser(['name' => 'Charlie User']);
+        $user1->manager_id = $manager1->id;
+        $user1->save();
+
+        $user2 = createUser(['name' => 'David User']);
+        $user2->manager_id = $manager2->id;
+        $user2->save();
+
+        $fixture = new class extends Illuminate\Database\Eloquent\Model
+        {
+            protected $table = 'users';
+
+            public function manager(): Illuminate\Database\Eloquent\Relations\BelongsTo
+            {
+                return $this->belongsTo(self::class, 'manager_id');
+            }
+        };
+
+        $result = DataTable::query($fixture::query()->whereIn('id', [$user1->id, $user2->id]))
+            ->columns([
+                Column::make('name'),
+                Column::make('manager_name')->relation('manager', 'name')->sortable(),
+            ])
+            ->handle(datatableRequest('', [new Sort('manager_name', 'asc')]));
+
+        expect($result->paginator->first()->name)->toBe('David User');
+    });
+
+    it('preserves relationship constraints when building the sort query', function (): void {
+        $author1 = createUser(['name' => 'Author One']);
+        $author2 = createUser(['name' => 'Author Two']);
+
+        $author1->posts()->create(['title' => 'Alpha Draft', 'body' => '...', 'status' => 'draft']);
+        $author1->posts()->create(['title' => 'Zulu Published', 'body' => '...', 'status' => 'published']);
+
+        $author2->posts()->create(['title' => 'Bravo Published', 'body' => '...', 'status' => 'published']);
+
+        $fixture = new class extends Illuminate\Database\Eloquent\Model
+        {
+            protected $table = 'users';
+
+            public function publishedPost(): Illuminate\Database\Eloquent\Relations\HasOne
+            {
+                return $this->hasOne(Post::class, 'user_id')->where('status', 'published');
+            }
+        };
+
+        $result = DataTable::query($fixture::query()->whereIn('id', [$author1->id, $author2->id]))
+            ->columns([
+                Column::make('name'),
+                Column::make('published_title')->relation('publishedPost', 'title')->sortable(),
+            ])
+            ->handle(datatableRequest('', [new Sort('published_title', 'asc')]));
+
+        expect($result->paginator->first()->name)->toBe('Author Two');
     });
 
     it('filters a relation column', function (): void {
