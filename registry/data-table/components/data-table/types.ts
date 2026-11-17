@@ -115,9 +115,19 @@ export interface DataTableQuery {
     filters: Array<{ column: string; value: unknown }>;
 }
 
+export interface DataTableQueryKeys {
+    page: string;
+    per_page: string;
+    search: string;
+    searches: string;
+    sort: string;
+    filters: string;
+}
+
 export interface DataTableConfig {
     debounce: number;
     per_page_options: number[];
+    query_keys?: DataTableQueryKeys;
 }
 
 export interface DataTableResponse<TData extends RowData = Record<string, unknown>> {

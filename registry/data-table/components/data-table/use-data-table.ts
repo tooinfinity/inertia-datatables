@@ -25,6 +25,28 @@ import { defaultCellFormatter } from './cell-formatters';
 
 type ColumnSearchesState = Record<string, string>;
 
+/**
+ * Effective query-string key names. Defaults match the PHP defaults when the
+ * backend does not send `config.query_keys` (older versions).
+ */
+interface QueryKeys {
+    page: string;
+    per_page: string;
+    search: string;
+    searches: string;
+    sort: string;
+    filters: string;
+}
+
+const DEFAULT_QUERY_KEYS: QueryKeys = {
+    page: 'page',
+    per_page: 'per_page',
+    search: 'search',
+    searches: 'searches',
+    sort: 'sort',
+    filters: 'filters',
+};
+
 /** Id of the client side column that renders the row actions. */
 export const DATA_TABLE_ACTIONS_COLUMN_ID = '__actions';
 
@@ -106,6 +128,10 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
 
     const debounceMs = initialData.config?.debounce ?? 300;
     const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
+    const KEYS: QueryKeys = {
+        ...DEFAULT_QUERY_KEYS,
+        ...(initialData.config?.query_keys ?? {}),
+    };
 
     const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
         const visibility: Record<string, boolean> = {};
@@ -328,18 +354,18 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             }
             debounceTimersRef.current[key] = setTimeout(() => {
                 // Update last sent values when request is actually sent
-                if (key === 'search' && 'search' in params) {
-                    lastSentRef.current.search = String(params.search);
-                } else if (key.startsWith('searches.') && 'search' in params) {
+                if (key === 'search' && KEYS.search in params) {
+                    lastSentRef.current.search = String(params[KEYS.search]);
+                } else if (key.startsWith('searches.') && KEYS.searches in params) {
                     const column = key.replace('searches.', '');
-                    const value = params[`searches[${column}]`];
+                    const value = params[`${KEYS.searches}[${column}]`];
                     lastSentRef.current.searches = {
                         ...lastSentRef.current.searches,
                         [column]: value === undefined ? '' : String(value),
                     };
-                } else if (key.startsWith('filters.') && 'filters' in params) {
+                } else if (key.startsWith('filters.') && KEYS.filters in params) {
                     const column = key.replace('filters.', '');
-                    const value = params[`filters[${column}]`];
+                    const value = params[`${KEYS.filters}[${column}]`];
                     lastSentRef.current.filters = {
                         ...lastSentRef.current.filters,
                         [column]: value,
@@ -349,7 +375,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 delete debounceTimersRef.current[key];
             }, debounceMs);
         },
-        [visitWithParams, debounceMs]
+        [visitWithParams, debounceMs, KEYS.search, KEYS.searches, KEYS.filters]
     );
 
     const handleSortChange = useCallback(
@@ -363,27 +389,27 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 ...prev,
                 sort: newSorting.map((s) => ({ column: s.id, direction: s.desc ? 'desc' : 'asc' })),
             }));
-            visitWithParams({ sort: sortString }, { replace: true });
+            visitWithParams({ [KEYS.sort]: sortString }, { replace: true });
         },
-        [visitWithParams]
+        [visitWithParams, KEYS.sort]
     );
 
     const handlePageChange = useCallback(
         (page: number) => {
             setState((prev) => ({ ...prev, page }));
             setPagination((prev) => ({ ...prev, pageIndex: page - 1 }));
-            visitWithParams({ page });
+            visitWithParams({ [KEYS.page]: page });
         },
-        [visitWithParams]
+        [visitWithParams, KEYS.page]
     );
 
     const handlePerPageChange = useCallback(
         (pageSize: number) => {
             setState((prev) => ({ ...prev, perPage: pageSize, page: 1 }));
             setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
-            visitWithParams({ per_page: pageSize, page: 1 });
+            visitWithParams({ [KEYS.per_page]: pageSize, [KEYS.page]: 1 });
         },
-        [visitWithParams]
+        [visitWithParams, KEYS.per_page, KEYS.page]
     );
 
     const handleSearchChange = useCallback(
@@ -391,9 +417,9 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             setGlobalFilter(value);
             setState((prev) => ({ ...prev, search: value, page: 1 }));
             setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-            debouncedVisit('search', { search: value, page: 1 });
+            debouncedVisit('search', { [KEYS.search]: value, [KEYS.page]: 1 });
         },
-        [debouncedVisit]
+        [debouncedVisit, KEYS.search, KEYS.page]
     );
 
     const handleColumnSearchChange = useCallback(
@@ -413,9 +439,12 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 page: 1,
             }));
             setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-            debouncedVisit(`searches.${column}`, { [`searches[${column}]`]: value || undefined, page: 1 });
+            debouncedVisit(`searches.${column}`, {
+                [`${KEYS.searches}[${column}]`]: value || undefined,
+                [KEYS.page]: 1,
+            });
         },
-        [debouncedVisit]
+        [debouncedVisit, KEYS.searches, KEYS.page]
     );
 
     const handleFilterChange = useCallback(
@@ -436,9 +465,12 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             }));
             setPagination((prev) => ({ ...prev, pageIndex: 0 }));
             const paramValue = value === '' || value === null || value === undefined ? undefined : value;
-            debouncedVisit(`filters.${column}`, { [`filters[${column}]`]: paramValue, page: 1 });
+            debouncedVisit(`filters.${column}`, {
+                [`${KEYS.filters}[${column}]`]: paramValue,
+                [KEYS.page]: 1,
+            });
         },
-        [debouncedVisit]
+        [debouncedVisit, KEYS.filters, KEYS.page]
     );
 
     const handleColumnVisibilityChange = useCallback(

@@ -85,6 +85,23 @@ final readonly class QueryConfig
     }
 
     /**
+     * The effective query-string key names the frontend must emit.
+     *
+     * @return array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string}
+     */
+    public function toQueryKeys(): array
+    {
+        return [
+            'page' => $this->page,
+            'per_page' => $this->perPage,
+            'search' => $this->search,
+            'searches' => $this->searches,
+            'sort' => $this->sort,
+            'filters' => $this->filters,
+        ];
+    }
+
+    /**
      * @param  array<string, string>  $queryConfig
      * @param  array{max_search_length: int, max_filter_value_length: int, max_filter_values: int, max_sorts: int, max_filters: int, max_searches: int}  $validationConfig
      */

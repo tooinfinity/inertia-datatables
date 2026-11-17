@@ -13,6 +13,7 @@ use TooInfinity\InertiaDataTables\DataTableResult;
 use TooInfinity\InertiaDataTables\Processing\Applicators\FilterApplier;
 use TooInfinity\InertiaDataTables\Processing\Applicators\SearchApplier;
 use TooInfinity\InertiaDataTables\Processing\Applicators\SortApplier;
+use TooInfinity\InertiaDataTables\QueryConfig;
 use TooInfinity\InertiaDataTables\Sorting\SortCollection;
 
 /**
@@ -119,7 +120,7 @@ final readonly class QueryProcessor
     }
 
     /**
-     * @return array{debounce: int, per_page_options: array<int, int>}
+     * @return array{debounce: int, per_page_options: array<int, int>, query_keys: array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string}}
      */
     private function buildConfig(int $perPage, int $maxPerPage): array
     {
@@ -129,6 +130,7 @@ final readonly class QueryProcessor
         return [
             'debounce' => $debounce,
             'per_page_options' => $this->resolvePerPageOptions($perPage, $maxPerPage),
+            'query_keys' => QueryConfig::fromConfig()->toQueryKeys(),
         ];
     }
 
