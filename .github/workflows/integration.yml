@@ -97,7 +97,6 @@ jobs:
 
       - name: Install shadcn CLI globally
         run: |
-          npm config set engine-strict=false
           if [ "${{ matrix.installer }}" = "bun" ]; then
             bun add -g shadcn@latest
           else
@@ -117,9 +116,6 @@ jobs:
         if: matrix.installer != 'bun'
         working-directory: ${{ matrix.directory }}
         run: |
-          # Disable npm engine checks for starter kits that require different
-          # package managers.
-          npm config set engine-strict=false
           npm install
 
       - name: TypeScript check
