@@ -110,7 +110,12 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: ${{ matrix.directory }}
-        run: ${{ matrix.installer }} install
+        run: |
+          # Disable npm engine checks for starter kits that require different
+          # package managers (e.g., bun). This must be set before any npm
+          # command runs in this directory.
+          npm config set engine-strict=false
+          ${{ matrix.installer }} install
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
