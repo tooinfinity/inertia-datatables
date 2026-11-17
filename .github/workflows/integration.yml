@@ -95,18 +95,23 @@ jobs:
           composer config minimum-stability dev
           composer require tooinfinity/inertia-datatables --no-interaction --no-scripts
 
+      - name: Install shadcn CLI globally
+        run: |
+          npm config set engine-strict=false
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bun add -g shadcn@latest
+          else
+            npm install -g shadcn@latest
+          fi
+
       - name: Install the data-table registry artifact
         working-directory: ${{ matrix.directory }}
         run: |
           # Tests the generated public/r artifact, not only registry/ sources.
-          # Use the starter kit's native package manager for shadcn to avoid
-          # engine validation conflicts.
-          if [ "${{ matrix.installer }}" = "bun" ]; then
-            bun add -g shadcn@latest
-            bunx shadcn add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
-          else
-            npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
-          fi
+          # Download the artifact directly and install via shadcn CLI to avoid
+          # npm devEngines validation conflicts with bun-based starter kits.
+          curl -sL https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json -o /tmp/data-table.json
+          shadcn add /tmp/data-table.json
 
       - name: Install frontend dependencies (npm-based kits)
         if: matrix.installer != 'bun'
