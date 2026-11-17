@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { type ReactTable, type Column, type RowData } from '@tanstack/react-table';
 import type { DataTableFeatures } from './table-features';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -43,7 +42,7 @@ export function DataTableColumnVisibility<TData extends RowData>({
                         <DropdownMenuItem
                             key={column.id}
                             className="flex items-center gap-2 px-2 py-1.5 text-sm"
-                            onSelect={(e: React.MouseEvent<HTMLDivElement>) => e.preventDefault()}
+                            onSelect={(e: Event) => e.preventDefault()}
                         >
                             <Checkbox
                                 checked={column.getIsVisible()}
