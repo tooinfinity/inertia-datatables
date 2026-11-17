@@ -113,10 +113,17 @@ describe('DataTableColumnHeader sort indicator with React Compiler', () => {
 
         act(() => {
             fireEvent.click(button);
-            fireEvent.click(button);
+        });
+        expect(button).toHaveTextContent('↑');
+
+        act(() => {
             fireEvent.click(button);
         });
+        expect(button).toHaveTextContent('↓');
 
+        act(() => {
+            fireEvent.click(button);
+        });
         expect(button).toHaveTextContent('↑');
         expect(button).not.toHaveTextContent('↕');
         expect(button).not.toHaveTextContent('↓');

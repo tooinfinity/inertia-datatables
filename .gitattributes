@@ -24,6 +24,7 @@
 /bun.lock           export-ignore
 /eslint.config.js   export-ignore
 /vite.config.ts     export-ignore
+/vitest.compiler.config.ts   export-ignore
 /vitest.config.ts   export-ignore
 /vitest.setup.tsx   export-ignore
 /tsconfig.json      export-ignore
