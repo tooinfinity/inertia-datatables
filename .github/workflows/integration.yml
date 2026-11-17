@@ -115,7 +115,11 @@ jobs:
           # package managers (e.g., bun). This must be set before any npm
           # command runs in this directory.
           npm config set engine-strict=false
-          ${{ matrix.installer }} install
+          # For bun-based starter kits, shadcn add already installs deps.
+          # Skip redundant install to avoid devEngines packageManager conflict.
+          if [ "${{ matrix.installer }}" != "bun" ]; then
+            npm install
+          fi
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
