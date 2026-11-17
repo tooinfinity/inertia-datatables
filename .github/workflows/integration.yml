@@ -26,6 +26,7 @@ jobs:
           - starter-kit: nunomaduro/laravel-starter-kit-inertia-react
             ref: bab1a305363ea7e70e678f270702d75301e1b950
             directory: nunomaduro-kit
+            installer: bun
             typecheck: test:types
             lint: test:lint
             build: build
@@ -33,6 +34,7 @@ jobs:
           - starter-kit: laravel/react-starter-kit
             ref: 012f4248f70e255e32ad93f540aca5fb7e8c96fe
             directory: laravel-kit
+            installer: npm
             typecheck: types:check
             lint: check
             build: build
@@ -74,9 +76,6 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.directory }}/package.json
 
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
-
       - name: Install bun
         uses: oven-sh/setup-bun@v2
 
@@ -101,7 +100,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: ${{ matrix.directory }}
-        run: npm install
+        run: ${{ matrix.installer }} install
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
