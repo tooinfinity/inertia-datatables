@@ -94,9 +94,9 @@ jobs:
         run: |
           # Use the package revision under test and run shadcn non-interactively.
           if [ "${{ matrix.installer }}" = "bun" ]; then
-            bunx --bun shadcn@latest add "$REGISTRY_URL" --yes --overwrite
+            bunx --bun shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
           else
-            pnpm dlx shadcn@latest add "$REGISTRY_URL" --yes --overwrite
+            pnpm dlx shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
           fi
 
       - name: Install frontend dependencies (pnpm workspace)
