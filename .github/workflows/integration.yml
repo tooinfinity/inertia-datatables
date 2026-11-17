@@ -76,6 +76,9 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.directory }}/package.json
 
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
       - name: Install bun
         uses: oven-sh/setup-bun@v2
 
