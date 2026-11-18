@@ -79,7 +79,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                     <button
                         onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
                         className="flex items-center gap-1 hover:text-foreground transition-colors"
-                        aria-label={`Sort by ${column.columnDef.header}`}
+                        aria-label={`Sort by ${column.columnDef.header as string}`}
                     >
                         {flexRender(column.columnDef.header!, header.getContext())}
                         {column.getIsSorted() === 'asc' ? (
@@ -100,7 +100,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                             Column search
                         </label>
                         <Input
-                            placeholder={`Search ${column.columnDef.header}...`}
+                            placeholder={`Search ${column.columnDef.header as string}...`}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
                             value={columnSearchValue}
                         />
@@ -177,7 +177,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                             {filterType === 'text' && (
                                 <div className="space-y-2">
                                     <Input
-                                        placeholder={`Filter ${column.columnDef.header}...`}
+                                        placeholder={`Filter ${column.columnDef.header as string}...`}
                                         value={filterInputValue}
                                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterTextChange(e.target.value)}
                                         className="w-full"
