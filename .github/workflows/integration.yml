@@ -107,10 +107,21 @@ jobs:
             pnpm dlx shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
           fi
 
-      - name: Install frontend dependencies (pnpm workspace)
-        if: matrix.installer == 'pnpm'
+      - name: Install frontend dependencies
         working-directory: ${{ matrix.directory }}
-        run: pnpm install --no-frozen-lockfile
+        run: |
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bun install --no-frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Format shadcn-installed files
+        working-directory: ${{ matrix.directory }}
+        # shadcn writes the data-table files (and overwrites shared ui files) in its
+        # own style, which doesn't match the starter kit's vp fmt conventions. Format
+        # them in place so the subsequent `vp fmt --check` / `vp check` passes.
+        run: vp fmt resources/
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
