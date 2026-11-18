@@ -87,6 +87,10 @@ jobs:
           composer config minimum-stability dev
           composer require tooinfinity/inertia-datatables --no-interaction --no-scripts
 
+      - name: Generate wayfinder routes and actions
+        working-directory: ${{ matrix.directory }}
+        run: php artisan wayfinder:generate --with-form
+
       - name: Install the data-table registry artifact
         working-directory: ${{ matrix.directory }}
         run: |
