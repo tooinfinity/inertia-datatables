@@ -121,7 +121,12 @@ jobs:
         # shadcn writes the data-table files (and overwrites shared ui files) in its
         # own style, which doesn't match the starter kit's vp fmt conventions. Format
         # them in place so the subsequent `vp fmt --check` / `vp check` passes.
-        run: vp fmt resources/
+        run: |
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bunx vp fmt resources/
+          else
+            pnpm exec vp fmt resources/
+          fi
 
       - name: TypeScript check
         working-directory: ${{ matrix.directory }}
