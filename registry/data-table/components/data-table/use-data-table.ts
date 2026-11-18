@@ -130,7 +130,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
     const KEYS: QueryKeys = {
         ...DEFAULT_QUERY_KEYS,
-        ...(initialData.config?.query_keys ?? {}),
+        ...(initialData.config?.query_keys),
     };
 
     const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
@@ -188,8 +188,8 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 enableGlobalFilter: col.searchable && override.enableGlobalFilter !== false,
                 enableColumnFilter: col.filterable && override.enableColumnFilter !== false,
                 meta: {
-                    ...(base.meta ?? {}),
-                    ...(override.meta ?? {}),
+                    ...(base.meta),
+                    ...(override.meta),
                 },
             } as ColumnDef<DataTableFeatures, TData, unknown>;
         });
@@ -207,7 +207,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     enableGlobalFilter: false,
                     enableColumnFilter: false,
                     meta: {
-                        ...(override.meta ?? {}),
+                        ...(override.meta),
                         client_only: true,
                     },
                 }) as ColumnDef<DataTableFeatures, TData, unknown>
