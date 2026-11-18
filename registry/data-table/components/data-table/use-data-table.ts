@@ -25,6 +25,8 @@ import { defaultCellFormatter } from './cell-formatters';
 
 type ColumnSearchesState = Record<string, string>;
 
+type StateUpdater<T> = T | ((_old: T) => T);
+
 /**
  * Effective query-string key names. Defaults match the PHP defaults when the
  * backend does not send `config.query_keys` (older versions).
@@ -130,7 +132,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
     const KEYS: QueryKeys = {
         ...DEFAULT_QUERY_KEYS,
-        ...(initialData.config?.query_keys ?? {}),
+        ...(initialData.config?.query_keys),
     };
 
     const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
@@ -188,8 +190,8 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 enableGlobalFilter: col.searchable && override.enableGlobalFilter !== false,
                 enableColumnFilter: col.filterable && override.enableColumnFilter !== false,
                 meta: {
-                    ...(base.meta ?? {}),
-                    ...(override.meta ?? {}),
+                    ...(base.meta),
+                    ...(override.meta),
                 },
             } as ColumnDef<DataTableFeatures, TData, unknown>;
         });
@@ -207,7 +209,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     enableGlobalFilter: false,
                     enableColumnFilter: false,
                     meta: {
-                        ...(override.meta ?? {}),
+                        ...(override.meta),
                         client_only: true,
                     },
                 }) as ColumnDef<DataTableFeatures, TData, unknown>
@@ -293,9 +295,9 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 currentParams.delete(`${key}[]`);
 
                 if (Array.isArray(value)) {
-                    value.forEach((item) => currentParams.append(`${key}[]`, String(item)));
+                    value.forEach((item) => currentParams.append(`${key}[]`, String(item as string)));
                 } else if (value !== '' && value !== null && value !== undefined) {
-                    currentParams.set(key, String(value));
+                    currentParams.set(key, String(value as string));
                 }
             });
 
@@ -355,13 +357,13 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             debounceTimersRef.current[key] = setTimeout(() => {
                 // Update last sent values when request is actually sent
                 if (key === 'search' && KEYS.search in params) {
-                    lastSentRef.current.search = String(params[KEYS.search]);
+                    lastSentRef.current.search = String(params[KEYS.search] as string);
                 } else if (key.startsWith('searches.') && KEYS.searches in params) {
                     const column = key.replace('searches.', '');
                     const value = params[`${KEYS.searches}[${column}]`];
                     lastSentRef.current.searches = {
                         ...lastSentRef.current.searches,
-                        [column]: value === undefined ? '' : String(value),
+                        [column]: value === undefined ? '' : String(value as string),
                     };
                 } else if (key.startsWith('filters.') && KEYS.filters in params) {
                     const column = key.replace('filters.', '');
@@ -379,7 +381,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     );
 
     const handleSortChange = useCallback(
-        (updater: SortingState | ((_old: SortingState) => SortingState)) => {
+        (updater: StateUpdater<SortingState>) => {
             const newSorting = typeof updater === 'function' ? updater(sortingRef.current) : updater;
             setSorting(newSorting);
             const sortString = newSorting
@@ -474,7 +476,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     );
 
     const handleColumnVisibilityChange = useCallback(
-        (updater: ColumnVisibilityState | ((_old: ColumnVisibilityState) => ColumnVisibilityState)) => {
+        (updater: StateUpdater<ColumnVisibilityState>) => {
             const newVisibility = typeof updater === 'function' ? updater(columnVisibility) : updater;
             setColumnVisibility(newVisibility);
         },

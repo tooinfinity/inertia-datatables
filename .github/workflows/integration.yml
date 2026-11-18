@@ -1,0 +1,145 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    # Pin upstream starter kits so failures remain attributable and repeatable.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - starter-kit: nunomaduro/laravel-starter-kit-inertia-react
+            ref: bab1a305363ea7e70e678f270702d75301e1b950
+            directory: nunomaduro-kit
+            installer: bun
+            typecheck: test:types
+            lint: test:lint
+            build: build
+            ssr: build:ssr
+          - starter-kit: laravel/react-starter-kit
+            ref: 012f4248f70e255e32ad93f540aca5fb7e8c96fe
+            directory: laravel-kit
+            installer: pnpm
+            typecheck: types:check
+            lint: check
+            build: build
+            ssr: build:ssr
+
+    name: ${{ matrix.starter-kit }}
+
+    steps:
+      - name: Checkout package
+        uses: actions/checkout@v4
+
+      - name: Checkout starter kit at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.starter-kit }}
+          ref: ${{ matrix.ref }}
+          path: ${{ matrix.directory }}
+
+      - name: Report pinned upstream commit
+        working-directory: ${{ matrix.directory }}
+        run: |
+          echo "Integration target: ${{ matrix.starter-kit }} @ ${{ matrix.ref }}"
+          echo "Resolved commit: $(git rev-parse HEAD) ($(git rev-parse --short HEAD))"
+          echo "STARTER_KIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.5
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        if: matrix.installer == 'pnpm'
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Setup Bun
+        if: matrix.installer == 'bun'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install the package through Composer
+        working-directory: ${{ matrix.directory }}
+        run: |
+          composer config repositories.tooinfinity path ../
+          composer config minimum-stability dev
+          composer require tooinfinity/inertia-datatables --no-interaction --no-scripts
+
+      - name: Generate wayfinder routes and actions
+        working-directory: ${{ matrix.directory }}
+        run: php artisan wayfinder:generate --with-form
+
+      - name: Install the data-table registry artifact
+        working-directory: ${{ matrix.directory }}
+        run: |
+          # Pass the artifact URL as a local shell variable (not exported to env).
+          # shadcn reads REGISTRY_URL from process.env as its registry *base* for
+          # dependency resolution, so exporting it to a single item JSON would make
+          # shadcn resolve @shadcn dependencies (button, input, ...) relative to that
+          # item file and 404. The default base (https://ui.shadcn.com/r) is used
+          # for deps; the URL below is only the item being added.
+          REGISTRY_URL="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/r/data-table.json"
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bunx --bun shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
+          else
+            pnpm dlx shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
+          fi
+
+      - name: Install frontend dependencies
+        working-directory: ${{ matrix.directory }}
+        run: |
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bun install --no-frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Format shadcn-installed files
+        working-directory: ${{ matrix.directory }}
+        # shadcn writes the data-table files (and overwrites shared ui files) in its
+        # own style, which doesn't match the starter kit's vp fmt conventions. Format
+        # them in place so the subsequent `vp fmt --check` / `vp check` passes.
+        run: |
+          if [ "${{ matrix.installer }}" = "bun" ]; then
+            bunx vp fmt resources/
+          else
+            pnpm exec vp fmt resources/
+          fi
+
+      - name: TypeScript check
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.installer }} run ${{ matrix.typecheck }}
+
+      - name: Lint/format check
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.installer }} run ${{ matrix.lint }}
+
+      - name: Production client build
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.installer }} run ${{ matrix.build }}
+
+      - name: SSR build smoke test
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.installer }} run ${{ matrix.ssr }}

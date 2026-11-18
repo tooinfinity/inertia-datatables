@@ -20,13 +20,10 @@ export function formatCellValue(value: unknown): ReactNode {
     if (typeof value === 'object') {
         try {
             const json = JSON.stringify(value);
-            if (json === undefined) {
-                return String(value);
-            }
             // Truncate long JSON strings
             return json.length > 100 ? json.slice(0, 100) + '…' : json;
         } catch {
-            return String(value);
+            return Object.prototype.toString.call(value);
         }
     }
 

@@ -896,6 +896,19 @@ composer test:unit
 
 Use `DB_CONNECTION=pgsql` for PostgreSQL. CI runs the suite against all three drivers, and `tests/Integration/DialectTest.php` pins the behaviour that differs between them.
 
+### Starter kit integration
+
+The Testbench suite above is intentionally kept separate from starter-kit integration coverage: it proves the package works in isolation, but it cannot prove that the distributed frontend files install and compile against the real starter-kit toolchains.
+
+End-to-end integration coverage for the official Laravel React starter kits (`nunomaduro/laravel-starter-kit-inertia-react` and `laravel/react-starter-kit`) runs in the [integration workflow](.github/workflows/integration.yml). Each job:
+
+- pins and reports the upstream starter-kit commit under test,
+- installs the package through Composer using the documented consumer command,
+- installs the published `data-table` registry artifact from `public/r`,
+- runs each kit's TypeScript, lint/format, production client build, and SSR build checks.
+
+Source-level dependency compatibility alone is not described as end-to-end integration coverage; only the checks above count.
+
 ### Registry artifacts
 
 The root `registry.json` is the single source of truth for the shadcn registry. The JSON files under `public/r` are generated artifacts and must not be edited manually.
