@@ -89,10 +89,14 @@ jobs:
 
       - name: Install the data-table registry artifact
         working-directory: ${{ matrix.directory }}
-        env:
-          REGISTRY_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/r/data-table.json
         run: |
-          # Use the package revision under test and run shadcn non-interactively.
+          # Pass the artifact URL as a local shell variable (not exported to env).
+          # shadcn reads REGISTRY_URL from process.env as its registry *base* for
+          # dependency resolution, so exporting it to a single item JSON would make
+          # shadcn resolve @shadcn dependencies (button, input, ...) relative to that
+          # item file and 404. The default base (https://ui.shadcn.com/r) is used
+          # for deps; the URL below is only the item being added.
+          REGISTRY_URL="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/r/data-table.json"
           if [ "${{ matrix.installer }}" = "bun" ]; then
             bunx --bun shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
           else
