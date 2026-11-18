@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { router, usePage } from '@inertiajs/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
@@ -223,5 +223,25 @@ describe('DataTable customization', () => {
         expect(warn).not.toHaveBeenCalled();
 
         warn.mockRestore();
+    });
+
+    it('renders the full table structure: headers, rows, and pagination', () => {
+        render(<DataTable data={createData()} />);
+
+        const table = screen.getByRole('table');
+
+        // Column headers render inside the table
+        expect(within(table).getByText('ID')).toBeInTheDocument();
+        expect(within(table).getByText('Name')).toBeInTheDocument();
+        expect(within(table).getByText('Status')).toBeInTheDocument();
+
+        // Data rows render actual cell values
+        expect(screen.getByText('Ada')).toBeInTheDocument();
+        expect(screen.getByText('Linus')).toBeInTheDocument();
+        expect(screen.getByText('active')).toBeInTheDocument();
+        expect(screen.getByText('inactive')).toBeInTheDocument();
+
+        // Pagination summary renders
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 1 to 2 of 2 results');
     });
 });

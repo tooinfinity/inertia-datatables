@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 
 Object.defineProperty(window, 'location', {
     value: {
@@ -24,28 +24,27 @@ vi.mock('@inertiajs/react', () => ({
     }),
 }));
 
-vi.mock('@tanstack/react-table', () => ({
-    createColumnHelper: () => ({
-        accessor: (key: unknown, options: Record<string, unknown>) => ({
-            ...options,
-            id: options.id ?? 'column',
-            accessorFn: typeof key === 'function' ? key : undefined,
-        }),
-    }),
-    flexRender: (render: (props: unknown) => React.ReactNode, props: unknown) => render?.(props) ?? null,
-    tableFeatures: (features: Record<string, unknown>) => features,
-    columnFilteringFeature: {},
-    columnVisibilityFeature: {},
-    globalFilteringFeature: {},
-    rowPaginationFeature: {},
-    rowSortingFeature: {},
-    metaHelper: () => ({}),
-    useTable: (options: Record<string, unknown>) => ({
-        ...options,
-        getHeaderGroups: () => [],
-        getRowModel: () => ({ rows: [] }),
-        getAllLeafColumns: () => options.columns ?? [],
-        state: options.state ?? {},
-        setState: vi.fn(),
-    }),
-}));
+// Console-error guard: fail tests that emit unexpected console.error output.
+// Third-party (shadcn/ui) React warnings about unknown DOM props are
+// allow-listed because they come from upstream components we don't control.
+const ALLOWED_ERROR_SUBSTRINGS = ['asChild', 'sideOffset'];
+
+let capturedErrors: string[] = [];
+
+beforeEach(() => {
+    capturedErrors = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        capturedErrors.push(args.map(String).join(' '));
+    });
+});
+
+afterEach(() => {
+    const unexpected = capturedErrors.filter(
+        (msg) =>
+            !ALLOWED_ERROR_SUBSTRINGS.some((sub) => msg.includes(sub))
+    );
+    vi.restoreAllMocks();
+    if (unexpected.length > 0) {
+        throw new Error(`Unexpected console.error output:\n${unexpected.join('\n')}`);
+    }
+});
