@@ -244,4 +244,86 @@ describe('DataTable customization', () => {
         // Pagination summary renders
         expect(screen.getByText(/Showing/).textContent).toBe('Showing 1 to 2 of 2 results');
     });
+
+    it('does not trigger onRowClick when clicking row actions', () => {
+        const onRowClick = vi.fn();
+
+        render(
+            <DataTable
+                data={createData()}
+                onRowClick={onRowClick}
+                actions={({ row }) => <button data-testid={`action-${row.id}`}>Delete</button>}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('action-1'));
+
+        expect(onRowClick).not.toHaveBeenCalled();
+    });
+
+    it('triggers onRowClick on keyboard Enter and Space', () => {
+        const onRowClick = vi.fn();
+
+        render(<DataTable data={createData()} onRowClick={onRowClick} />);
+
+        const row = screen.getByText('Ada').closest('tr')!;
+        fireEvent.keyDown(row, { key: 'Enter' });
+        expect(onRowClick).toHaveBeenCalledTimes(1);
+
+        fireEvent.keyDown(row, { key: ' ' });
+        expect(onRowClick).toHaveBeenCalledTimes(2);
+    });
+
+    it('renders the reset button in toolbar when table has active filters', () => {
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: 'Ada',
+                        sort: [],
+                        searches: [],
+                        filters: [],
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument();
+    });
+
+    it('renders filter trigger button for filterable columns', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: true, hidden: false, filter_type: 'text' },
+                    ],
+                })}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'Filter Name' })).toBeInTheDocument();
+    });
+
+    it('renders 0 to 0 of 0 results when total is 0', () => {
+        render(
+            <DataTable
+                data={createData({
+                    data: [],
+                    meta: {
+                        current_page: 1,
+                        per_page: 25,
+                        from: null,
+                        to: null,
+                        total: 0,
+                        last_page: 1,
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
+    });
 });

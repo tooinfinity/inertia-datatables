@@ -555,6 +555,45 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         mountedRef.current = true;
     }
 
+    const handleResetFilters = useCallback(() => {
+        setGlobalFilter('');
+        setColumnSearches({});
+        setColumnFilters([]);
+        setState((prev) => ({
+            ...prev,
+            search: '',
+            searches: {},
+            filters: {},
+            page: 1,
+        }));
+        setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+        const resetParams: Record<string, undefined | number> = {
+            [KEYS.search]: undefined,
+            [KEYS.page]: 1,
+        };
+
+        Object.keys(columnSearches).forEach((col) => {
+            resetParams[`${KEYS.searches}[${col}]`] = undefined;
+        });
+
+        Object.keys(state.filters).forEach((col) => {
+            resetParams[`${KEYS.filters}[${col}]`] = undefined;
+        });
+
+        debouncedVisit('filters.reset', resetParams);
+    }, [debouncedVisit, KEYS.search, KEYS.searches, KEYS.filters, KEYS.page, columnSearches, state.filters]);
+
+    const isFiltered = useMemo(() => {
+        return (
+            Boolean(state.search) ||
+            Object.values(columnSearches).some((v) => Boolean(v)) ||
+            Object.values(state.filters).some(
+                (v) => v !== '' && v !== null && v !== undefined
+            )
+        );
+    }, [state.search, columnSearches, state.filters]);
+
     const table = useTable<DataTableFeatures, TData>({
         features: dataTableFeatures,
         data: initialData.data,
@@ -588,6 +627,8 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         handleSearchChange,
         handleColumnSearchChange,
         handleFilterChange,
+        handleResetFilters,
+        isFiltered,
         perPageOptions,
         columnSearches,
         isLoading,

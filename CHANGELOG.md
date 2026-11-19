@@ -34,6 +34,7 @@
 
 ### Changed
 
+- Polished the DataTable registry UI/UX following shadcn/ui data-table patterns: cohesive toolbar layout with filter reset, in-toolbar column visibility, accessible dropdown-driven column filtering, integrated pagination with zero-result boundary handling and row selection feedback, and contained horizontal scrolling (fixes #79)
 - The `Column` value object now copies its properties through a single `with()` helper instead of re-instantiating itself with every argument in each fluent method
 - Upgraded the frontend registry to TanStack Table v9 with explicit table features and v9-compatible types
 - Standardized package and registry metadata on TanStack Table v9
