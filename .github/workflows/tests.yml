@@ -119,14 +119,17 @@ jobs:
         run: vendor/bin/pest
 
       - name: Test Suite (Type Coverage)
-        if: runner.os != 'Windows'
-        run: composer test:types | tee type-coverage.txt
+        if: !(runner.os == 'Windows' && matrix.stability == 'prefer-lowest')
+        shell: bash
+        run: |
+          set -o pipefail
+          composer test:types | tee type-coverage.txt
 
       - name: Upload type coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: type-coverage-report
+          name: type-coverage-report-${{ matrix.os }}-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}
           path: type-coverage.txt
 
   databases:
