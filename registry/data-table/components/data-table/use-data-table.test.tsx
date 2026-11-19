@@ -231,6 +231,63 @@ describe('useDataTable', () => {
         );
     });
 
+    it('retains a search across pagination visits to the same endpoint', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData, url: '/users' });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleSearchChange('alice'));
+        vi.advanceTimersByTime(300);
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/users?search=alice&page=1',
+            expect.any(Object)
+        );
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/users?search=alice&page=2',
+            expect.objectContaining({ only: ['data'] })
+        );
+    });
+
+    it('keeps a cleared filter cleared across pagination visits to the same endpoint', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({
+                data: initialData,
+                url: '/users?filters%5Bstatus%5D=active',
+            });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleFilterChange('status', ''));
+        vi.advanceTimersByTime(300);
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/users?page=1',
+            expect.any(Object)
+        );
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenLastCalledWith(
+            '/users?page=2',
+            expect.objectContaining({ only: ['data'] })
+        );
+    });
+
     it('handles per page change and triggers Inertia visit with correct URL', () => {
         const initialData = createMockData();
 

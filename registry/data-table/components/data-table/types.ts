@@ -161,8 +161,10 @@ export interface DataTableOptions<TData extends RowData = Record<string, unknown
      * search, column searches, filters and sorting). Consumers can pass a
      * Laravel Wayfinder generated URL, e.g. `index.url()`.
      *
-     * When omitted, the current page pathname is used, keeping the existing
-     * behaviour unchanged.
+     * The URL is resolved against the current origin (same-origin semantics):
+     * only its pathname and query are used for the Inertia visit. Pass a path
+     * such as `/users` or a same-origin absolute URL. When omitted, the current
+     * page pathname is used, keeping the existing behaviour unchanged.
      */
     url?: string;
     dataPropName?: string;

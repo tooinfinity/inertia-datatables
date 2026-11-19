@@ -102,6 +102,13 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const sortingRef = useRef<SortingState>([]);
     const warnedPropRef = useRef<string | null>(null);
+    // Effective query params for an explicit endpoint URL, retained across
+    // sequential visits so search→pagination and clear→pagination keep their
+    // related parameters instead of rebuilding from the configured URL each
+    // time. When `url` is omitted the browser location is the source of truth,
+    // so we only track state for explicit endpoints.
+    const endpointQueryRef = useRef<URLSearchParams | null>(null);
+    const endpointUrlRef = useRef<string | null>(null);
     // Track the last value sent to the server for each debounced field
     const lastSentRef = useRef<{
         search: string;
@@ -305,15 +312,26 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         (params: Record<string, unknown>, overrides: { replace?: boolean } = {}) => {
             // Target the explicit endpoint URL when one is configured
             // (e.g. a Laravel Wayfinder generated URL), otherwise the current
-            // page pathname. Query parameters already present on the endpoint
-            // URL are preserved and merged with the DataTable query state.
+            // page pathname. The URL is treated as same-origin: only its
+            // pathname and query are used for the visit.
             const endpoint = url ?? window.location.pathname;
             const endpointUrl = new URL(endpoint, window.location.href);
-            // Start from the endpoint URL's own query when an explicit URL is
-            // configured, otherwise from the current page's query string.
-            const currentParams = url
-                ? new URLSearchParams(endpointUrl.search)
-                : new URLSearchParams(window.location.search);
+
+            // Determine the effective query. For an explicit endpoint we retain
+            // state across visits so search→pagination and clear→pagination
+            // keep their related parameters. When `url` is omitted, the browser
+            // location is the source of truth.
+            let currentParams: URLSearchParams;
+            if (url) {
+                if (endpointUrlRef.current !== url) {
+                    // New endpoint: start from its own query parameters.
+                    endpointQueryRef.current = new URLSearchParams(endpointUrl.search);
+                    endpointUrlRef.current = url;
+                }
+                currentParams = new URLSearchParams(endpointQueryRef.current!.toString());
+            } else {
+                currentParams = new URLSearchParams(window.location.search);
+            }
             Object.entries(params).forEach(([key, value]) => {
                 // Remove any leftover scalar or array form of this key so
                 // multi-value filters (`filters[col][]=a&filters[col][]=b`) are
@@ -327,6 +345,12 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     currentParams.set(key, String(value as string));
                 }
             });
+
+            // Persist the effective query for explicit endpoints so cleared
+            // parameters stay cleared and unrelated state survives pagination.
+            if (url) {
+                endpointQueryRef.current = currentParams;
+            }
 
             const {
                 onStart,
@@ -630,7 +654,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             Object.values(debounceTimersRef.current).forEach((timer) => clearTimeout(timer));
             debounceTimersRef.current = {};
         };
-    }, []);
+    }, [url]);
 
     if (!mountedRef.current) {
         mountedRef.current = true;

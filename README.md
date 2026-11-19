@@ -490,6 +490,10 @@ predictably with the DataTable query state (page, per-page, search, column
 searches, filters and sorting). When omitted, the current page pathname is
 used, keeping the existing behaviour unchanged.
 
+The URL is resolved against the current origin (same-origin semantics): only
+its pathname and query are used for the Inertia visit. Pass a path such as
+`/users` or a same-origin absolute URL.
+
 This makes it possible to target a Laravel Wayfinder generated route or
 controller action without adding `laravel/wayfinder` or any Wayfinder npm
 package as a dependency:
