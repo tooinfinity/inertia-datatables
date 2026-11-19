@@ -119,6 +119,8 @@ jobs:
         run: vendor/bin/pest
 
       - name: Test Suite (Type Coverage)
+        env:
+          __PEST_PLUGIN_ENV: '1'
         run: composer test:types | tee type-coverage.txt
 
       - name: Upload type coverage report
