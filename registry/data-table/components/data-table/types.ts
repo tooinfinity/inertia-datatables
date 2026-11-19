@@ -152,6 +152,19 @@ export interface DataTableState {
 export interface DataTableOptions<TData extends RowData = Record<string, unknown>> {
     data: DataTableResponse<TData>;
     onDataChange?: (_data: DataTableResponse<TData>) => void;
+    /**
+     * Optional explicit endpoint URL for the DataTable visits.
+     *
+     * When provided, the hook visits this URL instead of the current page's
+     * pathname. Query parameters already present on the URL are preserved and
+     * merged predictably with the DataTable query state (page, per-page,
+     * search, column searches, filters and sorting). Consumers can pass a
+     * Laravel Wayfinder generated URL, e.g. `index.url()`.
+     *
+     * When omitted, the current page pathname is used, keeping the existing
+     * behaviour unchanged.
+     */
+    url?: string;
     dataPropName?: string;
     /**
      * Optional column definition overrides.

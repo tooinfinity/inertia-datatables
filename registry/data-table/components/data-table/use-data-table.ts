@@ -93,6 +93,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     cells,
     actions,
     visitOptions,
+    url,
     rowKey,
     enableRowSelection,
     onRowSelectionChange,
@@ -302,7 +303,17 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
 
     const visitWithParams = useCallback(
         (params: Record<string, unknown>, overrides: { replace?: boolean } = {}) => {
-            const currentParams = new URLSearchParams(window.location.search);
+            // Target the explicit endpoint URL when one is configured
+            // (e.g. a Laravel Wayfinder generated URL), otherwise the current
+            // page pathname. Query parameters already present on the endpoint
+            // URL are preserved and merged with the DataTable query state.
+            const endpoint = url ?? window.location.pathname;
+            const endpointUrl = new URL(endpoint, window.location.href);
+            // Start from the endpoint URL's own query when an explicit URL is
+            // configured, otherwise from the current page's query string.
+            const currentParams = url
+                ? new URLSearchParams(endpointUrl.search)
+                : new URLSearchParams(window.location.search);
             Object.entries(params).forEach(([key, value]) => {
                 // Remove any leftover scalar or array form of this key so
                 // multi-value filters (`filters[col][]=a&filters[col][]=b`) are
@@ -329,7 +340,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 ...restVisitOptions
             } = visitOptions ?? {};
 
-            router.visit(window.location.pathname + '?' + currentParams.toString(), {
+            router.visit(endpointUrl.pathname + '?' + currentParams.toString(), {
                 preserveScroll: true,
                 preserveState: true,
                 ...restVisitOptions,
@@ -362,7 +373,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 },
             });
         },
-        [dataPropName, visitOptions]
+        [dataPropName, visitOptions, url]
     );
 
     const debouncedVisit = useCallback(

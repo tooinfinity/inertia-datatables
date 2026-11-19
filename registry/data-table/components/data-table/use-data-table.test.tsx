@@ -151,6 +151,86 @@ describe('useDataTable', () => {
         );
     });
 
+    it('visits the configured relative endpoint URL instead of the current page', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData, url: '/users' });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/users?page=2',
+            expect.objectContaining({ only: ['data'] })
+        );
+    });
+
+    it('visits the configured absolute endpoint URL', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData, url: 'https://example.com/users' });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/users?page=2',
+            expect.objectContaining({ only: ['data'] })
+        );
+    });
+
+    it('preserves query parameters already present on the configured URL', () => {
+        const initialData = createMockData();
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData, url: '/users?filters%5Bstatus%5D=active' });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handleSearchChange('test'));
+
+        vi.advanceTimersByTime(300);
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/users?filters%5Bstatus%5D=active&search=test&page=1',
+            expect.any(Object)
+        );
+    });
+
+    it('overrides query parameters already present on the configured URL', () => {
+        const initialData = createMockData({
+            query: { ...createMockData().query, page: 3 },
+        });
+
+        let capturedResult: ReturnType<typeof useDataTable> | null = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData, url: '/users?page=3&per_page=50' });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+
+        act(() => capturedResult!.handlePageChange(2));
+
+        expect(router.visit).toHaveBeenCalledWith(
+            '/users?per_page=50&page=2',
+            expect.objectContaining({ only: ['data'] })
+        );
+    });
+
     it('handles per page change and triggers Inertia visit with correct URL', () => {
         const initialData = createMockData();
 
