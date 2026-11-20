@@ -31,6 +31,11 @@ export function DataTablePagination({
     const from = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
     const to = Math.min(currentPage * perPage, totalItems);
     const pages = getPageNumbers(currentPage, pageCount);
+    const effectivePerPageOptions = perPageOptions
+        ? perPageOptions.includes(perPage)
+            ? perPageOptions
+            : [...perPageOptions, perPage].sort((a, b) => a - b)
+        : [];
 
     return (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4">
@@ -49,20 +54,22 @@ export function DataTablePagination({
                 )}
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:gap-6 order-1 sm:order-2">
-                {onPerPageChange && perPageOptions && perPageOptions.length > 0 && (
+                {onPerPageChange && effectivePerPageOptions.length > 0 && (
                     <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                        <label htmlFor="per-page" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
                             Rows per page
-                        </p>
+                        </label>
                         <Select
+                            id="per-page"
+                            aria-label="Rows per page"
                             value={String(perPage)}
                             onValueChange={(value: string) => onPerPageChange(Number(value))}
                         >
-                            <SelectTrigger id="per-page" className="h-8 w-[72px]">
+                            <SelectTrigger id="per-page" aria-label="Rows per page" className="h-8 w-[72px]">
                                 <SelectValue placeholder={String(perPage)} />
                             </SelectTrigger>
                             <SelectContent side="top">
-                                {perPageOptions.map((option) => (
+                                {effectivePerPageOptions.map((option) => (
                                     <SelectItem key={String(option)} value={String(option)}>
                                         {option}
                                     </SelectItem>

@@ -9,6 +9,7 @@ import {
     type ColumnVisibilityState,
     type PaginationState,
     type RowData,
+    type RowSelectionState,
     type SortingState,
 } from '@tanstack/react-table';
 import { router, usePage } from '@inertiajs/react';
@@ -93,6 +94,8 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     actions,
     visitOptions,
     rowKey,
+    enableRowSelection,
+    onRowSelectionChange,
 }: DataTableOptions<TData>) {
     const mountedRef = useRef(false);
     const debounceTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -256,6 +259,19 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const [columnSearches, setColumnSearches] = useState<ColumnSearchesState>(state.searches);
 
     const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
+
+    const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+    const handleRowSelectionChange = useCallback(
+        (updater: StateUpdater<RowSelectionState>) => {
+            setRowSelection((prev) => {
+                const next = typeof updater === 'function' ? updater(prev) : updater;
+                onRowSelectionChange?.(next);
+                return next;
+            });
+        },
+        [onRowSelectionChange]
+    );
 
     const pageProps = useInertiaPageProps();
 
@@ -475,6 +491,60 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         [debouncedVisit, KEYS.filters, KEYS.page]
     );
 
+    const handleClearColumnFilter = useCallback(
+        (column: string, clearSearch: boolean = false) => {
+            if (debounceTimersRef.current[`filters.${column}`]) {
+                clearTimeout(debounceTimersRef.current[`filters.${column}`]);
+                delete debounceTimersRef.current[`filters.${column}`];
+            }
+            if (clearSearch && debounceTimersRef.current[`searches.${column}`]) {
+                clearTimeout(debounceTimersRef.current[`searches.${column}`]);
+                delete debounceTimersRef.current[`searches.${column}`];
+            }
+
+            setColumnFilters((prev) => prev.filter((f) => f.id !== column));
+            if (clearSearch) {
+                setColumnSearches((prev) => {
+                    const next = { ...prev };
+                    delete next[column];
+                    return next;
+                });
+            }
+
+            setState((prev) => {
+                const nextFilters = { ...prev.filters };
+                delete nextFilters[column];
+                const nextSearches = { ...prev.searches };
+                if (clearSearch) {
+                    delete nextSearches[column];
+                }
+                return {
+                    ...prev,
+                    filters: nextFilters,
+                    searches: nextSearches,
+                    page: 1,
+                };
+            });
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+            delete lastSentRef.current.filters[column];
+            if (clearSearch) {
+                delete lastSentRef.current.searches[column];
+            }
+
+            const params: Record<string, undefined | number> = {
+                [`${KEYS.filters}[${column}]`]: undefined,
+                [KEYS.page]: 1,
+            };
+            if (clearSearch) {
+                params[`${KEYS.searches}[${column}]`] = undefined;
+            }
+
+            debouncedVisit(`column.${column}.clear`, params);
+        },
+        [debouncedVisit, KEYS.filters, KEYS.searches, KEYS.page]
+    );
+
     const handleColumnVisibilityChange = useCallback(
         (updater: StateUpdater<ColumnVisibilityState>) => {
             const newVisibility = typeof updater === 'function' ? updater(columnVisibility) : updater;
@@ -556,6 +626,9 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     }
 
     const handleResetFilters = useCallback(() => {
+        Object.values(debounceTimersRef.current).forEach((timer) => clearTimeout(timer));
+        debounceTimersRef.current = {};
+
         setGlobalFilter('');
         setColumnSearches({});
         setColumnFilters([]);
@@ -567,6 +640,12 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             page: 1,
         }));
         setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+        lastSentRef.current = {
+            search: '',
+            searches: {},
+            filters: {},
+        };
 
         const resetParams: Record<string, undefined | number> = {
             [KEYS.search]: undefined,
@@ -581,8 +660,8 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             resetParams[`${KEYS.filters}[${col}]`] = undefined;
         });
 
-        debouncedVisit('filters.reset', resetParams);
-    }, [debouncedVisit, KEYS.search, KEYS.searches, KEYS.filters, KEYS.page, columnSearches, state.filters]);
+        visitWithParams(resetParams, { replace: true });
+    }, [visitWithParams, KEYS.search, KEYS.searches, KEYS.filters, KEYS.page, columnSearches, state.filters]);
 
     const isFiltered = useMemo(() => {
         return (
@@ -604,12 +683,15 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             globalFilter,
             columnFilters,
             columnVisibility,
+            rowSelection,
         },
         onSortingChange: handleSortChange,
         onPaginationChange: setPagination,
         onGlobalFilterChange: setGlobalFilter,
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: handleColumnVisibilityChange,
+        onRowSelectionChange: handleRowSelectionChange,
+        enableRowSelection,
         manualPagination: true,
         manualSorting: true,
         manualFiltering: true,
@@ -627,8 +709,11 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         handleSearchChange,
         handleColumnSearchChange,
         handleFilterChange,
+        handleClearColumnFilter,
         handleResetFilters,
         isFiltered,
+        rowSelection,
+        setRowSelection,
         perPageOptions,
         columnSearches,
         isLoading,

@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, forwardRef, type ReactElement, type Ref, useMemo } from 'react';
-import { flexRender, type RowData, type RowSelectionState } from '@tanstack/react-table';
+import { flexRender, type Row, type RowData, type RowSelectionState } from '@tanstack/react-table';
 import {
     type DataTableCellRenderers,
     type DataTableColumnDef,
@@ -10,6 +10,7 @@ import {
     type DataTableRowActions,
     type DataTableVisitOptions,
 } from './types';
+import { type DataTableFeatures } from './table-features';
 import {
     Table,
     TableHeader,
@@ -43,7 +44,7 @@ export interface DataTableProps<TData extends RowData> {
     /** Called when a row is clicked. */
     onRowClick?: (_row: TData, _index: number) => void;
     /** Whether row selection is enabled, or a predicate receiving the row. */
-    enableRowSelection?: boolean | ((_row: TData) => boolean);
+    enableRowSelection?: boolean | ((row: Row<DataTableFeatures, TData>) => boolean);
     /** Callback fired when row selection changes. */
     onRowSelectionChange?: (_selection: RowSelectionState) => void;
     /** Options forwarded to the Inertia `router.visit` call. */
@@ -67,6 +68,8 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             empty,
             rowKey,
             onRowClick,
+            enableRowSelection,
+            onRowSelectionChange,
             visitOptions,
             onError,
             skeletonRows = 5,
@@ -92,6 +95,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             handleSearchChange,
             handleColumnSearchChange,
             handleFilterChange,
+            handleClearColumnFilter,
             handleResetFilters,
             isFiltered,
             state,
@@ -106,6 +110,8 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             actions,
             visitOptions: mergedVisitOptions,
             rowKey,
+            enableRowSelection,
+            onRowSelectionChange,
         });
 
         const rows = table.getRowModel().rows;
@@ -137,6 +143,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                             column={header.column}
                                             onColumnSearchChange={handleColumnSearchChange}
                                             onFilterChange={handleFilterChange}
+                                            onClearFilter={handleClearColumnFilter}
                                             columnSearchValue={columnSearches[header.column.id] ?? ''}
                                             currentFilterValue={state.filters[header.column.id]}
                                         />
@@ -163,18 +170,27 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                 rows.map((row) => (
                                     <TableRow
                                         key={row.id}
-                                        data-state={(row as { getIsSelected?: () => boolean }).getIsSelected?.() ? 'selected' : undefined}
+                                        data-state={row.getIsSelected() ? 'selected' : undefined}
                                         role={onRowClick ? 'button' : undefined}
                                         tabIndex={onRowClick ? 0 : undefined}
                                         onClick={
                                             onRowClick
-                                                ? () => onRowClick(row.original, row.index)
+                                                ? (e) => {
+                                                      const target = e.target as HTMLElement | null;
+                                                      const interactive = target?.closest(
+                                                          'a, button, input, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]'
+                                                      );
+                                                      if (interactive && interactive !== e.currentTarget) {
+                                                          return;
+                                                      }
+                                                      onRowClick(row.original, row.index);
+                                                  }
                                                 : undefined
                                         }
                                         onKeyDown={
                                             onRowClick
                                                 ? (e) => {
-                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                                                           e.preventDefault();
                                                           onRowClick(row.original, row.index);
                                                       }
@@ -214,9 +230,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                     perPageOptions={perPageOptions}
                     totalPages={data.meta.last_page}
                     totalItems={data.meta.total}
-                    selectedCount={
-                        (table as unknown as { getSelectedRowModel?: () => { rows: unknown[] } }).getSelectedRowModel?.()?.rows?.length ?? 0
-                    }
+                    selectedCount={table.getSelectedRowModel().rows.length}
                 />
                 {children}
             </div>

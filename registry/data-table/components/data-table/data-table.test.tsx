@@ -326,4 +326,146 @@ describe('DataTable customization', () => {
 
         expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
     });
+
+    it('does not trigger onRowClick when pressing Enter on a nested action button', () => {
+        const onRowClick = vi.fn();
+
+        render(
+            <DataTable
+                data={createData()}
+                onRowClick={onRowClick}
+                actions={({ row }) => <button data-testid={`action-${row.id}`}>Delete</button>}
+            />
+        );
+
+        const actionButton = screen.getByTestId('action-1');
+        fireEvent.keyDown(actionButton, { key: 'Enter' });
+
+        expect(onRowClick).not.toHaveBeenCalled();
+    });
+
+    it('skips onRowClick when clicking an interactive link or button inside a cell', () => {
+        const onRowClick = vi.fn();
+
+        render(
+            <DataTable
+                data={createData()}
+                onRowClick={onRowClick}
+                cells={{
+                    name: ({ getValue }) => <a href="#profile">{String(getValue())}</a>,
+                }}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Ada'));
+        expect(onRowClick).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByText('active'));
+        expect(onRowClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels pending debounce timers when Reset is clicked and visits immediately', () => {
+        vi.useFakeTimers();
+
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [],
+                    },
+                })}
+            />
+        );
+
+        const searchInput = screen.getByLabelText('Global search');
+        fireEvent.change(searchInput, { target: { value: 'draft-query' } });
+
+        const resetButton = screen.getByRole('button', { name: 'Reset filters' });
+        fireEvent.click(resetButton);
+
+        vi.runAllTimers();
+
+        const calls = (router.visit as ReturnType<typeof vi.fn>).mock.calls;
+        const lastUrl = calls[calls.length - 1]?.[0] as string;
+        expect(lastUrl).not.toContain('draft-query');
+
+        vi.useRealTimers();
+    });
+
+    it('updates row selection feedback when row selection is enabled', () => {
+        render(
+            <DataTable
+                data={createData()}
+                enableRowSelection={true}
+                columns={[
+                    {
+                        id: 'select',
+                        header: () => null,
+                        cell: ({ row }) => (
+                            <input
+                                type="checkbox"
+                                aria-label={`Select ${row.original.name}`}
+                                checked={row.getIsSelected()}
+                                onChange={row.getToggleSelectedHandler()}
+                            />
+                        ),
+                    },
+                ]}
+            />
+        );
+
+        const checkbox = screen.getByLabelText('Select Ada');
+        expect(checkbox).not.toBeChecked();
+
+        fireEvent.click(checkbox);
+        expect(checkbox).toBeChecked();
+
+        const row = checkbox.closest('tr')!;
+        expect(row).toHaveAttribute('data-state', 'selected');
+
+        expect(screen.getByText(/row\(s\) selected/)).toHaveTextContent('1 of 2 row(s) selected.');
+    });
+
+    it('includes active perPage in options when missing from perPageOptions', () => {
+        render(
+            <DataTable
+                data={createData({
+                    meta: {
+                        current_page: 1,
+                        per_page: 15,
+                        from: 1,
+                        to: 2,
+                        total: 2,
+                        last_page: 1,
+                    },
+                    query: {
+                        page: 1,
+                        per_page: 15,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [],
+                    },
+                    config: {
+                        debounce: 300,
+                        per_page_options: [10, 25, 50],
+                    },
+                })}
+            />
+        );
+
+        const options = screen.getAllByRole('option').map((o) => o.textContent);
+        expect(options).toContain('15');
+    });
+
+    it('provides accessible name to the rows per page select', () => {
+        render(<DataTable data={createData()} />);
+
+        expect(screen.getByRole('combobox', { name: 'Rows per page' })).toBeInTheDocument();
+    });
 });

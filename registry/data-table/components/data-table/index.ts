@@ -25,5 +25,6 @@ export type {
   DataTableState,
   DataTableOptions,
   DataTableVisitOptions,
+  DataTableSelectionState,
 } from './types';
 export type { DataTableColumnMeta, DataTableFeatures } from './table-features';

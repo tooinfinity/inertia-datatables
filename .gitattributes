@@ -30,3 +30,4 @@
 /tsconfig.json      export-ignore
 /tsconfig.test.json export-ignore
 /rector.php         export-ignore
+/.commitlintrc.json export-ignore

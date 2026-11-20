@@ -21,6 +21,7 @@ interface DataTableColumnHeaderProps<TData extends RowData> {
     column: Column<DataTableFeatures, TData, unknown>;
     onColumnSearchChange: (_column: string, _value: string) => void;
     onFilterChange: (_column: string, _value: unknown) => void;
+    onClearFilter?: (_column: string, _clearSearch: boolean) => void;
     columnSearchValue: string;
     currentFilterValue?: unknown;
 }
@@ -30,6 +31,7 @@ export function DataTableColumnHeader<TData extends RowData>({
     column,
     onColumnSearchChange,
     onFilterChange,
+    onClearFilter,
     columnSearchValue,
     currentFilterValue,
 }: DataTableColumnHeaderProps<TData>) {
@@ -72,9 +74,13 @@ export function DataTableColumnHeader<TData extends RowData>({
 
     const handleClearFilter = () => {
         setFilterInputValue('');
-        onFilterChange(column.id, '');
-        if (canSearch && columnSearchValue) {
-            onColumnSearchChange(column.id, '');
+        if (onClearFilter) {
+            onClearFilter(column.id, Boolean(canSearch && columnSearchValue));
+        } else {
+            onFilterChange(column.id, '');
+            if (canSearch && columnSearchValue) {
+                onColumnSearchChange(column.id, '');
+            }
         }
     };
 
