@@ -119,7 +119,7 @@ jobs:
         run: vendor/bin/pest
 
       - name: Test Suite (Type Coverage)
-        if: !(runner.os == 'Windows' && matrix.stability == 'prefer-lowest')
+        if: ${{ !(runner.os == 'Windows' && matrix.stability == 'prefer-lowest') }}
         shell: bash
         run: |
           set -o pipefail
