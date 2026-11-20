@@ -4,6 +4,7 @@ import {
     globalFilteringFeature,
     metaHelper,
     rowPaginationFeature,
+    rowSelectionFeature,
     rowSortingFeature,
     tableFeatures,
 } from '@tanstack/react-table';
@@ -26,6 +27,7 @@ export const dataTableFeatures = tableFeatures({
     columnVisibilityFeature,
     globalFilteringFeature,
     rowPaginationFeature,
+    rowSelectionFeature,
     rowSortingFeature,
     columnMeta: metaHelper<DataTableColumnMeta>(),
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, forwardRef, type ReactElement, type Ref, useMemo } from 'react';
-import { flexRender } from '@tanstack/react-table';
+import { flexRender, type Row, type RowData, type RowSelectionState } from '@tanstack/react-table';
 import {
     type DataTableCellRenderers,
     type DataTableColumnDef,
@@ -10,6 +10,7 @@ import {
     type DataTableRowActions,
     type DataTableVisitOptions,
 } from './types';
+import { type DataTableFeatures } from './table-features';
 import {
     Table,
     TableHeader,
@@ -21,10 +22,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DataTableToolbar } from './data-table-toolbar';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableColumnHeader } from './data-table-column-header';
-import { DataTableColumnVisibility } from './data-table-column-visibility';
 import { DataTableEmpty } from './data-table-empty';
-import { useDataTable } from './use-data-table';
-import type { RowData } from '@tanstack/react-table';
+import { useDataTable, DATA_TABLE_ACTIONS_COLUMN_ID } from './use-data-table';
 
 export interface DataTableProps<TData extends RowData> {
     data: DataTableResponse<TData>;
@@ -44,6 +43,10 @@ export interface DataTableProps<TData extends RowData> {
     rowKey?: (_row: TData, _index: number) => string;
     /** Called when a row is clicked. */
     onRowClick?: (_row: TData, _index: number) => void;
+    /** Whether row selection is enabled, or a predicate receiving the row. */
+    enableRowSelection?: boolean | ((row: Row<DataTableFeatures, TData>) => boolean);
+    /** Callback fired when row selection changes. */
+    onRowSelectionChange?: (_selection: RowSelectionState) => void;
     /** Options forwarded to the Inertia `router.visit` call. */
     visitOptions?: DataTableVisitOptions;
     /** Called when the endpoint answered with validation errors. */
@@ -65,6 +68,8 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             empty,
             rowKey,
             onRowClick,
+            enableRowSelection,
+            onRowSelectionChange,
             visitOptions,
             onError,
             skeletonRows = 5,
@@ -90,6 +95,9 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             handleSearchChange,
             handleColumnSearchChange,
             handleFilterChange,
+            handleClearColumnFilter,
+            handleResetFilters,
+            isFiltered,
             state,
             perPageOptions,
             columnSearches,
@@ -102,25 +110,28 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             actions,
             visitOptions: mergedVisitOptions,
             rowKey,
+            enableRowSelection,
+            onRowSelectionChange,
         });
 
         const rows = table.getRowModel().rows;
-        const visibleColumnCount = table
-            .getAllLeafColumns()
-            .filter((column) => column.getIsVisible()).length;
+        const visibleColumnCount = Math.max(
+            1,
+            table.getAllLeafColumns().filter((column) => column.getIsVisible()).length
+        );
 
         return (
             <div className="space-y-4">
                 <DataTableToolbar
+                    table={table}
                     search={state.search}
                     onSearchChange={handleSearchChange}
-                    perPage={state.perPage}
-                    onPerPageChange={handlePerPageChange}
-                    perPageOptions={perPageOptions}
+                    isFiltered={isFiltered}
+                    onReset={handleResetFilters}
                 >
                     {toolbar}
                 </DataTableToolbar>
-                <div className="rounded-md border">
+                <div className="relative w-full overflow-x-auto rounded-md border">
                     <Table ref={ref} className="w-full caption-bottom text-sm" aria-busy={isLoading} {...props}>
                         <TableHeader>
                             {table.getHeaderGroups().map((headerGroup) => (
@@ -132,6 +143,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                             column={header.column}
                                             onColumnSearchChange={handleColumnSearchChange}
                                             onFilterChange={handleFilterChange}
+                                            onClearFilter={handleClearColumnFilter}
                                             columnSearchValue={columnSearches[header.column.id] ?? ''}
                                             currentFilterValue={state.filters[header.column.id]}
                                         />
@@ -151,26 +163,56 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                     </TableRow>
                                 ))
                             ) : rows.length === 0 ? (
-                                <DataTableEmpty columns={table.getAllLeafColumns().length}>
+                                <DataTableEmpty columns={visibleColumnCount}>
                                     {empty}
                                 </DataTableEmpty>
                             ) : (
                                 rows.map((row) => (
                                     <TableRow
                                         key={row.id}
+                                        data-state={row.getIsSelected() ? 'selected' : undefined}
+                                        role={onRowClick ? 'button' : undefined}
+                                        tabIndex={onRowClick ? 0 : undefined}
                                         onClick={
                                             onRowClick
-                                                ? () => onRowClick(row.original, row.index)
+                                                ? (e) => {
+                                                      const target = e.target as HTMLElement | null;
+                                                      const interactive = target?.closest(
+                                                          'a, button, input, select, textarea, [role="button"], [role="checkbox"], [role="menuitem"]'
+                                                      );
+                                                      if (interactive && interactive !== e.currentTarget) {
+                                                          return;
+                                                      }
+                                                      onRowClick(row.original, row.index);
+                                                  }
+                                                : undefined
+                                        }
+                                        onKeyDown={
+                                            onRowClick
+                                                ? (e) => {
+                                                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                                                          e.preventDefault();
+                                                          onRowClick(row.original, row.index);
+                                                      }
+                                                  }
                                                 : undefined
                                         }
                                         className={
                                             onRowClick
-                                                ? 'cursor-pointer border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'
+                                                ? 'cursor-pointer border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted focus-visible:outline-none focus-visible:bg-muted/50'
                                                 : 'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'
                                         }
                                     >
                                         {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id} className="p-4 align-middle">
+                                            <TableCell
+                                                key={cell.id}
+                                                className="p-4 align-middle"
+                                                onClick={
+                                                    cell.column.id === DATA_TABLE_ACTIONS_COLUMN_ID
+                                                        ? (e) => e.stopPropagation()
+                                                        : undefined
+                                                }
+                                            >
                                                 {flexRender(cell.column.columnDef.cell!, cell.getContext())}
                                             </TableCell>
                                         ))}
@@ -179,15 +221,17 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                             )}
                         </TableBody>
                     </Table>
-                    <DataTablePagination
-                        currentPage={state.page}
-                        perPage={state.perPage}
-                        onPageChange={handlePageChange}
-                        totalPages={data.meta.last_page}
-                        totalItems={data.meta.total}
-                    />
                 </div>
-                <DataTableColumnVisibility table={table} />
+                <DataTablePagination
+                    currentPage={state.page}
+                    perPage={state.perPage}
+                    onPageChange={handlePageChange}
+                    onPerPageChange={handlePerPageChange}
+                    perPageOptions={perPageOptions}
+                    totalPages={data.meta.last_page}
+                    totalItems={data.meta.total}
+                    selectedCount={table.getSelectedRowModel().rows.length}
+                />
                 {children}
             </div>
         );

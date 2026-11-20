@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { type Column, type Header, type RowData, flexRender } from '@tanstack/react-table';
 import type { DataTableFeatures, DataTableColumnMeta } from './table-features';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TableHead } from '@/components/ui/table';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -19,6 +21,7 @@ interface DataTableColumnHeaderProps<TData extends RowData> {
     column: Column<DataTableFeatures, TData, unknown>;
     onColumnSearchChange: (_column: string, _value: string) => void;
     onFilterChange: (_column: string, _value: unknown) => void;
+    onClearFilter?: (_column: string, _clearSearch: boolean) => void;
     columnSearchValue: string;
     currentFilterValue?: unknown;
 }
@@ -28,6 +31,7 @@ export function DataTableColumnHeader<TData extends RowData>({
     column,
     onColumnSearchChange,
     onFilterChange,
+    onClearFilter,
     columnSearchValue,
     currentFilterValue,
 }: DataTableColumnHeaderProps<TData>) {
@@ -43,6 +47,7 @@ export function DataTableColumnHeader<TData extends RowData>({
     const filterType = meta?.filter_type ?? 'text';
     const filterOptions = meta?.filter_options ?? [];
     const isFilterActive = currentFilterValue !== '' && currentFilterValue !== null && currentFilterValue !== undefined;
+    const headerTitle = typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
     const [filterInputValue, setFilterInputValue] = useState<string>('');
 
@@ -69,60 +74,96 @@ export function DataTableColumnHeader<TData extends RowData>({
 
     const handleClearFilter = () => {
         setFilterInputValue('');
-        onFilterChange(column.id, '');
+        if (onClearFilter) {
+            onClearFilter(column.id, Boolean(canSearch && columnSearchValue));
+        } else {
+            onFilterChange(column.id, '');
+            if (canSearch && columnSearchValue) {
+                onColumnSearchChange(column.id, '');
+            }
+        }
     };
 
     return (
-        <th className="group relative px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-            <div className="flex items-center gap-2">
-                {canSort && (
-                    <button
-                        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                        aria-label={`Sort by ${column.columnDef.header as string}`}
-                    >
-                        {flexRender(column.columnDef.header!, header.getContext())}
-                        {column.getIsSorted() === 'asc' ? (
-                            <span>↑</span>
-                        ) : column.getIsSorted() === 'desc' ? (
-                            <span>↓</span>
-                        ) : (
-                            <span className="text-muted-foreground">↕</span>
-                        )}
-                    </button>
-                )}
-                {!canSort && <span>{flexRender(column.columnDef.header!, header.getContext())}</span>}
-            </div>
-            <div className="absolute right-0 top-full mt-1 w-56 p-2 rounded-md border bg-popover shadow-lg hidden group-focus-within:block group-hover:block z-10">
-                {canSearch && (
-                    <div className="space-y-2">
-                        <label className="block text-xs font-medium text-muted-foreground">
-                            Column search
-                        </label>
-                        <Input
-                            placeholder={`Search ${column.columnDef.header as string}...`}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onColumnSearchChange(column.id, e.target.value)}
-                            value={columnSearchValue}
-                        />
-                    </div>
-                )}
-                {canFilter && (
+        <TableHead className="px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
+            <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1 min-w-0">
+                    {canSort ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                            className="-ml-3 h-8 text-xs font-medium hover:bg-accent hover:text-foreground data-[state=open]:bg-accent"
+                            aria-label={`Sort by ${headerTitle}`}
+                        >
+                            <span className="truncate">{flexRender(column.columnDef.header!, header.getContext())}</span>
+                            {column.getIsSorted() === 'asc' ? (
+                                <span className="ml-1 text-xs">↑</span>
+                            ) : column.getIsSorted() === 'desc' ? (
+                                <span className="ml-1 text-xs">↓</span>
+                            ) : (
+                                <span className="ml-1 text-xs text-muted-foreground/60">↕</span>
+                            )}
+                        </Button>
+                    ) : (
+                        <span className="truncate text-xs font-medium">{flexRender(column.columnDef.header!, header.getContext())}</span>
+                    )}
+                </div>
+
+                {(canSearch || canFilter) && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button className={`flex w-full items-center justify-between px-2 py-1 text-sm rounded ${isFilterActive ? 'text-foreground bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}>
-                                Filter
-                                <svg className="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-6 w-6 p-0 rounded hover:bg-accent ${
+                                    isFilterActive || columnSearchValue
+                                        ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                                aria-label={`Filter ${headerTitle}`}
+                            >
+                                <svg
+                                    className="h-3 w-3"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2"
+                                    stroke="currentColor"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                                    />
                                 </svg>
-                            </button>
+                            </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-64 p-2">
-                            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                                Filter {column.columnDef.header as string}
+                        <DropdownMenuContent className="w-60 p-2" align="end" sideOffset={6}>
+                            <DropdownMenuLabel className="px-1 text-xs font-semibold text-muted-foreground">
+                                Filter {headerTitle}
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {filterType === 'select' && filterOptions.length > 0 && (
-                                <div className="space-y-1">
+
+                            {canSearch && (
+                                <div className="p-1 space-y-1.5">
+                                    <label className="block text-[11px] font-medium text-muted-foreground">
+                                        Search {headerTitle}
+                                    </label>
+                                    <Input
+                                        placeholder={`Search ${headerTitle}...`}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                            onColumnSearchChange(column.id, e.target.value)
+                                        }
+                                        value={columnSearchValue}
+                                        className="h-7 text-xs"
+                                    />
+                                </div>
+                            )}
+
+                            {canFilter && filterType === 'select' && filterOptions.length > 0 && (
+                                <div className="space-y-0.5 p-1 max-h-[200px] overflow-y-auto">
                                     {filterOptions.map((option) => (
                                         <DropdownMenuItem
                                             key={option.value}
@@ -130,31 +171,40 @@ export function DataTableColumnHeader<TData extends RowData>({
                                                 e.preventDefault();
                                                 handleFilterSelect(option.value);
                                             }}
-                                            className={`flex items-center gap-2 px-2 py-1.5 text-sm ${currentFilterValue === option.value ? 'bg-primary/10 text-primary' : ''}`}
+                                            className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                                currentFilterValue === option.value
+                                                    ? 'bg-primary/10 text-primary font-medium'
+                                                    : 'hover:bg-accent'
+                                            }`}
                                         >
                                             <Checkbox
                                                 checked={currentFilterValue === option.value}
                                                 onCheckedChange={() => handleFilterSelect(option.value)}
-                                                className="h-4 w-4"
+                                                className="h-3.5 w-3.5"
                                             />
                                             <span className="truncate">{option.label}</span>
                                         </DropdownMenuItem>
                                     ))}
                                 </div>
                             )}
-                            {filterType === 'boolean' && (
-                                <div className="space-y-1">
+
+                            {canFilter && filterType === 'boolean' && (
+                                <div className="space-y-0.5 p-1">
                                     <DropdownMenuItem
                                         onSelect={(e) => {
                                             e.preventDefault();
                                             handleFilterBooleanChange(true);
                                         }}
-                                        className={`flex items-center gap-2 px-2 py-1.5 text-sm ${currentFilterValue === true ? 'bg-primary/10 text-primary' : ''}`}
+                                        className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                            currentFilterValue === true
+                                                ? 'bg-primary/10 text-primary font-medium'
+                                                : 'hover:bg-accent'
+                                        }`}
                                     >
                                         <Checkbox
                                             checked={currentFilterValue === true}
                                             onCheckedChange={() => handleFilterBooleanChange(true)}
-                                            className="h-4 w-4"
+                                            className="h-3.5 w-3.5"
                                         />
                                         <span className="truncate">Yes</span>
                                     </DropdownMenuItem>
@@ -163,33 +213,44 @@ export function DataTableColumnHeader<TData extends RowData>({
                                             e.preventDefault();
                                             handleFilterBooleanChange(false);
                                         }}
-                                        className={`flex items-center gap-2 px-2 py-1.5 text-sm ${currentFilterValue === false ? 'bg-primary/10 text-primary' : ''}`}
+                                        className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                            currentFilterValue === false
+                                                ? 'bg-primary/10 text-primary font-medium'
+                                                : 'hover:bg-accent'
+                                        }`}
                                     >
                                         <Checkbox
                                             checked={currentFilterValue === false}
                                             onCheckedChange={() => handleFilterBooleanChange(false)}
-                                            className="h-4 w-4"
+                                            className="h-3.5 w-3.5"
                                         />
                                         <span className="truncate">No</span>
                                     </DropdownMenuItem>
                                 </div>
                             )}
-                            {filterType === 'text' && (
-                                <div className="space-y-2">
+
+                            {canFilter && filterType === 'text' && (
+                                <div className="p-1 space-y-1.5">
+                                    <label className="block text-[11px] font-medium text-muted-foreground">
+                                        Filter value
+                                    </label>
                                     <Input
-                                        placeholder={`Filter ${column.columnDef.header as string}...`}
+                                        placeholder={`Filter ${headerTitle}...`}
                                         value={filterInputValue}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterTextChange(e.target.value)}
-                                        className="w-full"
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                            handleFilterTextChange(e.target.value)
+                                        }
+                                        className="h-7 text-xs"
                                     />
                                 </div>
                             )}
-                            {isFilterActive && (
+
+                            {(isFilterActive || columnSearchValue) && (
                                 <>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         onClick={handleClearFilter}
-                                        className="text-sm text-destructive"
+                                        className="text-xs text-destructive hover:bg-destructive/10 cursor-pointer font-medium px-2 py-1 rounded"
                                     >
                                         Clear filter
                                     </DropdownMenuItem>
@@ -199,6 +260,6 @@ export function DataTableColumnHeader<TData extends RowData>({
                     </DropdownMenu>
                 )}
             </div>
-        </th>
+        </TableHead>
     );
 }

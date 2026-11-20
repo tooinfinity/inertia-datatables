@@ -5,7 +5,9 @@ import type {
     ColumnFiltersState,
     ColumnVisibilityState,
     PaginationState,
+    Row,
     RowData,
+    RowSelectionState,
     SortingState,
 } from '@tanstack/react-table';
 import type { DataTableFeatures } from './table-features';
@@ -167,6 +169,10 @@ export interface DataTableOptions<TData extends RowData = Record<string, unknown
     visitOptions?: DataTableVisitOptions;
     /** Derives a stable row id from the row data. */
     rowKey?: (_row: TData, _index: number) => string;
+    /** Whether row selection is enabled, or a predicate receiving the row. */
+    enableRowSelection?: boolean | ((row: Row<DataTableFeatures, TData>) => boolean);
+    /** Callback fired when row selection changes. */
+    onRowSelectionChange?: (_selection: RowSelectionState) => void;
 }
 
 export type DataTableColumnDef<TData extends RowData = Record<string, unknown>> = ColumnDef<
@@ -179,3 +185,4 @@ export type DataTableSortingState = SortingState;
 export type DataTablePaginationState = PaginationState;
 export type DataTableColumnFiltersState = ColumnFiltersState;
 export type DataTableVisibilityState = ColumnVisibilityState;
+export type DataTableSelectionState = RowSelectionState;

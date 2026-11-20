@@ -25,6 +25,7 @@ vi.mock('@tanstack/react-table', () => ({
   columnVisibilityFeature: {},
   globalFilteringFeature: {},
   rowPaginationFeature: {},
+  rowSelectionFeature: {},
   rowSortingFeature: {},
   metaHelper: () => ({}),
   useTable: () => ({

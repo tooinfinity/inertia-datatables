@@ -1,7 +1,9 @@
 export { DataTable } from './data-table';
 export type { DataTableProps } from './data-table';
 export { DataTableToolbar } from './data-table-toolbar';
+export type { DataTableToolbarProps } from './data-table-toolbar';
 export { DataTablePagination } from './data-table-pagination';
+export type { DataTablePaginationProps } from './data-table-pagination';
 export { DataTableColumnHeader } from './data-table-column-header';
 export { DataTableColumnVisibility } from './data-table-column-visibility';
 export { DataTableEmpty } from './data-table-empty';
@@ -23,5 +25,6 @@ export type {
   DataTableState,
   DataTableOptions,
   DataTableVisitOptions,
+  DataTableSelectionState,
 } from './types';
 export type { DataTableColumnMeta, DataTableFeatures } from './table-features';
