@@ -165,7 +165,11 @@ describe('useDataTable', () => {
         act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenCalledWith(
-            '/users?page=2',
+            expect.stringContaining('per_page=25'),
+            expect.objectContaining({ only: ['data'] })
+        );
+        expect(router.visit).toHaveBeenCalledWith(
+            expect.stringContaining('page=2'),
             expect.objectContaining({ only: ['data'] })
         );
     });
@@ -184,7 +188,11 @@ describe('useDataTable', () => {
         act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenCalledWith(
-            '/users?page=2',
+            expect.stringContaining('per_page=25'),
+            expect.objectContaining({ only: ['data'] })
+        );
+        expect(router.visit).toHaveBeenCalledWith(
+            expect.stringContaining('page=2'),
             expect.objectContaining({ only: ['data'] })
         );
     });
@@ -205,7 +213,19 @@ describe('useDataTable', () => {
         vi.advanceTimersByTime(300);
 
         expect(router.visit).toHaveBeenCalledWith(
-            '/users?filters%5Bstatus%5D=active&search=test&page=1',
+            expect.stringContaining('filters%5Bstatus%5D=active'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenCalledWith(
+            expect.stringContaining('search=test'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenCalledWith(
+            expect.stringContaining('page=1'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenCalledWith(
+            expect.stringContaining('per_page=25'),
             expect.any(Object)
         );
     });
@@ -246,14 +266,30 @@ describe('useDataTable', () => {
         vi.advanceTimersByTime(300);
 
         expect(router.visit).toHaveBeenLastCalledWith(
-            '/users?search=alice&page=1',
+            expect.stringContaining('search=alice'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('page=1'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('per_page=25'),
             expect.any(Object)
         );
 
         act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenLastCalledWith(
-            '/users?search=alice&page=2',
+            expect.stringContaining('search=alice'),
+            expect.objectContaining({ only: ['data'] })
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('page=2'),
+            expect.objectContaining({ only: ['data'] })
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('per_page=25'),
             expect.objectContaining({ only: ['data'] })
         );
     });
@@ -276,14 +312,22 @@ describe('useDataTable', () => {
         vi.advanceTimersByTime(300);
 
         expect(router.visit).toHaveBeenLastCalledWith(
-            '/users?page=1',
+            expect.stringContaining('page=1'),
+            expect.any(Object)
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('per_page=25'),
             expect.any(Object)
         );
 
         act(() => capturedResult!.handlePageChange(2));
 
         expect(router.visit).toHaveBeenLastCalledWith(
-            '/users?page=2',
+            expect.stringContaining('page=2'),
+            expect.objectContaining({ only: ['data'] })
+        );
+        expect(router.visit).toHaveBeenLastCalledWith(
+            expect.stringContaining('per_page=25'),
             expect.objectContaining({ only: ['data'] })
         );
     });

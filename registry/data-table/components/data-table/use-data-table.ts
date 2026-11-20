@@ -20,6 +20,7 @@ import type {
     DataTableColumnDef,
     DataTableErrors,
     DataTableHttpException,
+    DataTableQuery,
 } from './types';
 import { dataTableFeatures, type DataTableFeatures } from './table-features';
 import { defaultCellFormatter } from './cell-formatters';
@@ -49,6 +50,51 @@ const DEFAULT_QUERY_KEYS: QueryKeys = {
     sort: 'sort',
     filters: 'filters',
 };
+
+/**
+ * Seeds DataTable-owned query parameters from the initial server state into the
+ * endpoint query, preserving any parameters already configured on the endpoint
+ * URL itself. Empty values are skipped so they do not pollute the URL.
+ */
+function seedEndpointQuery(
+    params: URLSearchParams,
+    query: DataTableQuery,
+    keys: QueryKeys
+): URLSearchParams {
+    const setIfMissing = (key: string, value: string | undefined) => {
+        if (value !== '' && value !== null && value !== undefined && !params.has(key)) {
+            params.set(key, value);
+        }
+    };
+
+    setIfMissing(keys.page, String(query.page));
+    setIfMissing(keys.per_page, String(query.per_page));
+    setIfMissing(keys.search, query.search);
+
+    const sortString = query.sort
+        .map((s) => (s.direction === 'desc' ? `-${s.column}` : s.column))
+        .join(',');
+    setIfMissing(keys.sort, sortString || undefined);
+
+    query.searches.forEach((s) => {
+        setIfMissing(`${keys.searches}[${s.column}]`, s.value);
+    });
+
+    query.filters.forEach((f) => {
+        const key = `${keys.filters}[${f.column}]`;
+        if (Array.isArray(f.value)) {
+            f.value.forEach((v) => {
+                if (!params.has(`${key}[]`)) {
+                    params.append(`${key}[]`, String(v));
+                }
+            });
+        } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
+            setIfMissing(key, String(f.value));
+        }
+    });
+
+    return params;
+}
 
 /** Id of the client side column that renders the row actions. */
 export const DATA_TABLE_ACTIONS_COLUMN_ID = '__actions';
@@ -141,10 +187,13 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
 
     const debounceMs = initialData.config?.debounce ?? 300;
     const perPageOptions = initialData.config?.per_page_options ?? [10, 25, 50, 100];
-    const KEYS: QueryKeys = {
-        ...DEFAULT_QUERY_KEYS,
-        ...(initialData.config?.query_keys),
-    };
+    const KEYS: QueryKeys = useMemo<QueryKeys>(
+        () => ({
+            ...DEFAULT_QUERY_KEYS,
+            ...(initialData.config?.query_keys),
+        }),
+        [initialData.config?.query_keys]
+    );
 
     const initialColumnVisibility = useMemo<Record<string, boolean>>(() => {
         const visibility: Record<string, boolean> = {};
@@ -324,8 +373,15 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             let currentParams: URLSearchParams;
             if (url) {
                 if (endpointUrlRef.current !== url) {
-                    // New endpoint: start from its own query parameters.
-                    endpointQueryRef.current = new URLSearchParams(endpointUrl.search);
+                    // New endpoint: start from its own query parameters, then
+                    // seed any DataTable-owned parameters from the initial
+                    // server state that are not already configured on the
+                    // endpoint URL itself.
+                    endpointQueryRef.current = seedEndpointQuery(
+                        new URLSearchParams(endpointUrl.search),
+                        initialData.query,
+                        KEYS
+                    );
                     endpointUrlRef.current = url;
                 }
                 currentParams = new URLSearchParams(endpointQueryRef.current!.toString());
@@ -397,7 +453,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 },
             });
         },
-        [dataPropName, visitOptions, url]
+        [dataPropName, visitOptions, url, KEYS, initialData.query]
     );
 
     const debouncedVisit = useCallback(
@@ -647,7 +703,62 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         if (shouldSyncSearches) {
             setColumnSearches(incomingSearches);
         }
-    }, [initialData.query]);
+
+        // Reconcile the retained endpoint query with the authoritative server
+        // state so pagination and other visits use the current values rather
+        // than a stale cached value. Pending debounced drafts are preserved so
+        // in-flight typing is not reverted by a server response.
+        if (url && endpointQueryRef.current) {
+            const nextQuery = new URLSearchParams(endpointQueryRef.current.toString());
+
+            // Page and page size are always authoritative.
+            nextQuery.set(KEYS.page, String(initialData.query.page));
+            nextQuery.set(KEYS.per_page, String(initialData.query.per_page));
+
+            // Sorting is always authoritative.
+            const sortString = initialData.query.sort
+                .map((s) => (s.direction === 'desc' ? `-${s.column}` : s.column))
+                .join(',');
+            if (sortString) {
+                nextQuery.set(KEYS.sort, sortString);
+            } else {
+                nextQuery.delete(KEYS.sort);
+            }
+
+            if (shouldSyncSearch) {
+                if (incomingSearch) {
+                    nextQuery.set(KEYS.search, incomingSearch);
+                } else {
+                    nextQuery.delete(KEYS.search);
+                }
+            }
+
+            if (shouldSyncSearches) {
+                Array.from(nextQuery.keys())
+                    .filter((key) => key.startsWith(`${KEYS.searches}[`))
+                    .forEach((key) => nextQuery.delete(key));
+                Object.entries(incomingSearches).forEach(([column, value]) => {
+                    nextQuery.set(`${KEYS.searches}[${column}]`, value);
+                });
+            }
+
+            if (shouldSyncFilters) {
+                Array.from(nextQuery.keys())
+                    .filter((key) => key.startsWith(`${KEYS.filters}[`))
+                    .forEach((key) => nextQuery.delete(key));
+                initialData.query.filters.forEach((f) => {
+                    const key = `${KEYS.filters}[${f.column}]`;
+                    if (Array.isArray(f.value)) {
+                        f.value.forEach((v) => nextQuery.append(`${key}[]`, String(v)));
+                    } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
+                        nextQuery.set(key, String(f.value));
+                    }
+                });
+            }
+
+            endpointQueryRef.current = nextQuery;
+        }
+    }, [initialData.query, KEYS, url]);
 
     useEffect(() => {
         return () => {
