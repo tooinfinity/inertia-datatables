@@ -179,7 +179,7 @@ describe('Dialect: boolean filters', function (): void {
         createUser(['name' => 'User', 'is_admin' => false]);
 
         $result = DataTable::query(User::query())
-            ->columns([Column::make('name'), Column::make('is_admin')->filterable()])
+            ->columns([Column::make('name'), Column::make('is_admin')->filterable()->filterType('boolean')])
             ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('is_admin', 'true')]));
 
         expect($result->paginator->total())->toBe(1)
@@ -191,7 +191,7 @@ describe('Dialect: boolean filters', function (): void {
         createUser(['name' => 'User', 'is_admin' => false]);
 
         $result = DataTable::query(User::query())
-            ->columns([Column::make('name'), Column::make('is_admin')->filterable()])
+            ->columns([Column::make('name'), Column::make('is_admin')->filterable()->filterType('boolean')])
             ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('is_admin', 'false')]));
 
         expect($result->paginator->total())->toBe(1)

@@ -838,13 +838,13 @@ The package implements strict allow-lists for both requests and response data:
 | `"*value"` | `LIKE '%value'` (wildcard prefix) |
 | `"value*"` | `LIKE 'value%'` (wildcard suffix) |
 | `"*value*"` | `LIKE '%value%'` (wildcard both sides) |
-| `"true"` / `"false"` / `"1"` / `"0"` | Boolean exact match (automatically detected for any filterable column) |
+| `"true"` / `"false"` / `"1"` / `"0"` | Boolean exact match when the column opts in with `->filterType('boolean')` |
 | Other strings | Exact match `WHERE column = value` |
 | Array (e.g., `filters[status][]=a&filters[status][]=b`) | `WHERE column IN (a, b)` — multi-value filter, supported for all filterable columns; for `select` type, values are validated against `filter_options` |
 
 > **Note:** Array filters are limited by `max_filter_values` config (default: 20). Nested arrays are rejected. String values within arrays are truncated to `max_filter_value_length`.
 >
-> **Note:** Boolean values (`"true"`, `"false"`, `"1"`, `"0"`) are automatically converted to boolean for any filterable column. Explicit `filterType('boolean')` is still supported for backward compatibility.
+> **Note:** Boolean values (`"true"`, `"false"`, `"1"`, `"0"`) are only coerced to boolean for columns that opt in with `->filterType('boolean')`. On every other filterable column they are treated as ordinary literal string values, so a string column can match the exact values `"0"`, `"1"`, `"true"` and `"false"`.
 
 ### Response Structure (Server → Client)
 

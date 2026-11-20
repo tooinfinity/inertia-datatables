@@ -132,6 +132,81 @@ describe('QueryProcessor', function (): void {
         expect($result->paginator->first()->is_admin)->toBeFalsy();
     });
 
+    it('matches the exact string value "0" on a string column', function () use ($processor): void {
+        createUser(['name' => 'Zero', 'status' => '0']);
+        createUser(['name' => 'One', 'status' => '1']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('status', '0')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+
+        $result = $processor->process($query, $request);
+
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->status)->toBe('0');
+    });
+
+    it('matches the exact string value "1" on a string column', function () use ($processor): void {
+        createUser(['name' => 'Zero', 'status' => '0']);
+        createUser(['name' => 'One', 'status' => '1']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('status', '1')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+
+        $result = $processor->process($query, $request);
+
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->status)->toBe('1');
+    });
+
+    it('matches the exact string value "true" on a string column', function () use ($processor): void {
+        createUser(['name' => 'True', 'status' => 'true']);
+        createUser(['name' => 'False', 'status' => 'false']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('status', 'true')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+
+        $result = $processor->process($query, $request);
+
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->status)->toBe('true');
+    });
+
+    it('matches the exact string value "false" on a string column', function () use ($processor): void {
+        createUser(['name' => 'True', 'status' => 'true']);
+        createUser(['name' => 'False', 'status' => 'false']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('status', 'false')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+
+        $result = $processor->process($query, $request);
+
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->status)->toBe('false');
+    });
+
+    it('matches an exact capitalized string value on a string column', function () use ($processor): void {
+        createUser(['name' => 'True', 'status' => 'True']);
+        createUser(['name' => 'False', 'status' => 'False']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $query = User::query();
+        $filters = new TooInfinity\InertiaDataTables\Filtering\FilterCollection([new TooInfinity\InertiaDataTables\Filtering\Filter('status', 'True')]);
+        $request = new DataTableRequest(1, 25, '', new TooInfinity\InertiaDataTables\Sorting\SortCollection, new TooInfinity\InertiaDataTables\Searching\SearchCollection, $filters);
+
+        $result = $processor->process($query, $request);
+
+        expect($result->paginator->total())->toBe(1);
+        expect($result->paginator->first()->status)->toBe('True');
+    });
+
     it('applies null filter', function () use ($processor): void {
         createUser(['name' => 'John', 'status' => 'active']);
         createUser(['name' => 'Jane', 'status' => null]);

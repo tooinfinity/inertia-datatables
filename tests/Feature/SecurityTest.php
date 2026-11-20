@@ -551,7 +551,7 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
     it('filters boolean values correctly', function (): void {
         makeTestRoute('/security-filter-boolean', [
             Column::make('name')->sortable(),
-            Column::make('is_admin')->filterable(),
+            Column::make('is_admin')->filterable()->filterType('boolean'),
         ]);
 
         // Boolean string values ("true"/"false"/"1"/"0") are automatically
@@ -569,7 +569,7 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
     it('filters boolean values with false string', function (): void {
         makeTestRoute('/security-filter-boolean-false', [
             Column::make('name')->sortable(),
-            Column::make('is_admin')->filterable(),
+            Column::make('is_admin')->filterable()->filterType('boolean'),
         ]);
 
         createUser(['name' => 'John', 'is_admin' => true]);
@@ -585,7 +585,7 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
     it('filters boolean values with 1 string', function (): void {
         makeTestRoute('/security-filter-boolean-1', [
             Column::make('name')->sortable(),
-            Column::make('is_admin')->filterable(),
+            Column::make('is_admin')->filterable()->filterType('boolean'),
         ]);
 
         createUser(['name' => 'John', 'is_admin' => true]);
@@ -601,7 +601,7 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
     it('filters boolean values with 0 string', function (): void {
         makeTestRoute('/security-filter-boolean-0', [
             Column::make('name')->sortable(),
-            Column::make('is_admin')->filterable(),
+            Column::make('is_admin')->filterable()->filterType('boolean'),
         ]);
 
         createUser(['name' => 'John', 'is_admin' => true]);
@@ -617,7 +617,7 @@ describe('Security: Filter Semantics (null, not_null, *)', function (): void {
     it('filters boolean values case-insensitively', function (): void {
         makeTestRoute('/security-filter-boolean-case', [
             Column::make('name')->sortable(),
-            Column::make('is_admin')->filterable(),
+            Column::make('is_admin')->filterable()->filterType('boolean'),
         ]);
 
         createUser(['name' => 'John', 'is_admin' => true]);

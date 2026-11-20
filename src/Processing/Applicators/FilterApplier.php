@@ -123,8 +123,11 @@ final readonly class FilterApplier
             $value = $canonical;
         }
 
-        // Handle boolean string values ("true"/"false"/"1"/"0") for any filterable column
-        if (is_string($value)) {
+        // Handle boolean string values ("true"/"false"/"1"/"0") only for columns
+        // that explicitly opt in with filterType('boolean'). For every other
+        // column these are ordinary literal string values, so a string column can
+        // still match the exact values "0", "1", "true" and "false".
+        if (is_string($value) && $column->filterType === 'boolean') {
             $lowerValue = strtolower($value);
             if (in_array($lowerValue, ['true', '1'], true)) {
                 $query->where($target, true);
