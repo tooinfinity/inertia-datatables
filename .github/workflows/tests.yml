@@ -148,7 +148,7 @@ jobs:
             image: postgres:16
             port: 5432
             username: postgres
-            health_cmd: pg_isready
+            health_cmd: pg_isready -U postgres
 
     name: DB ${{ matrix.database }}
 
