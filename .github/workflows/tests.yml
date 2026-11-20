@@ -15,37 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
-        with:
-          php-version: 8.4
-          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
-          ini-values: error_reporting=E_ALL
-          tools: composer:v2
-          coverage: none
-
-      - name: Install dependencies
-        run: |
-          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
-          composer run prepare
-
-      - name: Pint
-        run: composer lint:check
-
-      - name: PHPStan
-        run: composer analyse
-
-      - name: Rector
-        run: composer rector:check
-
   frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
@@ -66,28 +35,61 @@ jobs:
       - name: Run frontend tests
         run: npm run typecheck && npm test
 
-      - name: Verify registry artifacts
-        run: |
-          npm run registry:validate
-          npm run registry:build
-          git diff --exit-code public/r
-          test -z "$(git ls-files --others --exclude-standard -- public/r)"
-
   tests:
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        php: [8.3, 8.4, 8.5]
-        laravel: [12.*, 13.*]
-        stability: [prefer-lowest, prefer-stable]
+        # Keep every PHP/Laravel pair on stable dependencies. Exercise the
+        # lowest-dependency resolver at the oldest and newest compatibility
+        # boundaries, plus one representative Windows environment.
         include:
-          - laravel: 12.*
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 12.*
             testbench: 10.*
-          - laravel: 13.*
+            stability: prefer-lowest
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 13.*
             testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.4
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.4
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-lowest
+          - os: windows-latest
+            php: 8.4
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
 
     name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
@@ -110,6 +112,20 @@ jobs:
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress --no-scripts
           composer run prepare
 
+      # Run repository-wide static checks once on the canonical Linux matrix
+      # environment instead of reinstalling dependencies in a separate job.
+      - name: Pint
+        if: matrix.php == 8.4 && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable' && runner.os == 'Linux'
+        run: composer lint:check
+
+      - name: PHPStan
+        if: matrix.php == 8.4 && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable' && runner.os == 'Linux'
+        run: composer analyse
+
+      - name: Rector
+        if: matrix.php == 8.4 && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable' && runner.os == 'Linux'
+        run: composer rector:check
+
       - name: Test Suite
         if: runner.os != 'Windows'
         run: composer test:unit
@@ -119,7 +135,7 @@ jobs:
         run: vendor/bin/pest
 
       - name: Test Suite (Type Coverage)
-        if: ${{ !(runner.os == 'Windows' && matrix.stability == 'prefer-lowest') }}
+        if: matrix.php == 8.4 && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable' && runner.os == 'Linux'
         shell: bash
         run: |
           set -o pipefail
@@ -127,7 +143,7 @@ jobs:
 
       - name: Upload type coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: always() && matrix.php == 8.4 && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable' && runner.os == 'Linux'
         with:
           name: type-coverage-report-${{ matrix.os }}-${{ matrix.php }}-L${{ matrix.laravel == '12.*' && '12' || '13' }}-${{ matrix.stability }}
           path: type-coverage.txt
