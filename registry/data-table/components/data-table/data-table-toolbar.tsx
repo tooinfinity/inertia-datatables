@@ -114,17 +114,24 @@ export function DataTableFilterChip({
 
     // Compares a restored filter value (often a string from the query string)
     // against an option value (which may be a number for integer-backed enums).
+    // Array values (multi-value filters) match when any member equals the option.
     const filterValueMatches = (current: unknown, optionValue: string | number): boolean => {
-        if (current === optionValue) {
-            return true;
+        const matches = (value: unknown): boolean => {
+            if (value === optionValue) {
+                return true;
+            }
+            if (typeof value === 'string' && typeof optionValue === 'number') {
+                return value === String(optionValue);
+            }
+            if (typeof value === 'number' && typeof optionValue === 'string') {
+                return String(value) === optionValue;
+            }
+            return false;
+        };
+        if (Array.isArray(current)) {
+            return current.some((member) => matches(member));
         }
-        if (typeof current === 'string' && typeof optionValue === 'number') {
-            return current === String(optionValue);
-        }
-        if (typeof current === 'number' && typeof optionValue === 'string') {
-            return String(current) === optionValue;
-        }
-        return false;
+        return matches(current);
     };
 
     return (
@@ -138,7 +145,7 @@ export function DataTableFilterChip({
                     aria-haspopup="true"
                     aria-expanded={menuOpen}
                 >
-                    {label} • {activeCount} selected
+                    {activeCount > 0 ? `${label} • ${activeCount} selected` : label}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-60 p-2" align="end" sideOffset={6}>
@@ -301,21 +308,6 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
         return map;
     }, [table]);
 
-    const activeChipColumns = useMemo(() => {
-        const ids = new Set<string>();
-        Object.keys(filters).forEach((id) => {
-            if (isFilterActive(filters[id])) {
-                ids.add(id);
-            }
-        });
-        Object.keys(columnSearches).forEach((id) => {
-            if (columnSearches[id]) {
-                ids.add(id);
-            }
-        });
-        return Array.from(ids);
-    }, [filters, columnSearches]);
-
     return (
         <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-2">
@@ -351,9 +343,12 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
                         </svg>
                     </Button>
                 )}
-                {activeChipColumns.map((columnId) => {
-                    const info = columnMeta.get(columnId);
-                    if (!info) {
+                {/* Render a filter chip for every eligible column (searchable or
+                   filterable), active or not. Active columns show their selected
+                   count; inactive columns stay as an "add filter" entrypoint so
+                   users can always start a new column filter or search. */}
+                {Array.from(columnMeta.entries()).map(([columnId, info]) => {
+                    if (!info.canSearch && !info.canFilter) {
                         return null;
                     }
                     return (

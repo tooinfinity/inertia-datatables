@@ -370,6 +370,32 @@ describe('DataTable customization', () => {
         );
 
         expect(screen.getByRole('button', { name: 'Status • 2 selected' })).toBeInTheDocument();
+
+        // Opening the chip should show the restored multi-value options as checked.
+        fireEvent.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Archived' })).not.toBeChecked();
+    });
+
+    it('keeps a filter entrypoint for eligible columns when no filter is active', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: true, hidden: false, filter_type: 'text' },
+                    ],
+                })}
+            />
+        );
+
+        // No filters are active, but the column still offers an entrypoint to
+        // start filtering or searching beside the global search field.
+        expect(screen.getByRole('button', { name: 'Name' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Name' }));
+        expect(screen.getByLabelText('Search Name')).toBeInTheDocument();
+        expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
     });
 
     it('renders 0 to 0 of 0 results when total is 0', () => {
