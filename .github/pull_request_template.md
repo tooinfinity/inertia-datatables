@@ -21,7 +21,7 @@ Relevant issue: #NNN
 Run and confirm:
 
 - [ ] `composer test` passes (PHPStan, Pint, Rector dry-run, Pest type-coverage at 100%, unit tests)
-- [ ] `composer lint` passes
+- [ ] `composer lint:check` passes
 - [ ] Tests cover the changed behavior (new or updated tests)
 - [ ] Manually verified in a Laravel application, if user-facing
 
