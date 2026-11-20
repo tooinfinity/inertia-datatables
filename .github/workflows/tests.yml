@@ -2,9 +2,6 @@ name: tests
 
 on:
   push:
-    branches:
-      - main
-      - '*.x'
   pull_request:
 
 permissions:
