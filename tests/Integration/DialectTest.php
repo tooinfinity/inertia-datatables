@@ -199,6 +199,63 @@ describe('Dialect: boolean filters', function (): void {
     });
 });
 
+describe('Dialect: literal string values on string columns', function (): void {
+    // These pin the fix for #73: a filterable string column must still match the
+    // exact literal values "0", "1", "true" and "false" instead of being coerced
+    // to booleans. Runs against SQLite, MySQL and PostgreSQL via CI.
+    it('matches the exact string value "0" on a string column', function (): void {
+        createUser(['name' => 'Zero', 'status' => '0']);
+        createUser(['name' => 'One', 'status' => '1']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $result = DataTable::query(User::query())
+            ->columns([Column::make('name'), Column::make('status')->filterable()])
+            ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('status', '0')]));
+
+        expect($result->paginator->total())->toBe(1)
+            ->and($result->paginator->first()->status)->toBe('0');
+    });
+
+    it('matches the exact string value "1" on a string column', function (): void {
+        createUser(['name' => 'Zero', 'status' => '0']);
+        createUser(['name' => 'One', 'status' => '1']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $result = DataTable::query(User::query())
+            ->columns([Column::make('name'), Column::make('status')->filterable()])
+            ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('status', '1')]));
+
+        expect($result->paginator->total())->toBe(1)
+            ->and($result->paginator->first()->status)->toBe('1');
+    });
+
+    it('matches the exact string value "true" on a string column', function (): void {
+        createUser(['name' => 'True', 'status' => 'true']);
+        createUser(['name' => 'False', 'status' => 'false']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $result = DataTable::query(User::query())
+            ->columns([Column::make('name'), Column::make('status')->filterable()])
+            ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('status', 'true')]));
+
+        expect($result->paginator->total())->toBe(1)
+            ->and($result->paginator->first()->status)->toBe('true');
+    });
+
+    it('matches the exact string value "false" on a string column', function (): void {
+        createUser(['name' => 'True', 'status' => 'true']);
+        createUser(['name' => 'False', 'status' => 'false']);
+        createUser(['name' => 'Active', 'status' => 'active']);
+
+        $result = DataTable::query(User::query())
+            ->columns([Column::make('name'), Column::make('status')->filterable()])
+            ->handle(requestFor(filters: [new TooInfinity\InertiaDataTables\Filtering\Filter('status', 'false')]));
+
+        expect($result->paginator->total())->toBe(1)
+            ->and($result->paginator->first()->status)->toBe('false');
+    });
+});
+
 describe('Dialect: connection metadata', function (): void {
     it('runs against the configured driver', function (): void {
         $driver = DB::connection()->getDriverName();
