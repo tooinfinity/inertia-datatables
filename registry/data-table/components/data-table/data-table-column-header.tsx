@@ -50,6 +50,11 @@ export function DataTableColumnHeader<TData extends RowData>({
     const headerTitle = typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
     const [filterInputValue, setFilterInputValue] = useState<string>('');
+    const [filterMenuOpen, setFilterMenuOpen] = useState<boolean>(false);
+
+    const toggleFilterMenu = () => {
+        setFilterMenuOpen((open) => !open);
+    };
 
     useEffect(() => {
         if (filterType === 'text' && typeof currentFilterValue === 'string') {
@@ -100,7 +105,19 @@ export function DataTableColumnHeader<TData extends RowData>({
     };
 
     return (
-        <TableHead className="px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
+        <TableHead
+            className="px-4 py-3 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"
+            scope="col"
+            aria-sort={
+                canSort
+                    ? column.getIsSorted() === 'asc'
+                        ? 'ascending'
+                        : column.getIsSorted() === 'desc'
+                        ? 'descending'
+                        : 'none'
+                    : undefined
+            }
+        >
             <div className="flex items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1 min-w-0">
                     {canSort ? (
@@ -113,11 +130,11 @@ export function DataTableColumnHeader<TData extends RowData>({
                         >
                             <span className="truncate">{flexRender(column.columnDef.header!, header.getContext())}</span>
                             {column.getIsSorted() === 'asc' ? (
-                                <span className="ml-1 text-xs">↑</span>
+                                <span className="ml-1 text-xs" aria-hidden="true">↑</span>
                             ) : column.getIsSorted() === 'desc' ? (
-                                <span className="ml-1 text-xs">↓</span>
+                                <span className="ml-1 text-xs" aria-hidden="true">↓</span>
                             ) : (
-                                <span className="ml-1 text-xs text-muted-foreground/60">↕</span>
+                                <span className="ml-1 text-xs text-muted-foreground/60" aria-hidden="true">↕</span>
                             )}
                         </Button>
                     ) : (
@@ -131,12 +148,15 @@ export function DataTableColumnHeader<TData extends RowData>({
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={toggleFilterMenu}
                                 className={`h-6 w-6 p-0 rounded hover:bg-accent ${
                                     isFilterActive || columnSearchValue
                                         ? 'text-primary bg-primary/10 hover:bg-primary/20'
                                         : 'text-muted-foreground hover:text-foreground'
                                 }`}
                                 aria-label={`Filter ${headerTitle}`}
+                                aria-haspopup="true"
+                                aria-expanded={filterMenuOpen}
                             >
                                 <svg
                                     className="h-3 w-3"
@@ -163,10 +183,14 @@ export function DataTableColumnHeader<TData extends RowData>({
 
                             {canSearch && (
                                 <div className="p-1 space-y-1.5">
-                                    <label className="block text-[11px] font-medium text-muted-foreground">
+                                    <label
+                                        className="block text-[11px] font-medium text-muted-foreground"
+                                        htmlFor={`column-search-${column.id}`}
+                                    >
                                         Search {headerTitle}
                                     </label>
                                     <Input
+                                        id={`column-search-${column.id}`}
                                         placeholder={`Search ${headerTitle}...`}
                                         onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                             onColumnSearchChange(column.id, e.target.value)
@@ -193,6 +217,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                                             }`}
                                         >
                                             <Checkbox
+                                                aria-label={option.label}
                                                 checked={filterValueMatches(currentFilterValue, option.value)}
                                                 onCheckedChange={() => handleFilterSelect(option.value)}
                                                 className="h-3.5 w-3.5"
@@ -217,6 +242,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                                         }`}
                                     >
                                         <Checkbox
+                                            aria-label="Yes"
                                             checked={currentFilterValue === true}
                                             onCheckedChange={() => handleFilterBooleanChange(true)}
                                             className="h-3.5 w-3.5"
@@ -235,6 +261,7 @@ export function DataTableColumnHeader<TData extends RowData>({
                                         }`}
                                     >
                                         <Checkbox
+                                            aria-label="No"
                                             checked={currentFilterValue === false}
                                             onCheckedChange={() => handleFilterBooleanChange(false)}
                                             className="h-3.5 w-3.5"
@@ -246,10 +273,15 @@ export function DataTableColumnHeader<TData extends RowData>({
 
                             {canFilter && filterType === 'text' && (
                                 <div className="p-1 space-y-1.5">
-                                    <label className="block text-[11px] font-medium text-muted-foreground">
+                                    <label
+                                        className="block text-[11px] font-medium text-muted-foreground"
+                                        htmlFor={`filter-value-${column.id}`}
+                                    >
                                         Filter value
                                     </label>
                                     <Input
+                                        id={`filter-value-${column.id}`}
+                                        aria-label={`Filter ${headerTitle} value`}
                                         placeholder={`Filter ${headerTitle}...`}
                                         value={filterInputValue}
                                         onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
