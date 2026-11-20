@@ -135,7 +135,7 @@ export function DataTableFilterChip({
     };
 
     return (
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
                 <Button
                     variant="outline"
@@ -148,7 +148,8 @@ export function DataTableFilterChip({
                     {activeCount > 0 ? `${label} • ${activeCount} selected` : label}
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-60 p-2" align="end" sideOffset={6}>
+            {menuOpen && (
+                <DropdownMenuContent className="w-60 p-2" align="end" sideOffset={6}>
                 <DropdownMenuLabel className="px-1 text-xs font-semibold text-muted-foreground">
                     Filter {label}
                 </DropdownMenuLabel>
@@ -179,8 +180,7 @@ export function DataTableFilterChip({
                         {filterOptions.map((option) => (
                             <DropdownMenuItem
                                 key={option.value}
-                                onSelect={(e) => {
-                                    e.preventDefault();
+                                onSelect={() => {
                                     handleFilterSelect(option.value);
                                 }}
                                 className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
@@ -192,7 +192,6 @@ export function DataTableFilterChip({
                                 <Checkbox
                                     aria-label={option.label}
                                     checked={filterValueMatches(filterValue, option.value)}
-                                    onCheckedChange={() => handleFilterSelect(option.value)}
                                     className="h-3.5 w-3.5"
                                 />
                                 <span className="truncate">{option.label}</span>
@@ -204,8 +203,7 @@ export function DataTableFilterChip({
                 {canFilter && filterType === 'boolean' && (
                     <div className="space-y-0.5 p-1">
                         <DropdownMenuItem
-                            onSelect={(e) => {
-                                e.preventDefault();
+                            onSelect={() => {
                                 handleFilterBooleanChange(true);
                             }}
                             className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
@@ -215,14 +213,12 @@ export function DataTableFilterChip({
                             <Checkbox
                                 aria-label="Yes"
                                 checked={filterValue === true}
-                                onCheckedChange={() => handleFilterBooleanChange(true)}
                                 className="h-3.5 w-3.5"
                             />
                             <span className="truncate">Yes</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                            onSelect={(e) => {
-                                e.preventDefault();
+                            onSelect={() => {
                                 handleFilterBooleanChange(false);
                             }}
                             className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
@@ -232,7 +228,6 @@ export function DataTableFilterChip({
                             <Checkbox
                                 aria-label="No"
                                 checked={filterValue === false}
-                                onCheckedChange={() => handleFilterBooleanChange(false)}
                                 className="h-3.5 w-3.5"
                             />
                             <span className="truncate">No</span>
@@ -269,6 +264,7 @@ export function DataTableFilterChip({
                     Clear filter
                 </DropdownMenuItem>
             </DropdownMenuContent>
+            )}
         </DropdownMenu>
     );
 }
@@ -301,7 +297,7 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
                 label,
                 canSearch: meta?.searchable === true,
                 canFilter: meta?.filterable === true,
-                filterType: meta?.filter_type,
+                filterType: meta?.filter_type ?? 'text',
                 filterOptions: meta?.filter_options ?? [],
             });
         });

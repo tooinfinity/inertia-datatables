@@ -393,9 +393,57 @@ describe('DataTable customization', () => {
         // start filtering or searching beside the global search field.
         expect(screen.getByRole('button', { name: 'Name' })).toBeInTheDocument();
 
+        // Closed state: filter controls are hidden until the chip is opened.
+        expect(screen.queryByLabelText('Search Name')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Filter Name value')).not.toBeInTheDocument();
+
         fireEvent.click(screen.getByRole('button', { name: 'Name' }));
         expect(screen.getByLabelText('Search Name')).toBeInTheDocument();
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
+    });
+
+    it('toggles the filter dropdown open and closed, preserving aria-expanded', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        {
+                            name: 'status',
+                            label: 'Status',
+                            sortable: false,
+                            searchable: false,
+                            filterable: true,
+                            hidden: false,
+                            filter_type: 'select',
+                            filter_options: [
+                                { value: 'active', label: 'Active' },
+                                { value: 'inactive', label: 'Inactive' },
+                            ],
+                        },
+                    ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'status', value: 'active' }],
+                    },
+                })}
+            />
+        );
+
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+
+        fireEvent.click(chip);
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+
+        fireEvent.click(chip);
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
     });
 
     it('renders 0 to 0 of 0 results when total is 0', () => {
