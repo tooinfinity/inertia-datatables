@@ -252,7 +252,7 @@ describe('DataTable customization', () => {
         const wrapper = table.parentElement;
 
         expect(wrapper).not.toBeNull();
-        expect(wrapper!.className).toContain('overflow-x-auto');
+        expect(wrapper).toHaveClass('overflow-x-auto');
         expect(wrapper!.className).toContain('rounded-md');
         expect(wrapper!.className).toContain('border');
     });

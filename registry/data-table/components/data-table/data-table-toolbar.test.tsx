@@ -24,13 +24,15 @@ describe('DataTableToolbar narrow-viewport behavior', () => {
                 search=""
                 onSearchChange={vi.fn()}
                 isFiltered={false}
-            />
+            >
+                <button>Custom action</button>
+            </DataTableToolbar>
         );
 
         const search = screen.getByLabelText('Global search');
 
-        const container = search.closest('[class*="flex-wrap"]');
-        expect(container).toBeInTheDocument();
-        expect(container!.className).toContain('flex-wrap');
+        const container = search.parentElement;
+        expect(container).toHaveClass('flex-wrap');
+        expect(container).toContainElement(screen.getByRole('button', { name: 'Custom action' }));
     });
 });
