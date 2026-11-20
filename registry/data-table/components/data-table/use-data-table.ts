@@ -89,7 +89,7 @@ function seedEndpointQuery(
                 }
             });
         } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
-            setIfMissing(key, String(f.value));
+            setIfMissing(key, String(f.value as string));
         }
     });
 
@@ -751,7 +751,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     if (Array.isArray(f.value)) {
                         f.value.forEach((v) => nextQuery.append(`${key}[]`, String(v)));
                     } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
-                        nextQuery.set(key, String(f.value));
+                        nextQuery.set(key, String(f.value as string));
                     }
                 });
             }
