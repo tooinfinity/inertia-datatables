@@ -52,6 +52,7 @@ export function DataTableColumnVisibility<TData extends RowData>({
                             onSelect={(e: Event) => e.preventDefault()}
                         >
                             <Checkbox
+                                aria-label={`Toggle ${column.columnDef.header as string} column`}
                                 checked={column.getIsVisible()}
                                 onCheckedChange={(checked: boolean) => column.toggleVisibility(checked)}
                                 className="h-4 w-4"
