@@ -245,6 +245,18 @@ describe('DataTable customization', () => {
         expect(screen.getByText(/Showing/).textContent).toBe('Showing 1 to 2 of 2 results');
     });
 
+    it('wraps the table in a horizontally scrollable region so wide tables do not widen the page', () => {
+        render(<DataTable data={createData()} />);
+
+        const table = screen.getByRole('table');
+        const wrapper = table.parentElement;
+
+        expect(wrapper).not.toBeNull();
+        expect(wrapper!.className).toContain('overflow-x-auto');
+        expect(wrapper!.className).toContain('rounded-md');
+        expect(wrapper!.className).toContain('border');
+    });
+
     it('does not trigger onRowClick when clicking row actions', () => {
         const onRowClick = vi.fn();
 
