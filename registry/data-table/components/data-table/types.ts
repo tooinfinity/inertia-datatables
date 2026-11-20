@@ -20,7 +20,7 @@ export interface DataTableColumn<TData extends RowData = Record<string, unknown>
     filterable: boolean;
     hidden: boolean;
     filter_type?: 'text' | 'select' | 'boolean' | null;
-    filter_options?: Array<{ value: string; label: string }>;
+    filter_options?: Array<{ value: string | number; label: string }>;
     /** Custom cell formatter. Receives the cell context and returns a React node. */
     cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }

@@ -194,6 +194,7 @@ Column::make('status')->filterable()->filterType('select')->filterOptions([
     ['value' => 'active', 'label' => 'Active'],
     ['value' => 'inactive', 'label' => 'Inactive'],
 ]);                                                // Select dropdown filter
+Column::make('status')->filterable()->filterEnum(PostStatus::class);            // Select options from a backed enum
 Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
 ```
@@ -375,6 +376,73 @@ The `->hidden()` option marks a column as hidden in the **UI only**. It does **n
 | `select` | Predefined options | Checkbox list |
 | `boolean` | True/false values | Yes/No checkboxes |
 
+#### `->filterEnum()` — Backed enum select options
+
+When an Eloquent attribute is cast to a PHP `BackedEnum`, use `->filterEnum()`
+to derive the select options from the enum cases instead of writing them out
+manually. Each case's actual backed value (string or integer) is preserved as
+the filter value:
+
+```php
+enum PostStatus: string {
+    case Draft = 'draft';
+    case Published = 'published';
+    case Archived = 'archived';
+}
+
+Column::make('status')
+    ->filterable()
+    ->filterEnum(PostStatus::class);
+```
+
+This produces:
+
+```json
+[
+    { "value": "draft", "label": "Draft" },
+    { "value": "published", "label": "Published" },
+    { "value": "archived", "label": "Archived" }
+]
+```
+
+Default labels are derived from the case name (`DRAFT` → `Draft`,
+`IN_REVIEW` → `In Review`). Labels can be overridden with a backed value =>
+label map:
+
+```php
+->filterEnum(PostStatus::class, ['draft' => 'Brouillon'])
+```
+
+or a label resolver receiving the enum case:
+
+```php
+->filterEnum(PostStatus::class, null, fn (PostStatus $case) => __($case->name));
+```
+
+Submitted filter values are validated against the enum's backed values, so a
+value that is not a valid enum case is rejected with a validation error. The
+existing `->filterOptions()` API remains fully supported and backward compatible.
+
+Integer-backed enums are supported too, with integer values preserved in the
+JSON response:
+
+```php
+enum PostPriority: int {
+    case Low = 1;
+    case Medium = 2;
+    case High = 3;
+}
+
+Column::make('priority')->filterable()->filterEnum(PostPriority::class);
+```
+
+**TypeScript / Wayfinder interoperability.** The `filter_options` type accepts
+`value: string | number`, so integer-backed enum values come through as numbers.
+The same application enum can be consumed in TypeScript when Laravel Wayfinder
+is installed (Wayfinder can generate a TypeScript representation of the enum),
+but this package does not depend on Wayfinder — it only serializes the backed
+values through its existing `filter_options` response contract.
+
 ### Request Parameters
 
 The DataTable accepts these query parameters:
@@ -430,7 +498,7 @@ interface DataTableColumn<TData extends RowData = Record<string, unknown>> {
     filterable: boolean;
     hidden: boolean;
     filter_type?: 'text' | 'select' | 'boolean' | null;
-    filter_options?: Array<{ value: string; label: string }>;
+    filter_options?: Array<{ value: string | number; label: string }>;
     cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }
 

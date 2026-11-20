@@ -59,7 +59,7 @@ export function DataTableColumnHeader<TData extends RowData>({
         }
     }, [currentFilterValue, filterType]);
 
-    const handleFilterSelect = (value: string) => {
+    const handleFilterSelect = (value: string | number) => {
         onFilterChange(column.id, value);
     };
 
@@ -82,6 +82,21 @@ export function DataTableColumnHeader<TData extends RowData>({
                 onColumnSearchChange(column.id, '');
             }
         }
+    };
+
+    // Compares a restored filter value (often a string from the query string)
+    // against an option value (which may be a number for integer-backed enums).
+    const filterValueMatches = (current: unknown, optionValue: string | number): boolean => {
+        if (current === optionValue) {
+            return true;
+        }
+        if (typeof current === 'string' && typeof optionValue === 'number') {
+            return current === String(optionValue);
+        }
+        if (typeof current === 'number' && typeof optionValue === 'string') {
+            return String(current) === optionValue;
+        }
+        return false;
     };
 
     return (
@@ -172,13 +187,13 @@ export function DataTableColumnHeader<TData extends RowData>({
                                                 handleFilterSelect(option.value);
                                             }}
                                             className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
-                                                currentFilterValue === option.value
+                                                filterValueMatches(currentFilterValue, option.value)
                                                     ? 'bg-primary/10 text-primary font-medium'
                                                     : 'hover:bg-accent'
                                             }`}
                                         >
                                             <Checkbox
-                                                checked={currentFilterValue === option.value}
+                                                checked={filterValueMatches(currentFilterValue, option.value)}
                                                 onCheckedChange={() => handleFilterSelect(option.value)}
                                                 className="h-3.5 w-3.5"
                                             />

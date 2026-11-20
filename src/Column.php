@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables;
 
+use BackedEnum;
 use Closure;
+use InvalidArgumentException;
 use JsonSerializable;
+use ReflectionEnum;
 
 final readonly class Column implements JsonSerializable
 {
     /**
-     * @param  array<int, array{value: string, label: string}>  $filterOptions
+     * @param  array<int, array{value: int|string, label: string}>  $filterOptions
      * @param  Closure|null  $searchUsing  Receives the query builder, the search term and the boolean operator.
      * @param  Closure|null  $sortUsing  Receives the query builder and the sort direction.
      * @param  Closure|null  $filterUsing  Receives the query builder and the filter value.
@@ -24,7 +27,7 @@ final readonly class Column implements JsonSerializable
         public bool $filterable = false,
         public bool $hidden = false,
         public ?string $filterType = null,
-        /** @var array<int, array{value: string, label: string}> */
+        /** @var array<int, array{value: int|string, label: string}> */
         public array $filterOptions = [],
         public ?string $field = null,
         public ?string $relation = null,
@@ -69,12 +72,62 @@ final readonly class Column implements JsonSerializable
     }
 
     /**
-     * @param  array<int, array{value: string, label: string}>  $options
+     * @param  array<int, array{value: int|string, label: string}>  $options
      */
     public function filterOptions(array $options): self
     {
         return $this->with([
             'filterType' => $this->filterType ?? 'select',
+            'filterOptions' => $options,
+        ]);
+    }
+
+    /**
+     * Derive select filter options from a PHP {@see BackedEnum}.
+     *
+     * Each case's actual backed value (string or integer) is used as the
+     * filter value. A human-readable default label is derived from the case
+     * name. Labels can be overridden with a backed value => label map, or a
+     * label resolver closure receiving the enum case and returning a label
+     * (or null to fall back to the map and then the default label).
+     *
+     * Pure {@see \UnitEnum} cases are rejected because they do not have scalar
+     * values suitable for database filters.
+     *
+     * @param  class-string<BackedEnum>  $enumClass  A backed enum class.
+     * @param  array<int|string, string>|null  $labels  Optional backed value => label overrides.
+     * @param  Closure(BackedEnum): string|null|null  $labelResolver  Optional label resolver.
+     *
+     * @throws InvalidArgumentException When the class does not exist or is not a backed enum.
+     */
+    public function filterEnum(string $enumClass, ?array $labels = null, ?Closure $labelResolver = null): self
+    {
+        if (! enum_exists($enumClass)) {
+            throw new InvalidArgumentException("Class [{$enumClass}] does not exist.");
+        }
+
+        $reflection = new ReflectionEnum($enumClass);
+
+        if (! $reflection->isBacked()) {
+            throw new InvalidArgumentException("Class [{$enumClass}] is not a backed enum.");
+        }
+
+        $options = [];
+
+        foreach ($enumClass::cases() as $case) {
+            /** @var BackedEnum $case */
+            $label = $labelResolver ? ($labelResolver)($case) : null;
+            $label ??= $labels[$case->value] ?? null;
+            $label ??= $this->defaultLabel($case->name);
+
+            $options[] = [
+                'value' => $case->value,
+                'label' => $label,
+            ];
+        }
+
+        return $this->with([
+            'filterType' => 'select',
             'filterOptions' => $options,
         ]);
     }
@@ -152,7 +205,7 @@ final readonly class Column implements JsonSerializable
     }
 
     /**
-     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}
+     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>}
      */
     public function toArray(): array
     {
@@ -169,7 +222,7 @@ final readonly class Column implements JsonSerializable
     }
 
     /**
-     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: string, label: string}>}
+     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>}
      */
     public function jsonSerialize(): array
     {
@@ -179,6 +232,17 @@ final readonly class Column implements JsonSerializable
     private static function formatLabel(string $name): string
     {
         return ucwords(str_replace(['_', '.'], ' ', $name));
+    }
+
+    /**
+     * Derive a human-readable default label from an enum case name.
+     *
+     * @param  string  $name  The enum case name (e.g. `IN_REVIEW`).
+     * @return string The default label (e.g. `In Review`).
+     */
+    private function defaultLabel(string $name): string
+    {
+        return ucwords(strtolower(str_replace(['_', '-'], ' ', $name)));
     }
 
     /**
@@ -192,7 +256,7 @@ final readonly class Column implements JsonSerializable
      *     filterable?: bool,
      *     hidden?: bool,
      *     filterType?: string|null,
-     *     filterOptions?: array<int, array{value: string, label: string}>,
+     *     filterOptions?: array<int, array{value: int|string, label: string}>,
      *     field?: string|null,
      *     relation?: string|null,
      *     relationColumn?: string|null,
