@@ -49,6 +49,16 @@ export interface DataTableProps<TData extends RowData> {
     onRowSelectionChange?: (_selection: RowSelectionState) => void;
     /** Options forwarded to the Inertia `router.visit` call. */
     visitOptions?: DataTableVisitOptions;
+    /**
+     * Optional explicit endpoint URL for the DataTable visits.
+     *
+     * When provided, the table visits this URL instead of the current page's
+     * pathname. Query parameters already present on the URL are preserved and
+     * merged with the DataTable query state. Consumers can pass a Laravel
+     * Wayfinder generated URL, e.g. `index.url()`. When omitted, the current
+     * page pathname is used.
+     */
+    url?: string;
     /** Called when the endpoint answered with validation errors. */
     onError?: (_errors: DataTableErrors) => void;
     /** Number of skeleton rows rendered while a visit is in flight. */
@@ -71,6 +81,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             enableRowSelection,
             onRowSelectionChange,
             visitOptions,
+            url,
             onError,
             skeletonRows = 5,
             ...props
@@ -109,6 +120,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             cells,
             actions,
             visitOptions: mergedVisitOptions,
+            url,
             rowKey,
             enableRowSelection,
             onRowSelectionChange,

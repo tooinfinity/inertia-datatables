@@ -546,9 +546,40 @@ interface DataTableOptions<TData extends RowData = Record<string, unknown>> {
     cells?: DataTableCellRenderers<TData>;       // cell renderers keyed by column name
     actions?: DataTableRowActions<TData>;        // trailing row actions cell
     visitOptions?: DataTableVisitOptions;        // options for the Inertia visit
+    url?: string;                                 // explicit endpoint URL (e.g. Wayfinder `index.url()`)
     rowKey?: (row: TData, index: number) => string; // stable row id
 }
 ```
+
+The `url` option specifies an explicit endpoint URL for the DataTable visits.
+When provided, the hook visits this URL instead of the current page's pathname.
+Query parameters already present on the URL are preserved and merged
+predictably with the DataTable query state (page, per-page, search, column
+searches, filters and sorting). When omitted, the current page pathname is
+used, keeping the existing behaviour unchanged.
+
+The URL is resolved against the current origin (same-origin semantics): only
+its pathname and query are used for the Inertia visit. Pass a path such as
+`/users` or a same-origin absolute URL.
+
+This makes it possible to target a Laravel Wayfinder generated route or
+controller action without adding `laravel/wayfinder` or any Wayfinder npm
+package as a dependency:
+
+```tsx
+import { index } from '@/routes/users';
+
+<DataTable
+    data={users}
+    dataPropName="users"
+    url={index.url()}
+/>
+```
+
+Wayfinder `.url()` output works with both named routes and controller-action
+routes. Existing query parameters on the configured URL are preserved unless
+overridden by DataTable state, and Inertia partial reload options
+(`only`, `preserveState`, `preserveScroll`, callbacks) continue to work.
 
 The `dataPropName` option specifies which Inertia page prop contains the DataTable result. This enables correct partial reloads when the table data changes.
 
