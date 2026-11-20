@@ -60,8 +60,6 @@ export function DataTablePagination({
                             Rows per page
                         </label>
                         <Select
-                            id="per-page"
-                            aria-label="Rows per page"
                             value={String(perPage)}
                             onValueChange={(value: string) => onPerPageChange(Number(value))}
                         >
