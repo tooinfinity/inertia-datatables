@@ -327,6 +327,64 @@ describe('DataTable customization', () => {
         expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
     });
 
+    it('renders the correct zero-results summary when a search returns no results', () => {
+        render(
+            <DataTable
+                data={createData({
+                    data: [],
+                    meta: {
+                        current_page: 1,
+                        per_page: 25,
+                        from: null,
+                        to: null,
+                        total: 0,
+                        last_page: 1,
+                    },
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: 'no-match',
+                        sort: [],
+                        searches: [],
+                        filters: [],
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
+        expect(screen.getByText('No results found')).toBeInTheDocument();
+    });
+
+    it('spans only visible columns in the empty row when a column is hidden', () => {
+        render(
+            <DataTable
+                data={createData({
+                    data: [],
+                    meta: {
+                        current_page: 1,
+                        per_page: 25,
+                        from: null,
+                        to: null,
+                        total: 0,
+                        last_page: 1,
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByText('No results found')).toBeInTheDocument();
+
+        // open the column visibility menu and hide the "Status" column
+        fireEvent.click(screen.getByRole('button', { name: /Columns/ }));
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[2]); // Status column
+
+        const emptyRow = screen.getByText('No results found').closest('tr')!;
+        const cell = emptyRow.querySelector('td')!;
+        expect(cell.getAttribute('colspan')).toBe('2');
+    });
+
     it('does not trigger onRowClick when pressing Enter on a nested action button', () => {
         const onRowClick = vi.fn();
 
