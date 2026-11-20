@@ -29,6 +29,7 @@ This repository is a Laravel package (`tooinfinity/inertia-datatables`): server-
 - Never commit `dist/`, `build/`, `vendor/`, `node_modules/`, `.idea/`, `.phpunit.cache` (all gitignored).
 - Don't touch `composer.lock` / `package-lock.json` / `bun.lock` unless a dependency change is intended.
 - Follow conventional commits (see `.commitlintrc.json`).
+- Any new top-level directory or file must either be added to `.gitattributes` `export-ignore` (if not runtime package code) or be added to the expected entry list in `tests/Feature/ComposerArchiveTest.php`. `git archive HEAD` must match that list exactly, or `ComposerArchiveTest` fails.
 
 ## Contribution process
 

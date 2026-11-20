@@ -31,3 +31,4 @@ This repository is a Laravel package. Keep the package focused, idiomatic, and e
 
 - `dist/`, `build/`, `vendor/`, `node_modules/`, `.idea/`, `.phpunit.cache` are gitignored build artifacts — never commit them.
 - Follow conventional commits (see `.commitlintrc.json`).
+- Any new top-level directory or file added to the repo must either be added to `.gitattributes` `export-ignore` (if it is not runtime package code) or be added to the expected entry list in `tests/Feature/ComposerArchiveTest.php` (if it should ship in the Composer archive). `git archive HEAD` must produce exactly the entries listed there, or `ComposerArchiveTest` fails.
