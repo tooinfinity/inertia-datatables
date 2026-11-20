@@ -82,13 +82,16 @@ final readonly class FilterApplier
         if (is_array($value)) {
             // For select filter type, validate against allowed options
             if ($column->filterType === 'select' && $column->filterOptions !== []) {
-                $allowedValues = array_column($column->filterOptions, 'value');
+                $canonicalValues = [];
                 foreach ($value as $item) {
-                    $itemString = is_string($item) ? $item : json_encode($item);
-                    if (! in_array($item, $allowedValues, true)) {
-                        throw InvalidFilterException::invalidValue($column->name, "Value '{$itemString}' is not in allowed options");
+                    $canonical = $this->resolveSelectValue($item, $column->filterOptions);
+                    if ($canonical === null) {
+                        $itemString = is_string($item) ? $item : json_encode($item);
+                        throw InvalidFilterException::invalidValue($column->name, "Value '{$itemString}' is not in allowed options")->forRequest();
                     }
+                    $canonicalValues[] = $canonical;
                 }
+                $value = $canonicalValues;
             }
 
             // Empty array means no results
@@ -101,6 +104,23 @@ final readonly class FilterApplier
             $query->whereIn($target, $value);
 
             return;
+        }
+
+        // Validate select membership before the generic operator branches so
+        // disallowed scalar values (e.g. "*", "true", "null", "not_null")
+        // produce a validation error instead of a query constraint.
+        if (
+            $column->filterType === 'select'
+            && $column->filterOptions !== []
+            && is_scalar($value)
+        ) {
+            $canonical = $this->resolveSelectValue($value, $column->filterOptions);
+
+            if ($canonical === null) {
+                throw InvalidFilterException::invalidValue($column->name, $value)->forRequest();
+            }
+
+            $value = $canonical;
         }
 
         // Handle boolean string values ("true"/"false"/"1"/"0") for any filterable column
@@ -144,19 +164,6 @@ final readonly class FilterApplier
             return;
         }
 
-        // Validate scalar select values against the allowed enum-backed options.
-        if (
-            $column->filterType === 'select'
-            && $column->filterOptions !== []
-            && is_scalar($value)
-        ) {
-            $allowedValues = array_column($column->filterOptions, 'value');
-
-            if (! in_array($value, $allowedValues, true)) {
-                throw InvalidFilterException::invalidValue($column->name, $value);
-            }
-        }
-
         $query->where($target, $value);
     }
 
@@ -175,5 +182,38 @@ final readonly class FilterApplier
         $resolved['eloquent']->has($this->relations->relationName($column), '>=', 1, 'and', function (EloquentBuilder $related) use ($column, $resolved, $value): void {
             $this->applyFilterToColumn($related, $column, $resolved['link']->relatedColumn, $value);
         });
+    }
+
+    /**
+     * Resolve a submitted filter value against the allowed select options'
+     * wire representations, returning the canonical option value when a match
+     * is found (e.g. the string `"2"` matches the integer option `2`).
+     *
+     * @param  array<int, array{value: int|string, label: string}>  $options
+     * @return mixed|null The canonical option value, or null when no match exists.
+     */
+    private function resolveSelectValue(mixed $value, array $options): mixed
+    {
+        $allowedValues = array_column($options, 'value');
+
+        if (in_array($value, $allowedValues, true)) {
+            return $value;
+        }
+
+        foreach ($allowedValues as $allowed) {
+            $allowedString = (string) $allowed;
+
+            if (is_string($value) && $value === $allowedString) {
+                return $allowed;
+            }
+
+            if (is_int($value) || is_float($value)) {
+                if ((string) $value === $allowedString) {
+                    return $allowed;
+                }
+            }
+        }
+
+        return null;
     }
 }

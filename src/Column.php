@@ -13,7 +13,7 @@ use ReflectionEnum;
 final readonly class Column implements JsonSerializable
 {
     /**
-     * @param  array<int, array{value: string, label: string}>  $filterOptions
+     * @param  array<int, array{value: int|string, label: string}>  $filterOptions
      * @param  Closure|null  $searchUsing  Receives the query builder, the search term and the boolean operator.
      * @param  Closure|null  $sortUsing  Receives the query builder and the sort direction.
      * @param  Closure|null  $filterUsing  Receives the query builder and the filter value.
@@ -72,7 +72,7 @@ final readonly class Column implements JsonSerializable
     }
 
     /**
-     * @param  array<int, array{value: string, label: string}>  $options
+     * @param  array<int, array{value: int|string, label: string}>  $options
      */
     public function filterOptions(array $options): self
     {
@@ -114,7 +114,7 @@ final readonly class Column implements JsonSerializable
 
         $options = [];
 
-        foreach ($reflection->getConstants() as $case) {
+        foreach ($enumClass::cases() as $case) {
             /** @var BackedEnum $case */
             $label = $labelResolver ? ($labelResolver)($case) : null;
             $label ??= $labels[$case->value] ?? null;
