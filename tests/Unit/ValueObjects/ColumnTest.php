@@ -4,6 +4,26 @@ declare(strict_types=1);
 
 use TooInfinity\InertiaDataTables\Column;
 
+enum TestPostStatus: string
+{
+    case Draft = 'draft';
+    case Published = 'published';
+    case Archived = 'archived';
+}
+
+enum TestPostPriority: int
+{
+    case Low = 1;
+    case Medium = 2;
+    case High = 3;
+}
+
+enum TestPostVisibility
+{
+    case Public;
+    case Private;
+}
+
 describe('Column', function (): void {
     it('creates a column with minimal parameters', function (): void {
         $column = Column::make('name');
@@ -75,6 +95,96 @@ describe('Column', function (): void {
 
         expect($column->filterOptions)->toBe($options);
         expect($column->filterType)->toBe('select'); // defaults to select when options provided
+    });
+
+    describe('filterEnum', function (): void {
+        it('derives select options from a string-backed enum', function (): void {
+            $column = Column::make('status')->filterable()->filterEnum(TestPostStatus::class);
+
+            expect($column->filterType)->toBe('select');
+            expect($column->filterOptions)->toBe([
+                ['value' => 'draft', 'label' => 'Draft'],
+                ['value' => 'published', 'label' => 'Published'],
+                ['value' => 'archived', 'label' => 'Archived'],
+            ]);
+        });
+
+        it('derives select options from an integer-backed enum', function (): void {
+            $column = Column::make('priority')->filterable()->filterEnum(TestPostPriority::class);
+
+            expect($column->filterType)->toBe('select');
+            expect($column->filterOptions)->toBe([
+                ['value' => 1, 'label' => 'Low'],
+                ['value' => 2, 'label' => 'Medium'],
+                ['value' => 3, 'label' => 'High'],
+            ]);
+        });
+
+        it('overrides labels with a backed value map', function (): void {
+            $column = Column::make('status')->filterable()->filterEnum(TestPostStatus::class, [
+                'draft' => 'Brouillon',
+                'published' => 'Publié',
+            ]);
+
+            expect($column->filterOptions)->toBe([
+                ['value' => 'draft', 'label' => 'Brouillon'],
+                ['value' => 'published', 'label' => 'Publié'],
+                ['value' => 'archived', 'label' => 'Archived'],
+            ]);
+        });
+
+        it('overrides labels with a label resolver', function (): void {
+            $column = Column::make('status')->filterable()->filterEnum(
+                TestPostStatus::class,
+                null,
+                fn (TestPostStatus $case): string => 'Status: '.$case->name,
+            );
+
+            expect($column->filterOptions)->toBe([
+                ['value' => 'draft', 'label' => 'Status: Draft'],
+                ['value' => 'published', 'label' => 'Status: Published'],
+                ['value' => 'archived', 'label' => 'Status: Archived'],
+            ]);
+        });
+
+        it('prefers the label resolver over the value map', function (): void {
+            $column = Column::make('status')->filterable()->filterEnum(
+                TestPostStatus::class,
+                ['draft' => 'Map'],
+                fn (): string => 'Resolver',
+            );
+
+            expect($column->filterOptions[0]['label'])->toBe('Resolver');
+        });
+
+        it('preserves the backed value type in the JSON representation', function (): void {
+            $column = Column::make('priority')->filterable()->filterEnum(TestPostPriority::class);
+
+            expect(json_decode(json_encode($column->filterOptions), true))->toBe([
+                ['value' => 1, 'label' => 'Low'],
+                ['value' => 2, 'label' => 'Medium'],
+                ['value' => 3, 'label' => 'High'],
+            ]);
+        });
+
+        it('returns a new immutable instance', function (): void {
+            $original = Column::make('status');
+            $modified = $original->filterEnum(TestPostStatus::class);
+
+            expect($original->filterOptions)->toBe([]);
+            expect($modified->filterOptions)->not->toBe([]);
+            expect($original)->not->toBe($modified);
+        });
+
+        it('throws when the class does not exist', function (): void {
+            expect(fn (): mixed => Column::make('status')->filterEnum(stdClass::class))
+                ->toThrow(InvalidArgumentException::class, 'does not exist');
+        });
+
+        it('throws when the class is a unit enum', function (): void {
+            expect(fn (): mixed => Column::make('visibility')->filterEnum(TestPostVisibility::class))
+                ->toThrow(InvalidArgumentException::class, 'is not a backed enum');
+        });
     });
 
     it('allows setting hidden', function (): void {

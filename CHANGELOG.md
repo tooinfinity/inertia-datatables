@@ -30,6 +30,7 @@
 - `select` filter type validates array values against `filter_options`
 - Nested arrays and objects in filter values are rejected with `422` error
 - String values in filter arrays are truncated to `max_filter_value_length`
+- `->filterEnum()` for deriving select filter options from a PHP `BackedEnum`, with sensible default labels, custom labels via a map or resolver, and validation of submitted values against the enum's backed values (fixes #78)
 - The test suite now runs against MySQL 8 and PostgreSQL 16 in CI, in addition to SQLite, and the database connection is driven by the standard `DB_*` environment variables (fixes #27)
 
 ### Changed

@@ -144,6 +144,19 @@ final readonly class FilterApplier
             return;
         }
 
+        // Validate scalar select values against the allowed enum-backed options.
+        if (
+            $column->filterType === 'select'
+            && $column->filterOptions !== []
+            && is_scalar($value)
+        ) {
+            $allowedValues = array_column($column->filterOptions, 'value');
+
+            if (! in_array($value, $allowedValues, true)) {
+                throw InvalidFilterException::invalidValue($column->name, $value);
+            }
+        }
+
         $query->where($target, $value);
     }
 
