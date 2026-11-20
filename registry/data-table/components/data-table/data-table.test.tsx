@@ -305,18 +305,71 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument();
     });
 
-    it('renders filter trigger button for filterable columns', () => {
+    it('moves filter controls to a toolbar chip beside the search field', () => {
         render(
             <DataTable
                 data={createData({
                     columns: [
                         { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: true, hidden: false, filter_type: 'text' },
                     ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'name', value: 'Ada' }],
+                    },
                 })}
             />
         );
 
-        expect(screen.getByRole('button', { name: 'Filter Name' })).toBeInTheDocument();
+        // Filter chip lives in the toolbar beside the global search field
+        expect(screen.getByRole('button', { name: 'Name • 1 selected' })).toBeInTheDocument();
+
+        // Clicking the chip opens a dropdown with the column's filter controls
+        fireEvent.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
+        expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
+
+        // Column headers stay clean: only the sort indicator, no filter dropdown
+        const table = screen.getByRole('table');
+        expect(within(table).queryByRole('button', { name: /Name •/ })).not.toBeInTheDocument();
+        expect(within(table).getByRole('button', { name: 'Sort by Name' })).toBeInTheDocument();
+    });
+
+    it('shows the selected count on a filter chip for multi-value filters', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        {
+                            name: 'status',
+                            label: 'Status',
+                            sortable: false,
+                            searchable: false,
+                            filterable: true,
+                            hidden: false,
+                            filter_type: 'select',
+                            filter_options: [
+                                { value: 'active', label: 'Active' },
+                                { value: 'inactive', label: 'Inactive' },
+                                { value: 'archived', label: 'Archived' },
+                            ],
+                        },
+                    ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'status', value: ['active', 'inactive'] }],
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'Status • 2 selected' })).toBeInTheDocument();
     });
 
     it('renders 0 to 0 of 0 results when total is 0', () => {

@@ -107,11 +107,24 @@ describe('DataTable accessibility (issue #36)', () => {
     });
 
     it('associates the column search label with its input via htmlFor/id', () => {
-        render(<DataTable data={createData()} />);
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [{ column: 'name', value: 'Ada' }],
+                        filters: [],
+                    },
+                })}
+            />
+        );
 
-        const filterButton = screen.getByRole('button', { name: 'Filter Name' });
+        const chip = screen.getByRole('button', { name: 'Name • 1 selected' });
         act(() => {
-            fireEvent.click(filterButton);
+            fireEvent.click(chip);
         });
 
         // getByLabelText returns the associated form control (the input);
@@ -125,35 +138,61 @@ describe('DataTable accessibility (issue #36)', () => {
     });
 
     it('gives the filter value input an accessible name', () => {
-        render(<DataTable data={createData()} />);
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'name', value: 'Ada' }],
+                    },
+                })}
+            />
+        );
 
         // The "Name" column uses filter_type: 'text', so it renders a text filter input.
-        const filterButton = screen.getByRole('button', { name: 'Filter Name' });
+        const chip = screen.getByRole('button', { name: 'Name • 1 selected' });
         act(() => {
-            fireEvent.click(filterButton);
+            fireEvent.click(chip);
         });
 
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
     });
 
     it('exposes aria-expanded on the filter trigger and toggles it on activation (keyboard Enter/Space or click)', () => {
-        render(<DataTable data={createData()} />);
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'name', value: 'Ada' }],
+                    },
+                })}
+            />
+        );
 
-        const filterButton = screen.getByRole('button', { name: 'Filter Name' });
-        expect(filterButton).toHaveAttribute('aria-haspopup', 'true');
-        expect(filterButton).toHaveAttribute('aria-expanded', 'false');
+        const chip = screen.getByRole('button', { name: 'Name • 1 selected' });
+        expect(chip).toHaveAttribute('aria-haspopup', 'true');
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
 
         act(() => {
-            fireEvent.click(filterButton);
+            fireEvent.click(chip);
         });
 
-        expect(filterButton).toHaveAttribute('aria-expanded', 'true');
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
 
         act(() => {
-            fireEvent.click(filterButton);
+            fireEvent.click(chip);
         });
 
-        expect(filterButton).toHaveAttribute('aria-expanded', 'false');
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('marks decorative sort arrow glyphs as hidden', () => {

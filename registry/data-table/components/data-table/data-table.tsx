@@ -140,6 +140,11 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                     onSearchChange={handleSearchChange}
                     isFiltered={isFiltered}
                     onReset={handleResetFilters}
+                    filters={state.filters}
+                    columnSearches={columnSearches}
+                    onFilterChange={handleFilterChange}
+                    onColumnSearchChange={handleColumnSearchChange}
+                    onClearFilter={handleClearColumnFilter}
                 >
                     {toolbar}
                 </DataTableToolbar>
@@ -153,11 +158,6 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                             key={header.id}
                                             header={header}
                                             column={header.column}
-                                            onColumnSearchChange={handleColumnSearchChange}
-                                            onFilterChange={handleFilterChange}
-                                            onClearFilter={handleClearColumnFilter}
-                                            columnSearchValue={columnSearches[header.column.id] ?? ''}
-                                            currentFilterValue={state.filters[header.column.id]}
                                         />
                                     ))}
                                 </TableRow>
