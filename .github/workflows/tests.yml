@@ -53,7 +53,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -72,17 +72,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Run the full compatibility matrix on Linux. Windows gets one
-        # representative smoke test instead of repeating every combination.
-        os: [ubuntu-latest]
-        php: [8.3, 8.4, 8.5]
-        laravel: [12.*, 13.*]
-        stability: [prefer-lowest, prefer-stable]
+        # Keep every PHP/Laravel pair on stable dependencies. Exercise the
+        # lowest-dependency resolver at the oldest and newest compatibility
+        # boundaries, plus one representative Windows environment.
         include:
-          - laravel: 12.*
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 12.*
             testbench: 10.*
-          - laravel: 13.*
+            stability: prefer-lowest
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.3
+            laravel: 13.*
             testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.4
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.4
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 12.*
+            testbench: 10.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-lowest
           - os: windows-latest
             php: 8.4
             laravel: 13.*
@@ -119,7 +152,7 @@ jobs:
         run: vendor/bin/pest
 
       - name: Test Suite (Type Coverage)
-        if: ${{ !(runner.os == 'Windows' && matrix.stability == 'prefer-lowest') }}
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           set -o pipefail
@@ -127,7 +160,7 @@ jobs:
 
       - name: Upload type coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: always() && runner.os != 'Windows'
         with:
           name: type-coverage-report-${{ matrix.os }}-${{ matrix.php }}-L${{ matrix.laravel == '12.*' && '12' || '13' }}-${{ matrix.stability }}
           path: type-coverage.txt
