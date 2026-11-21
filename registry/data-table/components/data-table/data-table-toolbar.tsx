@@ -307,7 +307,15 @@ export function DataTableFilterChip({
                                         id={`toolbar-range-${columnId}-${key}`}
                                         type={filterType === 'number_range' ? 'number' : 'date'}
                                         value={typeof filterValue === 'object' && filterValue !== null
-                                            ? (filterValue as Record<string, string>)[key] ?? ''
+                                            ? (() => {
+                                                  const raw = (filterValue as Record<string, string>)[key] ?? '';
+                                                  // A date-only input cannot display a time-bearing value such
+                                                  // as "2026-02-15 10:00:00". Strip the time portion so the
+                                                  // control shows a valid date while preserving the full bound.
+                                                  return filterType === 'date_range' && typeof raw === 'string'
+                                                      ? raw.split(' ')[0]
+                                                      : raw;
+                                              })()
                                             : ''}
                                         onChange={(e) => {
                                             const next = {
