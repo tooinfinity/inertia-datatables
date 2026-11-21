@@ -6,7 +6,6 @@ namespace TooInfinity\InertiaDataTables\Processing\Applicators;
 
 use Closure;
 use DateTimeImmutable;
-use DateTimeZone;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -296,6 +295,18 @@ final readonly class FilterApplier
     }
 
     /**
+     * Check whether a string represents a whole integer (optional sign,
+     * digits only, no decimal point or exponent).
+     *
+     * @param  string  $value  A numeric string.
+     * @return bool True when the string is an integer representation.
+     */
+    private function isIntegerString(string $value): bool
+    {
+        return preg_match('/^[+-]?\d+$/', $value) === 1;
+    }
+
+    /**
      * Compare two numeric string representations exactly, normalizing decimal
      * and exponent forms without converting to imprecise floats.
      *
@@ -389,14 +400,66 @@ final readonly class FilterApplier
      */
     private function scientificToDecimal(string $value): string
     {
-        $float = (float) $value;
-        $formatted = sprintf('%.17f', $float);
-        $formatted = rtrim($formatted, '0');
-        if (str_ends_with($formatted, '.')) {
-            $formatted = substr($formatted, 0, -1);
+        // Split into mantissa and exponent.
+        $parts = preg_split('/[eE]/', $value, 2);
+        if ($parts === false || count($parts) !== 2) {
+            return $value;
+        }
+        $mantissa = $parts[0];
+        $exponent = (int) $parts[1];
+
+        // Track sign.
+        $sign = '';
+        if (str_starts_with($mantissa, '-')) {
+            $sign = '-';
+            $mantissa = ltrim($mantissa, '-');
+        } elseif (str_starts_with($mantissa, '+')) {
+            $mantissa = ltrim($mantissa, '+');
         }
 
-        return $formatted;
+        // Split into integer and fractional parts.
+        if (str_contains($mantissa, '.')) {
+            [$intPart, $fracPart] = explode('.', $mantissa, 2);
+        } else {
+            $intPart = $mantissa;
+            $fracPart = '';
+        }
+
+        $intPart = ltrim($intPart, '0') ?: '0';
+        $digits = ltrim($intPart.$fracPart, '0') ?: '0';
+
+        // Decimal position in the mantissa (digits after the decimal point).
+        $decimalPos = strlen($fracPart);
+        // New decimal position after applying the exponent.
+        $newDecimalPos = $decimalPos - $exponent;
+
+        if ($newDecimalPos <= 0) {
+            // Decimal point is at or before the first digit: append zeros.
+            $result = $digits.str_repeat('0', -$newDecimalPos);
+        } elseif ($newDecimalPos >= strlen($digits)) {
+            // Need leading zeros after the decimal point.
+            $zeros = str_repeat('0', $newDecimalPos - strlen($digits));
+            $result = '0.'.$zeros.$digits;
+        } else {
+            // Decimal point lands within the digits.
+            $split = strlen($digits) - $newDecimalPos;
+            $result = substr($digits, 0, $split).'.'.substr($digits, $split);
+        }
+
+        // Strip trailing zeros from the fractional part.
+        if (str_contains($result, '.')) {
+            $result = rtrim($result, '0');
+            if (str_ends_with($result, '.')) {
+                $result = substr($result, 0, -1);
+            }
+        }
+
+        // Normalize all-zero results and -0.
+        if (in_array($result, ['', '-0', '-0.'], true)) {
+            $result = '0';
+        }
+
+        return $sign.$result;
     }
 
     /**
@@ -418,16 +481,18 @@ final readonly class FilterApplier
             return $ca <=> $cb;
         }
 
-        // Compare integer and integer-string values exactly without float
-        // conversion, so large integers keep their precision.
-        if ((is_int($ca) && is_string($cb)) || (is_string($ca) && is_int($cb))) {
-            return $this->compareIntegerStrings((string) $ca, (string) $cb);
+        // Compare integer values exactly without float conversion. Only use
+        // compareIntegerStrings() when both sides are actual integers; decimals
+        // and exponent forms go through compareNumericStrings().
+        if (is_int($ca) && is_string($cb) && $this->isIntegerString($cb)) {
+            return $this->compareIntegerStrings((string) $ca, $cb);
+        }
+        if (is_string($ca) && $this->isIntegerString($ca) && is_int($cb)) {
+            return $this->compareIntegerStrings($ca, (string) $cb);
         }
 
-        if (is_string($ca) && is_string($cb)) {
-            return $this->compareIntegerStrings($ca, $cb);
-        }
-
+        // One or both values are decimals or exponent forms: compare exactly
+        // without imprecise float conversion.
         return $this->compareNumericStrings((string) $ca, (string) $cb);
     }
 
@@ -517,9 +582,6 @@ final readonly class FilterApplier
                 ) {
                     throw InvalidFilterException::invalidValue($column->name, "Invalid 'from' date: {$from}")->forRequest();
                 }
-                // Normalize to a single timezone so formatted bounds compare
-                // consistently regardless of input offsets.
-                $fromDate = $fromDate->setTimezone(new DateTimeZone('UTC'));
             }
             if ($hasTo) {
                 if (! is_string($to)) {
@@ -534,13 +596,12 @@ final readonly class FilterApplier
                 ) {
                     throw InvalidFilterException::invalidValue($column->name, "Invalid 'to' date: {$to}")->forRequest();
                 }
-                // Expand a date-only upper bound to the final fractional second
-                // of its calendar day in its original timezone, then normalize
-                // to UTC so the bound includes the whole selected day everywhere.
+                // Expand a date-only upper bound to the final fractional
+                // second of its calendar day so the bound includes the
+                // whole selected day.
                 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) === 1) {
                     $toDate = $toDate->setTime(23, 59, 59, 999999);
                 }
-                $toDate = $toDate->setTimezone(new DateTimeZone('UTC'));
             }
         }
 

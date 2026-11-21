@@ -589,6 +589,44 @@ describe('QueryProcessor: new filter types (date_range, number_range, multi_sele
         expect($result->paginator->total())->toBe(0);
     });
 
+    it('accepts mixed int and decimal bounds for number_range', function () use ($processor): void {
+        // from='2.0' (decimal string) vs to=10 (int): 2.0 <= 10, valid range.
+        $filters = new FilterCollection([new Filter('id', ['from' => '2.0', 'to' => '10'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        // Users with id 2, 3, 4 match (2.0 <= id <= 10).
+        expect($result->paginator->total())->toBe(3);
+    });
+
+    it('rejects inverted mixed int and decimal bounds for number_range', function () use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => '10', 'to' => '2.0'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        expect(fn (): TooInfinity\InertiaDataTables\DataTableResult => $processor->process(User::query(), $request))
+            ->toThrow(InvalidFilterException::class, "Invalid range: 'from' must be before or equal to 'to'");
+    });
+
+    it('accepts equal mixed-representation scientific notation bounds', function () use ($processor): void {
+        // from='1e-1' (scientific string) vs to=0.1 (float): both equal 0.1.
+        $filters = new FilterCollection([new Filter('id', ['from' => '1e-1', 'to' => 0.1])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        // No users have id 0.1, but the equal bounds must not be rejected.
+        expect($result->paginator->total())->toBe(0);
+    });
+
+    it('rejects inverted scientific notation bounds for number_range', function () use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => '1e1', 'to' => '2'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        expect(fn (): TooInfinity\InertiaDataTables\DataTableResult => $processor->process(User::query(), $request))
+            ->toThrow(InvalidFilterException::class, "Invalid range: 'from' must be before or equal to 'to'");
+    });
+
     it('preserves fractional seconds in date_range bounds', function () use ($processor): void {
         // A date-only upper bound expands to the end of the day (23:59:59.999999),
         // so a record later on that day is included even when filtering by date only.
