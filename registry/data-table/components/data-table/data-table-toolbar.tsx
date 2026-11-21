@@ -37,6 +37,14 @@ export interface DataTableToolbarProps<TData extends RowData = Record<string, un
     onColumnSearchChange?: (_column: string, _value: string) => void;
     /** Fired when a per-column filter or search is cleared. */
     onClearFilter?: (_column: string, _clearSearch: boolean) => void;
+    /** Action buttons rendered on the right side of the toolbar (e.g. "+ New", "Export", "View"). */
+    actions?: ReactNode;
+    /** Optional date range picker rendered in the top-right corner of the toolbar. */
+    dateRange?: {
+        from: string | null;
+        to: string | null;
+        onChange: (_range: { from: string | null; to: string | null }) => void;
+    };
 }
 
 interface ColumnFilterInfo {
@@ -97,6 +105,30 @@ export function DataTableFilterChip({
     const handleFilterBooleanChange = (value: boolean) => {
         onFilterChange(columnId, value);
         setMenuOpen(false);
+    };
+
+    const handleFilterMultiSelectChange = (
+        value: string | number,
+        event?: Event,
+    ) => {
+        // Radix closes the dropdown on select by default; preventDefault keeps
+        // the menu open so users can toggle several options in one go.
+        event?.preventDefault();
+
+        // A restored scalar (e.g. a single pre-selected option) is normalized
+        // to a singleton array so toggling it removes rather than re-adds it.
+        const current = Array.isArray(filterValue)
+            ? [...filterValue]
+            : filterValue !== '' && filterValue !== null && filterValue !== undefined
+                ? [filterValue]
+                : [];
+        const index = current.findIndex((item) => filterValueMatches(item, value));
+        if (index >= 0) {
+            current.splice(index, 1);
+        } else {
+            current.push(value);
+        }
+        onFilterChange(columnId, current);
     };
 
     const handleFilterTextChange = (value: string) => {
@@ -235,6 +267,70 @@ export function DataTableFilterChip({
                     </div>
                 )}
 
+                {canFilter && filterType === 'multi_select' && filterOptions.length > 0 && (
+                    <div className="space-y-0.5 p-1 max-h-[200px] overflow-y-auto">
+                        {filterOptions.map((option) => (
+                            <DropdownMenuItem
+                                key={option.value}
+                                onSelect={(event) => {
+                                    handleFilterMultiSelectChange(option.value, event);
+                                }}
+                                className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                    filterValueMatches(filterValue, option.value)
+                                        ? 'bg-primary/10 text-primary font-medium'
+                                        : 'hover:bg-accent'
+                                }`}
+                            >
+                                <Checkbox
+                                    aria-label={option.label}
+                                    checked={filterValueMatches(filterValue, option.value)}
+                                    className="h-3.5 w-3.5"
+                                />
+                                <span className="truncate">{option.label}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </div>
+                )}
+
+                {canFilter && (filterType === 'date_range' || filterType === 'number_range') && (
+                    <div className="p-1 space-y-1.5">
+                        <div className="grid grid-cols-2 gap-2">
+                            {['from', 'to'].map((key) => (
+                                <div key={key} className="flex flex-col gap-1">
+                                    <label
+                                        className="block text-[11px] font-medium text-muted-foreground"
+                                        htmlFor={`toolbar-range-${columnId}-${key}`}
+                                    >
+                                        {key.charAt(0).toUpperCase() + key.slice(1)}
+                                    </label>
+                                    <Input
+                                        id={`toolbar-range-${columnId}-${key}`}
+                                        type={filterType === 'number_range' ? 'number' : 'date'}
+                                        value={typeof filterValue === 'object' && filterValue !== null
+                                            ? (filterValue as Record<string, string>)[key] ?? ''
+                                            : ''}
+                                        onChange={(e) => {
+                                            const next = {
+                                                ...(typeof filterValue === 'object' && filterValue !== null
+                                                    ? (filterValue as Record<string, string>)
+                                                    : {}),
+                                            };
+                                            if (e.target.value === '') {
+                                                delete next[key];
+                                            } else {
+                                                next[key] = e.target.value;
+                                            }
+                                            onFilterChange(columnId, Object.keys(next).length > 0 ? next : '');
+                                        }}
+                                        className="h-7 text-xs"
+                                        aria-label={key}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {canFilter && filterType === 'text' && (
                     <div className="p-1 space-y-1.5">
                         <label
@@ -284,6 +380,8 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
     onFilterChange = () => {},
     onColumnSearchChange = () => {},
     onClearFilter = () => {},
+    actions,
+    dateRange,
 }: DataTableToolbarProps<TData>) {
     // Column metadata (label, filter type, options) derived from the table so
     // each filter chip can render the matching dropdown controls.
@@ -388,6 +486,49 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
                         <span className="text-sm text-muted-foreground whitespace-nowrap">per page</span>
                     </div>
                 )}
+                {dateRange && (
+                    <div className="flex items-center gap-2">
+                        <label
+                            htmlFor="toolbar-date-from"
+                            className="text-sm text-muted-foreground whitespace-nowrap"
+                        >
+                            From
+                        </label>
+                        <Input
+                            id="toolbar-date-from"
+                            type="date"
+                            value={dateRange.from ?? ''}
+                            onChange={(e) => {
+                                dateRange.onChange({
+                                    from: e.target.value || null,
+                                    to: dateRange.to,
+                                });
+                            }}
+                            className="h-7 text-xs w-[120px]"
+                            aria-label="Date range from"
+                        />
+                        <label
+                            htmlFor="toolbar-date-to"
+                            className="text-sm text-muted-foreground whitespace-nowrap"
+                        >
+                            To
+                        </label>
+                        <Input
+                            id="toolbar-date-to"
+                            type="date"
+                            value={dateRange.to ?? ''}
+                            onChange={(e) => {
+                                dateRange.onChange({
+                                    from: dateRange.from,
+                                    to: e.target.value || null,
+                                });
+                            }}
+                            className="h-7 text-xs w-[120px]"
+                            aria-label="Date range to"
+                        />
+                    </div>
+                )}
+                {actions && <div className="flex items-center gap-2">{actions}</div>}
             </div>
         </div>
     );

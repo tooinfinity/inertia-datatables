@@ -187,50 +187,38 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
     }
 
     /**
-     * Sanitize a filter value - handles both scalars and arrays.
+     * Sanitize a filter value - handles scalars, sequential arrays and flat
+     * associative arrays (e.g. `{ from, to }` for date/number ranges).
      *
-     * @param  int  $maxValues  Maximum number of values allowed in an array
+     * @param  int  $maxValues  Maximum number of values/keys allowed
      * @param  int  $maxValueLength  Maximum length of each string value
      *
      * @throws InvalidFilterException If value is a nested array/object or exceeds limits
      */
     private static function sanitizeValue(mixed $value, int $maxValues, int $maxValueLength): mixed
     {
-        // Reject nested arrays and objects
+        // Reject objects
+        if (is_object($value)) {
+            throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
+        }
+
         if (is_array($value)) {
-            // Check if it's a flat array (all keys are integers 0, 1, 2...)
             $keys = array_keys($value);
-            if ($keys !== range(0, count($keys) - 1)) {
-                throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+
+            // Sequential integer array (e.g. filters[col][]=a&filters[col][]=b)
+            if ($keys === range(0, count($keys) - 1)) {
+                return self::sanitizeSequentialArray($value, $maxValues, $maxValueLength);
             }
 
-            // Check for nested arrays in values
-            foreach ($value as $item) {
-                if (is_array($item)) {
+            // Flat associative array with string keys (e.g. filters[col][from]=…&filters[col][to]=…)
+            // Reject mixed or non-string keys.
+            foreach ($keys as $key) {
+                if (! is_string($key)) {
                     throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
                 }
             }
 
-            // Limit array size
-            if (count($value) > $maxValues) {
-                throw InvalidFilterException::invalidValue('filter', "Filter value array exceeds maximum of {$maxValues} items");
-            }
-
-            // Sanitize each item
-            $sanitized = [];
-            foreach ($value as $item) {
-                if (is_scalar($item) || $item === null) {
-                    $sanitizedItem = $item;
-                    if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
-                        $sanitizedItem = mb_substr($sanitizedItem, 0, $maxValueLength);
-                    }
-                    $sanitized[] = $sanitizedItem;
-                } else {
-                    throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
-                }
-            }
-
-            return $sanitized;
+            return self::sanitizeAssociativeArray($value, $maxValues, $maxValueLength);
         }
 
         // Scalar value - truncate string if too long
@@ -239,5 +227,79 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
         }
 
         return $value;
+    }
+
+    /**
+     * Sanitize a sequential array of filter values.
+     *
+     * @param  array<mixed, mixed>  $value
+     * @return array<mixed, mixed>
+     *
+     * @throws InvalidFilterException If a value is nested or exceeds limits
+     */
+    private static function sanitizeSequentialArray(array $value, int $maxValues, int $maxValueLength): array
+    {
+        // Check for nested arrays in values
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+            }
+        }
+
+        // Limit array size
+        if (count($value) > $maxValues) {
+            throw InvalidFilterException::invalidValue('filter', "Filter value array exceeds maximum of {$maxValues} items");
+        }
+
+        // Sanitize each item
+        $sanitized = [];
+        foreach ($value as $item) {
+            if (is_scalar($item) || $item === null) {
+                $sanitizedItem = $item;
+                if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
+                    $sanitizedItem = mb_substr($sanitizedItem, 0, $maxValueLength);
+                }
+                $sanitized[] = $sanitizedItem;
+            } else {
+                throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Sanitize a flat associative array of filter values (string keys only).
+     *
+     * @param  array<mixed, mixed>  $value
+     * @return array<mixed, mixed>
+     *
+     * @throws InvalidFilterException If a value is nested or exceeds limits
+     */
+    private static function sanitizeAssociativeArray(array $value, int $maxValues, int $maxValueLength): array
+    {
+        // Limit number of keys
+        if (count($value) > $maxValues) {
+            throw InvalidFilterException::invalidValue('filter', "Filter value array exceeds maximum of {$maxValues} items");
+        }
+
+        $sanitized = [];
+        foreach ($value as $key => $item) {
+            if (is_array($item) || is_object($item)) {
+                throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+            }
+
+            if (! is_scalar($item) && $item !== null) {
+                throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
+            }
+
+            $sanitizedItem = $item;
+            if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
+                $sanitizedItem = mb_substr($sanitizedItem, 0, $maxValueLength);
+            }
+            $sanitized[$key] = $sanitizedItem;
+        }
+
+        return $sanitized;
     }
 }

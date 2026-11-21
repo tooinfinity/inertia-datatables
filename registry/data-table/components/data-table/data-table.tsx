@@ -37,6 +37,14 @@ export interface DataTableProps<TData extends RowData> {
     actions?: DataTableRowActions<TData>;
     /** Extra content rendered next to the search field. */
     toolbar?: ReactNode;
+    /** Action buttons rendered on the right side of the toolbar (e.g. "+ New", "Export", "View"). */
+    toolbarActions?: ReactNode;
+    /** Optional date range picker rendered in the top-right corner of the toolbar. */
+    dateRange?: {
+        from: string | null;
+        to: string | null;
+        onChange: (_range: { from: string | null; to: string | null }) => void;
+    };
     /** Replaces the default empty state. */
     empty?: ReactNode;
     /** Derives a stable row id from the row data. */
@@ -74,6 +82,8 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
             columns,
             cells,
             actions,
+            toolbarActions,
+            dateRange,
             toolbar,
             empty,
             rowKey,
@@ -145,6 +155,8 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                     onFilterChange={handleFilterChange}
                     onColumnSearchChange={handleColumnSearchChange}
                     onClearFilter={handleClearColumnFilter}
+                    actions={toolbarActions}
+                    dateRange={dateRange}
                 >
                     {toolbar}
                 </DataTableToolbar>

@@ -433,3 +433,32 @@ it('returns columns metadata with capabilities', function (): void {
     expect($statusColumn['sortable'])->toBeTrue();
     expect($statusColumn['filterable'])->toBeTrue();
 });
+
+it('handles date range filters via named bounds', function (): void {
+    makeTestRoute('/test-users-date-range', [
+        Column::make('name')->searchable()->sortable(),
+        Column::make('created_at')->filterable()->sortable()->filterType('date_range'),
+    ], 'created_at', 'desc');
+
+    $password = '$2y$04$wT3wY2K7dKjMh6H7R9uIhe9Zz3E3O6B2I5l9h.8P7v4n3S3T4k6W2';
+    User::forceCreate([
+        'name' => 'Early', 'email' => 'early@example.com', 'password' => $password,
+        'created_at' => '2026-01-10 10:00:00', 'updated_at' => '2026-01-10 10:00:00',
+    ]);
+    User::forceCreate([
+        'name' => 'Mid', 'email' => 'mid@example.com', 'password' => $password,
+        'created_at' => '2026-02-15 12:00:00', 'updated_at' => '2026-02-15 12:00:00',
+    ]);
+    User::forceCreate([
+        'name' => 'Late', 'email' => 'late@example.com', 'password' => $password,
+        'created_at' => '2026-03-20 10:00:00', 'updated_at' => '2026-03-20 10:00:00',
+    ]);
+
+    $response = $this->get('/test-users-date-range?filters[created_at][from]=2026-02-01&filters[created_at][to]=2026-02-28');
+
+    $response->assertOk();
+    expect($response->json('meta.total'))->toBe(1);
+    expect($response->json('data.0.name'))->toBe('Mid');
+    expect($response->json('query.filters.0.column'))->toBe('created_at');
+    expect($response->json('query.filters.0.value'))->toBe(['from' => '2026-02-01', 'to' => '2026-02-28']);
+});
