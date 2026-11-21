@@ -413,7 +413,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 currentParams.delete(key);
                 currentParams.delete(`${key}[]`);
 
-                if (value === undefined || value === null || isPlainObject(value)) {
+                if (value === undefined || value === null || isPlainObject(value) || Array.isArray(value)) {
                     // Clear any range sub-keys (e.g. filters[col][from], filters[col][to])
                     // before rewriting the keys that remain, so a removed bound is not
                     // retained in the URL or endpoint query.

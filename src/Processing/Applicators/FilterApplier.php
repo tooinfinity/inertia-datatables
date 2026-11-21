@@ -253,7 +253,7 @@ final readonly class FilterApplier
 
         // Decimal string: keep as string for exact comparison without
         // imprecise float conversion.
-        return $value;
+        return $trimmed;
     }
 
     /**
@@ -316,6 +316,13 @@ final readonly class FilterApplier
      */
     private function compareNumericStrings(string $a, string $b): int
     {
+        // Scientific notation values are compared by exponent/mantissa to
+        // avoid unbounded memory allocation from decimal expansion.
+        if (str_contains($a, 'e') || str_contains($a, 'E')
+            || str_contains($b, 'e') || str_contains($b, 'E')) {
+            return $this->compareScientificNotation($a, $b);
+        }
+
         $a = $this->normalizeNumericString($a);
         $b = $this->normalizeNumericString($b);
 
@@ -371,8 +378,11 @@ final readonly class FilterApplier
      */
     private function normalizeNumericString(string $value): string
     {
-        // Handle scientific notation like "1e10" or "1.5E-3".
-        if (preg_match('/^[+-]?\d+\.?\d*[eE][+-]?\d+$/', $value) === 1) {
+        // Trim whitespace so values like " 2.0" compare correctly.
+        $value = trim($value);
+
+        // Handle scientific notation like "1e10", "1.5E-3", or ".5e1".
+        if (preg_match('/^[+-]?(?:\d+\.?\d*|\.\d+)[eE][+-]?\d+$/', $value) === 1) {
             return $this->scientificToDecimal($value);
         }
 
@@ -407,6 +417,13 @@ final readonly class FilterApplier
         }
         $mantissa = $parts[0];
         $exponent = (int) $parts[1];
+
+        // Refuse to expand exponents that would allocate excessive memory
+        // (e.g. 1e1000000000). Callers handle such values via exponent
+        // comparison instead.
+        if (abs($exponent) > 1000) {
+            return $value;
+        }
 
         // Track sign.
         $sign = '';
@@ -460,6 +477,85 @@ final readonly class FilterApplier
         }
 
         return $sign.$result;
+    }
+
+    /**
+     * Compare two values that may be in scientific notation by parsing
+     * mantissa and exponent, without expanding to decimal strings.
+     * This avoids unbounded memory allocation for extreme exponents
+     * (e.g. 1e1000000000).
+     *
+     * @param  string  $a  A numeric string, possibly in scientific notation.
+     * @param  string  $b  A numeric string, possibly in scientific notation.
+     * @return int -1, 0, or 1.
+     */
+    private function compareScientificNotation(string $a, string $b): int
+    {
+        $pa = $this->parseScientificNotation($a);
+        $pb = $this->parseScientificNotation($b);
+
+        // Compare signs.
+        if ($pa['sign'] !== $pb['sign']) {
+            return $pa['sign'] === '-' ? -1 : 1;
+        }
+        $sign = $pa['sign'] === '-' ? -1 : 1;
+
+        // Effective exponent accounts for mantissa length AND the original
+        // decimal-point position: 1.23e5 == 123e3, so combine exponent with
+        // mantissa length and decimal digits to compare magnitudes exactly.
+        $expA = $pa['exponent'] - $pa['decimalDigits'] + strlen($pa['mantissa']);
+        $expB = $pb['exponent'] - $pb['decimalDigits'] + strlen($pb['mantissa']);
+
+        if ($expA !== $expB) {
+            return $sign * ($expA <=> $expB);
+        }
+
+        // Same effective exponent: compare mantissas digit by digit.
+        $maxLen = max(strlen($pa['mantissa']), strlen($pb['mantissa']));
+        $ma = str_pad($pa['mantissa'], $maxLen, '0');
+        $mb = str_pad($pb['mantissa'], $maxLen, '0');
+        $cmp = strcmp($ma, $mb);
+
+        return $sign * $cmp;
+    }
+
+    /**
+     * Parse a numeric string (possibly in scientific notation) into sign,
+     * mantissa digits, and exponent.
+     *
+     * @param  string  $value  A numeric string.
+     * @return array{sign: string, mantissa: string, exponent: int, decimalDigits: int}
+     */
+    private function parseScientificNotation(string $value): array
+    {
+        $sign = '+';
+        if (str_starts_with($value, '-')) {
+            $sign = '-';
+            $value = ltrim($value, '-');
+        } elseif (str_starts_with($value, '+')) {
+            $value = ltrim($value, '+');
+        }
+
+        $parts = preg_split('/[eE]/', $value, 2);
+        if ($parts === false) {
+            $parts = [$value];
+        }
+        $mantissa = $parts[0];
+        $exponent = isset($parts[1]) ? (int) $parts[1] : 0;
+
+        // Track digits after the decimal point in the original mantissa.
+        $decimalDigits = str_contains($mantissa, '.') ? strlen(explode('.', $mantissa, 2)[1]) : 0;
+
+        // Remove decimal point and leading zeros from mantissa.
+        $mantissa = str_replace('.', '', $mantissa);
+        $mantissa = ltrim($mantissa, '0') ?: '0';
+
+        return [
+            'sign' => $sign,
+            'mantissa' => $mantissa,
+            'exponent' => $exponent,
+            'decimalDigits' => $decimalDigits,
+        ];
     }
 
     /**
