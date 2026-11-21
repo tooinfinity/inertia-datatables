@@ -8,7 +8,9 @@ use Closure;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\PostgresConnection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\Query\Expression;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTableRequest;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
@@ -702,14 +704,24 @@ final readonly class FilterApplier
         }
 
         if ($hasFrom) {
-            // Cast numeric bounds to float so all supported database drivers
-            // (including PostgreSQL) can compare them against integer columns
-            // without parsing decimal strings as bigint. Validation of
-            // inverted ranges uses exact decimal comparison in compareNumbers().
-            $query->where($target, '>=', $validateNumeric ? (float) $resolvedFrom : $this->formatDateTime($fromDate));
+            if ($validateNumeric && $query->getConnection() instanceof PostgresConnection) {
+                // PostgreSQL cannot cast a float bound parameter to a bigint
+                // column. Cast the bound parameter to double precision so the
+                // comparison works against integer columns. The column itself
+                // is passed through where() so Laravel qualifies it correctly.
+                $query->where($target, '>=', new Expression('?::double precision'));
+                $query->addBinding((float) $resolvedFrom);
+            } else {
+                $query->where($target, '>=', $validateNumeric ? (float) $resolvedFrom : $this->formatDateTime($fromDate));
+            }
         }
         if ($hasTo) {
-            $query->where($target, '<=', $validateNumeric ? (float) $resolvedTo : $this->formatDateTime($toDate));
+            if ($validateNumeric && $query->getConnection() instanceof PostgresConnection) {
+                $query->where($target, '<=', new Expression('?::double precision'));
+                $query->addBinding((float) $resolvedTo);
+            } else {
+                $query->where($target, '<=', $validateNumeric ? (float) $resolvedTo : $this->formatDateTime($toDate));
+            }
         }
 
         // Reject inverted ranges when both bounds are present. The comparison
