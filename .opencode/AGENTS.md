@@ -16,6 +16,14 @@ This repository is a Laravel package (`tooinfinity/inertia-datatables`): server-
 - Install JS deps: `bun install` (or `npm install`)
 - Build frontend: `composer build` (runs `tsc && vite build`, output to `dist/`)
 
+## Before commit or push
+
+Always run registry validation and build before committing or pushing:
+- `npm run registry:validate` — validates the registry manifest
+- `npm run registry:build` — rebuilds `public/r` artifacts; must be committed when registry source changes
+
+CI verifies that `public/r` artifacts are up to date with registry source, so any change to registry source files must be accompanied by regenerated artifacts committed in the same change.
+
 ## Local skills
 
 - `package-scaffold`: adding package capabilities / service-provider wiring (commands, migrations, routes, config, views, assets, publish tags, workbench files).
