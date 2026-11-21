@@ -92,7 +92,7 @@ function seedEndpointQuery(
         } else if (isPlainObject(f.value)) {
             Object.entries(f.value).forEach(([subKey, subValue]) => {
                 if (subValue !== '' && subValue !== null && subValue !== undefined) {
-                    setIfMissing(`${key}[${subKey}]`, String(subValue));
+                    setIfMissing(`${key}[${subKey}]`, String(subValue as string));
                 }
             });
         } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
@@ -428,7 +428,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 } else if (isPlainObject(value)) {
                     Object.entries(value).forEach(([subKey, subValue]) => {
                         if (subValue !== '' && subValue !== null && subValue !== undefined) {
-                            currentParams.set(`${key}[${subKey}]`, String(subValue));
+                            currentParams.set(`${key}[${subKey}]`, String(subValue as string));
                         } else {
                             currentParams.delete(`${key}[${subKey}]`);
                         }
@@ -789,7 +789,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     } else if (isPlainObject(f.value)) {
                         Object.entries(f.value).forEach(([subKey, subValue]) => {
                             if (subValue !== '' && subValue !== null && subValue !== undefined) {
-                                nextQuery.set(`${key}[${subKey}]`, String(subValue));
+                                nextQuery.set(`${key}[${subKey}]`, String(subValue as string));
                             }
                         });
                     } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
