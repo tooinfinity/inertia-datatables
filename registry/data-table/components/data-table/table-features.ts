@@ -12,7 +12,7 @@ import {
 export interface DataTableColumnMeta {
     searchable?: boolean;
     filterable?: boolean;
-    filter_type?: 'text' | 'select' | 'boolean' | null;
+    filter_type?: 'text' | 'select' | 'boolean' | 'date_range' | 'number_range' | 'multi_select' | null;
     filter_options?: Array<{ value: string | number; label: string }>;
     /**
      * Marks a column that only exists on the client (row actions, extra

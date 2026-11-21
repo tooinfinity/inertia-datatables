@@ -83,9 +83,16 @@ function seedEndpointQuery(
     query.filters.forEach((f) => {
         const key = `${keys.filters}[${f.column}]`;
         if (Array.isArray(f.value)) {
-            f.value.forEach((v) => {
-                if (!params.has(`${key}[]`)) {
-                    params.append(`${key}[]`, String(v));
+            // Only seed initial values when the endpoint URL has not already
+            // configured the array parameter, so explicitly configured values
+            // are preserved and every initial value is appended.
+            if (!params.has(`${key}[]`)) {
+                f.value.forEach((v) => params.append(`${key}[]`, String(v)));
+            }
+        } else if (isPlainObject(f.value)) {
+            Object.entries(f.value).forEach(([subKey, subValue]) => {
+                if (subValue !== '' && subValue !== null && subValue !== undefined) {
+                    setIfMissing(`${key}[${subKey}]`, String(subValue));
                 }
             });
         } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
@@ -94,6 +101,16 @@ function seedEndpointQuery(
     });
 
     return params;
+}
+
+/** Returns true when the value is a plain object (e.g. a { from, to } range). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.getPrototypeOf(value) === Object.prototype
+    );
 }
 
 /** Id of the client side column that renders the row actions. */
@@ -389,14 +406,33 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 currentParams = new URLSearchParams(window.location.search);
             }
             Object.entries(params).forEach(([key, value]) => {
-                // Remove any leftover scalar or array form of this key so
-                // multi-value filters (`filters[col][]=a&filters[col][]=b`) are
+                // Remove any leftover scalar, array or object form of this key so
+                // multi-value filters (`filters[col][]=a&filters[col][]=b`) and
+                // range filters (`filters[col][from]=…&filters[col][to]=…`) are
                 // written correctly and can be fully cleared.
                 currentParams.delete(key);
                 currentParams.delete(`${key}[]`);
 
+                if (value === undefined || value === null || isPlainObject(value)) {
+                    // Clear any range sub-keys (e.g. filters[col][from], filters[col][to])
+                    // before rewriting the keys that remain, so a removed bound is not
+                    // retained in the URL or endpoint query.
+                    const prefix = `${key}[`;
+                    Array.from(currentParams.keys())
+                        .filter((k) => k.startsWith(prefix))
+                        .forEach((k) => currentParams.delete(k));
+                }
+
                 if (Array.isArray(value)) {
                     value.forEach((item) => currentParams.append(`${key}[]`, String(item as string)));
+                } else if (isPlainObject(value)) {
+                    Object.entries(value).forEach(([subKey, subValue]) => {
+                        if (subValue !== '' && subValue !== null && subValue !== undefined) {
+                            currentParams.set(`${key}[${subKey}]`, String(subValue));
+                        } else {
+                            currentParams.delete(`${key}[${subKey}]`);
+                        }
+                    });
                 } else if (value !== '' && value !== null && value !== undefined) {
                     currentParams.set(key, String(value as string));
                 }
@@ -750,6 +786,12 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                     const key = `${KEYS.filters}[${f.column}]`;
                     if (Array.isArray(f.value)) {
                         f.value.forEach((v) => nextQuery.append(`${key}[]`, String(v)));
+                    } else if (isPlainObject(f.value)) {
+                        Object.entries(f.value).forEach(([subKey, subValue]) => {
+                            if (subValue !== '' && subValue !== null && subValue !== undefined) {
+                                nextQuery.set(`${key}[${subKey}]`, String(subValue));
+                            }
+                        });
                     } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
                         nextQuery.set(key, String(f.value as string));
                     }

@@ -375,6 +375,9 @@ The `->hidden()` option marks a column as hidden in the **UI only**. It does **n
 | `text` (default) | Free-text exact match | Text input |
 | `select` | Predefined options | Checkbox list |
 | `boolean` | True/false values | Yes/No checkboxes |
+| `multi_select` | Multiple predefined options | Checkbox list (multi-select) |
+| `date_range` | Between two dates | From / To date inputs |
+| `number_range` | Between two numbers | From / To number inputs |
 
 #### `->filterEnum()` — Backed enum select options
 
@@ -422,6 +425,34 @@ or a label resolver receiving the enum case:
 Submitted filter values are validated against the enum's backed values, so a
 value that is not a valid enum case is rejected with a validation error. The
 existing `->filterOptions()` API remains fully supported and backward compatible.
+
+#### `multi_select`
+
+Let users pick multiple predefined options. Submitted as
+`filters[col][]=a&filters[col][]=b` and validated against `filterOptions`:
+
+```php
+Column::make('role')
+    ->filterable()
+    ->filterType('multi_select')
+    ->filterOptions([
+        ['value' => 'admin', 'label' => 'Admin'],
+        ['value' => 'user', 'label' => 'User'],
+        ['value' => 'moderator', 'label' => 'Moderator'],
+    ]);
+```
+
+#### `date_range` and `number_range`
+
+Filter between two bounds, submitted as
+`filters[col][from]=…&filters[col][to]=…`. Either bound may be omitted for a
+one-sided constraint. An inverted range (`from` after `to`) is rejected with a
+validation error. `number_range` rejects non-numeric values.
+
+```php
+Column::make('created_at')->filterable()->filterType('date_range');
+Column::make('price')->filterable()->filterType('number_range');
+```
 
 Integer-backed enums are supported too, with integer values preserved in the
 JSON response:

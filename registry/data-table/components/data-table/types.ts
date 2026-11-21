@@ -19,7 +19,7 @@ export interface DataTableColumn<TData extends RowData = Record<string, unknown>
     searchable: boolean;
     filterable: boolean;
     hidden: boolean;
-    filter_type?: 'text' | 'select' | 'boolean' | null;
+    filter_type?: 'text' | 'select' | 'boolean' | 'date_range' | 'number_range' | 'multi_select' | null;
     filter_options?: Array<{ value: string | number; label: string }>;
     /** Custom cell formatter. Receives the cell context and returns a React node. */
     cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
