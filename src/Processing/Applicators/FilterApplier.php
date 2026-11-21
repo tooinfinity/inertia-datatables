@@ -252,7 +252,9 @@ final readonly class FilterApplier
             return $trimmed;
         }
 
-        return (float) $value;
+        // Decimal string: keep as string for exact comparison without
+        // imprecise float conversion.
+        return $value;
     }
 
     /**
@@ -294,11 +296,116 @@ final readonly class FilterApplier
     }
 
     /**
+     * Compare two numeric string representations exactly, normalizing decimal
+     * and exponent forms without converting to imprecise floats.
+     *
+     * @param  string  $a  A numeric string.
+     * @param  string  $b  A numeric string.
+     * @return int -1, 0, or 1.
+     */
+    private function compareNumericStrings(string $a, string $b): int
+    {
+        $a = $this->normalizeNumericString($a);
+        $b = $this->normalizeNumericString($b);
+
+        $aNeg = str_starts_with($a, '-');
+        $bNeg = str_starts_with($b, '-');
+
+        if ($aNeg && ! $bNeg) {
+            return -1;
+        }
+        if (! $aNeg && $bNeg) {
+            return 1;
+        }
+
+        $a = ltrim($a, '+-');
+        $b = ltrim($b, '+-');
+
+        // Split into integer and fractional parts.
+        [$aInt, $aFrac] = str_contains($a, '.') ? explode('.', $a, 2) : [$a, ''];
+        [$bInt, $bFrac] = str_contains($b, '.') ? explode('.', $b, 2) : [$b, ''];
+
+        // Normalize integer parts (strip leading zeros).
+        $aInt = ltrim($aInt, '0') ?: '0';
+        $bInt = ltrim($bInt, '0') ?: '0';
+
+        $sign = $aNeg ? -1 : 1;
+
+        // Compare integer parts by length then lexicographically.
+        $intLenCmp = strlen($aInt) <=> strlen($bInt);
+        if ($intLenCmp !== 0) {
+            return $sign * $intLenCmp;
+        }
+
+        $intCmp = strcmp($aInt, $bInt);
+        if ($intCmp !== 0) {
+            return $sign * $intCmp;
+        }
+
+        // Compare fractional parts (right-pad shorter with zeros).
+        $maxFracLen = max(strlen($aFrac), strlen($bFrac));
+        $aFrac = str_pad($aFrac, $maxFracLen, '0');
+        $bFrac = str_pad($bFrac, $maxFracLen, '0');
+        $fracCmp = strcmp($aFrac, $bFrac);
+
+        return $sign * $fracCmp;
+    }
+
+    /**
+     * Normalize a numeric string: handle scientific notation and strip
+     * trailing zeros from the fractional part.
+     *
+     * @param  string  $value  A numeric string.
+     * @return string The normalized numeric string.
+     */
+    private function normalizeNumericString(string $value): string
+    {
+        // Handle scientific notation like "1e10" or "1.5E-3".
+        if (preg_match('/^[+-]?\d+\.?\d*[eE][+-]?\d+$/', $value) === 1) {
+            return $this->scientificToDecimal($value);
+        }
+
+        // Strip trailing zeros after the decimal point.
+        if (str_contains($value, '.')) {
+            $value = rtrim($value, '0');
+            if (str_ends_with($value, '.')) {
+                $value = substr($value, 0, -1);
+            }
+        }
+
+        // Normalize -0 to 0.
+        if ($value === '-0' || $value === '-0.') {
+            $value = '0';
+        }
+
+        return $value;
+    }
+
+    /**
+     * Convert a scientific notation string to a decimal string.
+     *
+     * @param  string  $value  A value in scientific notation (e.g. "1e10").
+     * @return string The decimal representation.
+     */
+    private function scientificToDecimal(string $value): string
+    {
+        $float = (float) $value;
+        $formatted = sprintf('%.17f', $float);
+        $formatted = rtrim($formatted, '0');
+        if (str_ends_with($formatted, '.')) {
+            $formatted = substr($formatted, 0, -1);
+        }
+
+        return $formatted;
+    }
+
+    /**
      * Compare two numeric values with full precision.
      *
      * Native integers compare exactly. Integer strings that fit the native int
      * range compare as integers. Out-of-range integer strings compare exactly
-     * by magnitude and sign. Everything else compares as floats.
+     * by magnitude and sign. Decimal and exponent forms are normalized and
+     * compared exactly without imprecise float conversion.
      *
      * @return int -1, 0, or 1.
      */
@@ -321,7 +428,26 @@ final readonly class FilterApplier
             return $this->compareIntegerStrings($ca, $cb);
         }
 
-        return (float) $ca <=> (float) $cb;
+        return $this->compareNumericStrings((string) $ca, (string) $cb);
+    }
+
+    /**
+     * Format a date bound for SQL binding, preserving fractional seconds when
+     * present. Falls back to whole-second formatting when there are no
+     * microseconds, so existing whole-second comparisons are unchanged.
+     */
+    private function formatDateTime(?DateTimeImmutable $date): ?string
+    {
+        if (! $date instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        $micro = (int) $date->format('u');
+        if ($micro !== 0) {
+            return $date->format('Y-m-d H:i:s.u');
+        }
+
+        return $date->format('Y-m-d H:i:s');
     }
 
     /**
@@ -408,21 +534,21 @@ final readonly class FilterApplier
                 ) {
                     throw InvalidFilterException::invalidValue($column->name, "Invalid 'to' date: {$to}")->forRequest();
                 }
-                // Expand a date-only upper bound to the end of its calendar day
-                // in its original timezone, then normalize to UTC so the bound
-                // includes the whole selected day everywhere.
+                // Expand a date-only upper bound to the final fractional second
+                // of its calendar day in its original timezone, then normalize
+                // to UTC so the bound includes the whole selected day everywhere.
                 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) === 1) {
-                    $toDate = $toDate->setTime(23, 59, 59);
+                    $toDate = $toDate->setTime(23, 59, 59, 999999);
                 }
                 $toDate = $toDate->setTimezone(new DateTimeZone('UTC'));
             }
         }
 
         if ($hasFrom) {
-            $query->where($target, '>=', $validateNumeric ? $resolvedFrom : ($fromDate?->format('Y-m-d H:i:s') ?? $from));
+            $query->where($target, '>=', $validateNumeric ? $resolvedFrom : $this->formatDateTime($fromDate));
         }
         if ($hasTo) {
-            $query->where($target, '<=', $validateNumeric ? $resolvedTo : ($toDate?->format('Y-m-d H:i:s') ?? $to));
+            $query->where($target, '<=', $validateNumeric ? $resolvedTo : $this->formatDateTime($toDate));
         }
 
         // Reject inverted ranges when both bounds are present. The comparison

@@ -570,6 +570,46 @@ describe('QueryProcessor: new filter types (date_range, number_range, multi_sele
         expect($names)->toBe(['John', 'Later']);
     });
 
+    it('rejects inverted decimal range for number_range', function () use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => '9223372036854775808.1', 'to' => '9223372036854775807.2'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        expect(fn (): TooInfinity\InertiaDataTables\DataTableResult => $processor->process(User::query(), $request))
+            ->toThrow(InvalidFilterException::class, "Invalid range: 'from' must be before or equal to 'to'");
+    });
+
+    it('accepts valid decimal range for number_range', function () use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => '9223372036854775807.2', 'to' => '9223372036854775808.1'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        // No users match this out-of-range decimal interval, but it must not
+        // be rejected as inverted.
+        expect($result->paginator->total())->toBe(0);
+    });
+
+    it('preserves fractional seconds in date_range bounds', function () use ($processor): void {
+        // A date-only upper bound expands to the end of the day (23:59:59.999999),
+        // so a record later on that day is included even when filtering by date only.
+        User::forceCreate([
+            'name' => 'Later', 'email' => 'later@example.com',
+            'password' => '$2y$04$wT3wY2K7dKjMh6H7R9uIhe9Zz3E3O6B2I5l9h.8P7v4n3S3T4k6W2',
+            'created_at' => '2026-02-15 23:59:59', 'updated_at' => '2026-02-15 23:59:59',
+        ]);
+
+        $filters = new FilterCollection([new Filter('created_at', [
+            'from' => '2026-02-15 00:00:00',
+            'to' => '2026-02-15',
+        ])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        // John (10:00) and Later (23:59:59) both fall on 2026-02-15 and must match.
+        expect($result->paginator->total())->toBe(2);
+    });
+
     it('applies no constraint for empty range filter', function () use ($processor): void {
         $filters = new FilterCollection([new Filter('created_at', [])]);
         $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
