@@ -18,6 +18,12 @@ This repository is a Laravel package. Keep the package focused, idiomatic, and e
 - Pest tests: `composer test:unit`
 - Workbench build: `composer build`
 - Workbench server: `composer serve`
+- Registry validation: `npm run registry:validate` — validates the registry manifest
+- Registry build: `npm run registry:build` — rebuilds `public/r` artifacts; must be committed when registry source changes
+
+## Before commit or push
+
+Always run `npm run registry:validate` and `npm run registry:build` before committing or pushing. CI verifies that `public/r` artifacts are up to date with registry source, so any change to registry source files must be accompanied by regenerated artifacts committed in the same change.
 
 ## Local Skills
 

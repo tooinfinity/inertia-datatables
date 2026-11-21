@@ -305,7 +305,80 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument();
     });
 
-    it('renders filter trigger button for filterable columns', () => {
+    it('moves filter controls to a toolbar chip beside the search field', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: true, hidden: false, filter_type: 'text' },
+                    ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'name', value: 'Ada' }],
+                    },
+                })}
+            />
+        );
+
+        // Filter chip lives in the toolbar beside the global search field
+        expect(screen.getByRole('button', { name: 'Name • 1 selected' })).toBeInTheDocument();
+
+        // Clicking the chip opens a dropdown with the column's filter controls
+        fireEvent.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
+        expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
+
+        // Column headers stay clean: only the sort indicator, no filter dropdown
+        const table = screen.getByRole('table');
+        expect(within(table).queryByRole('button', { name: /Name •/ })).not.toBeInTheDocument();
+        expect(within(table).getByRole('button', { name: 'Sort by Name' })).toBeInTheDocument();
+    });
+
+    it('shows the selected count on a filter chip for multi-value filters', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        {
+                            name: 'status',
+                            label: 'Status',
+                            sortable: false,
+                            searchable: false,
+                            filterable: true,
+                            hidden: false,
+                            filter_type: 'select',
+                            filter_options: [
+                                { value: 'active', label: 'Active' },
+                                { value: 'inactive', label: 'Inactive' },
+                                { value: 'archived', label: 'Archived' },
+                            ],
+                        },
+                    ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'status', value: ['active', 'inactive'] }],
+                    },
+                })}
+            />
+        );
+
+        expect(screen.getByRole('button', { name: 'Status • 2 selected' })).toBeInTheDocument();
+
+        // Opening the chip should show the restored multi-value options as checked.
+        fireEvent.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Archived' })).not.toBeChecked();
+    });
+
+    it('keeps a filter entrypoint for eligible columns when no filter is active', () => {
         render(
             <DataTable
                 data={createData({
@@ -316,7 +389,61 @@ describe('DataTable customization', () => {
             />
         );
 
-        expect(screen.getByRole('button', { name: 'Filter Name' })).toBeInTheDocument();
+        // No filters are active, but the column still offers an entrypoint to
+        // start filtering or searching beside the global search field.
+        expect(screen.getByRole('button', { name: 'Name' })).toBeInTheDocument();
+
+        // Closed state: filter controls are hidden until the chip is opened.
+        expect(screen.queryByLabelText('Search Name')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Filter Name value')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Name' }));
+        expect(screen.getByLabelText('Search Name')).toBeInTheDocument();
+        expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
+    });
+
+    it('toggles the filter dropdown open and closed, preserving aria-expanded', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        {
+                            name: 'status',
+                            label: 'Status',
+                            sortable: false,
+                            searchable: false,
+                            filterable: true,
+                            hidden: false,
+                            filter_type: 'select',
+                            filter_options: [
+                                { value: 'active', label: 'Active' },
+                                { value: 'inactive', label: 'Inactive' },
+                            ],
+                        },
+                    ],
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [],
+                        searches: [],
+                        filters: [{ column: 'status', value: 'active' }],
+                    },
+                })}
+            />
+        );
+
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+
+        fireEvent.click(chip);
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+
+        fireEvent.click(chip);
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
     });
 
     it('renders 0 to 0 of 0 results when total is 0', () => {

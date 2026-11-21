@@ -1,12 +1,21 @@
 'use client';
 
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, useState, useMemo } from 'react';
 import { type ReactTable, type RowData } from '@tanstack/react-table';
-import type { DataTableFeatures } from './table-features';
+import type { DataTableColumnMeta, DataTableFeatures } from './table-features';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { DataTableColumnVisibility } from './data-table-column-visibility';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export interface DataTableToolbarProps<TData extends RowData = Record<string, unknown>> {
     table?: ReactTable<DataTableFeatures, TData>;
@@ -18,6 +27,246 @@ export interface DataTableToolbarProps<TData extends RowData = Record<string, un
     isFiltered?: boolean;
     onReset?: () => void;
     children?: ReactNode;
+    /** Active per-column filters keyed by column id. */
+    filters?: Record<string, unknown>;
+    /** Active per-column searches keyed by column id. */
+    columnSearches?: Record<string, string>;
+    /** Fired when a per-column filter value changes. */
+    onFilterChange?: (_column: string, _value: unknown) => void;
+    /** Fired when a per-column search value changes. */
+    onColumnSearchChange?: (_column: string, _value: string) => void;
+    /** Fired when a per-column filter or search is cleared. */
+    onClearFilter?: (_column: string, _clearSearch: boolean) => void;
+}
+
+interface ColumnFilterInfo {
+    label: string;
+    canSearch: boolean;
+    canFilter: boolean;
+    filterType: DataTableColumnMeta['filter_type'];
+    filterOptions: Array<{ value: string | number; label: string }>;
+}
+
+interface DataTableFilterChipProps {
+    columnId: string;
+    label: string;
+    filterValue: unknown;
+    searchValue: string;
+    filterType: DataTableColumnMeta['filter_type'];
+    filterOptions: Array<{ value: string | number; label: string }>;
+    canSearch: boolean;
+    canFilter: boolean;
+    onFilterChange: (_column: string, _value: unknown) => void;
+    onColumnSearchChange: (_column: string, _value: string) => void;
+    onClearFilter: (_column: string, _clearSearch: boolean) => void;
+}
+
+function isFilterActive(value: unknown): boolean {
+    return value !== '' && value !== null && value !== undefined;
+}
+
+function filterValueCount(value: unknown): number {
+    if (Array.isArray(value)) {
+        return value.length;
+    }
+    return isFilterActive(value) ? 1 : 0;
+}
+
+export function DataTableFilterChip({
+    columnId,
+    label,
+    filterValue,
+    searchValue,
+    filterType,
+    filterOptions,
+    canSearch,
+    canFilter,
+    onFilterChange,
+    onColumnSearchChange,
+    onClearFilter,
+}: DataTableFilterChipProps) {
+    const [menuOpen, setMenuOpen] = useState<boolean>(false);
+
+    const activeCount = filterValueCount(filterValue) + (searchValue ? 1 : 0);
+
+    const handleFilterSelect = (value: string | number) => {
+        onFilterChange(columnId, value);
+        setMenuOpen(false);
+    };
+
+    const handleFilterBooleanChange = (value: boolean) => {
+        onFilterChange(columnId, value);
+        setMenuOpen(false);
+    };
+
+    const handleFilterTextChange = (value: string) => {
+        onFilterChange(columnId, value);
+    };
+
+    const handleColumnSearchChange = (value: string) => {
+        onColumnSearchChange(columnId, value);
+    };
+
+    const handleClearFilter = () => {
+        onClearFilter(columnId, Boolean(canSearch && searchValue));
+        setMenuOpen(false);
+    };
+
+    // Compares a restored filter value (often a string from the query string)
+    // against an option value (which may be a number for integer-backed enums).
+    // Array values (multi-value filters) match when any member equals the option.
+    const filterValueMatches = (current: unknown, optionValue: string | number): boolean => {
+        const matches = (value: unknown): boolean => {
+            if (value === optionValue) {
+                return true;
+            }
+            if (typeof value === 'string' && typeof optionValue === 'number') {
+                return value === String(optionValue);
+            }
+            if (typeof value === 'number' && typeof optionValue === 'string') {
+                return String(value) === optionValue;
+            }
+            return false;
+        };
+        if (Array.isArray(current)) {
+            return current.some((member) => matches(member));
+        }
+        return matches(current);
+    };
+
+    return (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMenuOpen((open) => !open)}
+                    className="h-8 px-2.5 text-xs gap-1.5 text-foreground hover:bg-accent"
+                    aria-haspopup="true"
+                    aria-expanded={menuOpen}
+                >
+                    {activeCount > 0 ? `${label} • ${activeCount} selected` : label}
+                </Button>
+            </DropdownMenuTrigger>
+            {menuOpen && (
+                <DropdownMenuContent className="w-60 p-2" align="end" sideOffset={6}>
+                <DropdownMenuLabel className="px-1 text-xs font-semibold text-muted-foreground">
+                    Filter {label}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+
+                {canSearch && (
+                    <div className="p-1 space-y-1.5">
+                        <label
+                            className="block text-[11px] font-medium text-muted-foreground"
+                            htmlFor={`toolbar-column-search-${columnId}`}
+                        >
+                            Search {label}
+                        </label>
+                        <Input
+                            id={`toolbar-column-search-${columnId}`}
+                            placeholder={`Search ${label}...`}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                handleColumnSearchChange(e.target.value)
+                            }
+                            value={searchValue}
+                            className="h-7 text-xs"
+                        />
+                    </div>
+                )}
+
+                {canFilter && filterType === 'select' && filterOptions.length > 0 && (
+                    <div className="space-y-0.5 p-1 max-h-[200px] overflow-y-auto">
+                        {filterOptions.map((option) => (
+                            <DropdownMenuItem
+                                key={option.value}
+                                onSelect={() => {
+                                    handleFilterSelect(option.value);
+                                }}
+                                className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                    filterValueMatches(filterValue, option.value)
+                                        ? 'bg-primary/10 text-primary font-medium'
+                                        : 'hover:bg-accent'
+                                }`}
+                            >
+                                <Checkbox
+                                    aria-label={option.label}
+                                    checked={filterValueMatches(filterValue, option.value)}
+                                    className="h-3.5 w-3.5"
+                                />
+                                <span className="truncate">{option.label}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </div>
+                )}
+
+                {canFilter && filterType === 'boolean' && (
+                    <div className="space-y-0.5 p-1">
+                        <DropdownMenuItem
+                            onSelect={() => {
+                                handleFilterBooleanChange(true);
+                            }}
+                            className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                filterValue === true ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-accent'
+                            }`}
+                        >
+                            <Checkbox
+                                aria-label="Yes"
+                                checked={filterValue === true}
+                                className="h-3.5 w-3.5"
+                            />
+                            <span className="truncate">Yes</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onSelect={() => {
+                                handleFilterBooleanChange(false);
+                            }}
+                            className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
+                                filterValue === false ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-accent'
+                            }`}
+                        >
+                            <Checkbox
+                                aria-label="No"
+                                checked={filterValue === false}
+                                className="h-3.5 w-3.5"
+                            />
+                            <span className="truncate">No</span>
+                        </DropdownMenuItem>
+                    </div>
+                )}
+
+                {canFilter && filterType === 'text' && (
+                    <div className="p-1 space-y-1.5">
+                        <label
+                            className="block text-[11px] font-medium text-muted-foreground"
+                            htmlFor={`toolbar-filter-value-${columnId}`}
+                        >
+                            Filter value
+                        </label>
+                        <Input
+                            id={`toolbar-filter-value-${columnId}`}
+                            aria-label={`Filter ${label} value`}
+                            placeholder={`Filter ${label}...`}
+                            value={typeof filterValue === 'string' ? filterValue : ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                handleFilterTextChange(e.target.value)
+                            }
+                            className="h-7 text-xs"
+                        />
+                    </div>
+                )}
+
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    onClick={handleClearFilter}
+                    className="text-xs text-destructive hover:bg-destructive/10 cursor-pointer font-medium px-2 py-1 rounded"
+                >
+                    Clear filter
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+            )}
+        </DropdownMenu>
+    );
 }
 
 export function DataTableToolbar<TData extends RowData = Record<string, unknown>>({
@@ -30,7 +279,31 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
     isFiltered,
     onReset,
     children,
+    filters = {},
+    columnSearches = {},
+    onFilterChange = () => {},
+    onColumnSearchChange = () => {},
+    onClearFilter = () => {},
 }: DataTableToolbarProps<TData>) {
+    // Column metadata (label, filter type, options) derived from the table so
+    // each filter chip can render the matching dropdown controls.
+    const columnMeta = useMemo<Map<string, ColumnFilterInfo>>(() => {
+        const map = new Map<string, ColumnFilterInfo>();
+        table?.getAllLeafColumns().forEach((column) => {
+            const meta = column.columnDef.meta as DataTableColumnMeta | undefined;
+            const header = column.columnDef.header;
+            const label = typeof header === 'string' ? header : column.id;
+            map.set(column.id, {
+                label,
+                canSearch: meta?.searchable === true,
+                canFilter: meta?.filterable === true,
+                filterType: meta?.filter_type ?? 'text',
+                filterOptions: meta?.filter_options ?? [],
+            });
+        });
+        return map;
+    }, [table]);
+
     return (
         <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-1 flex-wrap items-center gap-2">
@@ -66,6 +339,31 @@ export function DataTableToolbar<TData extends RowData = Record<string, unknown>
                         </svg>
                     </Button>
                 )}
+                {/* Render a filter chip for every eligible column (searchable or
+                   filterable), active or not. Active columns show their selected
+                   count; inactive columns stay as an "add filter" entrypoint so
+                   users can always start a new column filter or search. */}
+                {Array.from(columnMeta.entries()).map(([columnId, info]) => {
+                    if (!info.canSearch && !info.canFilter) {
+                        return null;
+                    }
+                    return (
+                        <DataTableFilterChip
+                            key={columnId}
+                            columnId={columnId}
+                            label={info.label}
+                            filterValue={filters[columnId]}
+                            searchValue={columnSearches[columnId] ?? ''}
+                            filterType={info.filterType}
+                            filterOptions={info.filterOptions}
+                            canSearch={info.canSearch}
+                            canFilter={info.canFilter}
+                            onFilterChange={onFilterChange}
+                            onColumnSearchChange={onColumnSearchChange}
+                            onClearFilter={onClearFilter}
+                        />
+                    );
+                })}
                 {children}
             </div>
             <div className="flex items-center gap-2">
