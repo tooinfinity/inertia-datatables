@@ -702,10 +702,14 @@ final readonly class FilterApplier
         }
 
         if ($hasFrom) {
-            $query->where($target, '>=', $validateNumeric ? $resolvedFrom : $this->formatDateTime($fromDate));
+            // Cast numeric bounds to float so all supported database drivers
+            // (including PostgreSQL) can compare them against integer columns
+            // without parsing decimal strings as bigint. Validation of
+            // inverted ranges uses exact decimal comparison in compareNumbers().
+            $query->where($target, '>=', $validateNumeric ? (float) $resolvedFrom : $this->formatDateTime($fromDate));
         }
         if ($hasTo) {
-            $query->where($target, '<=', $validateNumeric ? $resolvedTo : $this->formatDateTime($toDate));
+            $query->where($target, '<=', $validateNumeric ? (float) $resolvedTo : $this->formatDateTime($toDate));
         }
 
         // Reject inverted ranges when both bounds are present. The comparison

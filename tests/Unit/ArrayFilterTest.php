@@ -600,6 +600,18 @@ describe('QueryProcessor: new filter types (date_range, number_range, multi_sele
         expect($result->paginator->total())->toBe(3);
     });
 
+    it('applies decimal number_range bounds against integer column', function () use ($processor): void {
+        // Decimal bounds on an integer column must not fail (e.g. PostgreSQL
+        // parsing the decimal as bigint). Cast to float for query binding.
+        $filters = new FilterCollection([new Filter('id', ['from' => '2.5', 'to' => '4.5'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        // Users with id 3 and 4 match (2.5 <= id <= 4.5).
+        expect($result->paginator->total())->toBe(2);
+    });
+
     it('rejects inverted mixed int and decimal bounds for number_range', function () use ($processor): void {
         $filters = new FilterCollection([new Filter('id', ['from' => '10', 'to' => '2.0'])]);
         $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
