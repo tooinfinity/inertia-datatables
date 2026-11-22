@@ -149,6 +149,10 @@ final readonly class FilterApplier
         // Validate select / multi_select membership before the generic operator
         // branches so disallowed scalar values (e.g. "*", "true", "null",
         // "not_null") produce a validation error instead of a query constraint.
+        // A validated scalar option is applied as a literal equality predicate,
+        // which prevents option values such as "not_null" from being interpreted
+        // as operators (e.g. whereNotNull) and ensures a scalar multi_select
+        // matches only the literal option.
         if (
             in_array($column->filterType, ['select', 'multi_select'], true)
             && $column->filterOptions !== []
@@ -160,17 +164,7 @@ final readonly class FilterApplier
                 throw InvalidFilterException::invalidValue($column->name, $value)->forRequest();
             }
 
-            $value = $canonical;
-        }
-
-        // A validated scalar select/multi_select option is applied as a literal
-        // equality predicate. This prevents option values such as "not_null"
-        // from being interpreted as operators (e.g. whereNotNull) and ensures
-        // a scalar multi_select matches only the literal option.
-        if (in_array($column->filterType, ['select', 'multi_select'], true)
-            && $column->filterOptions !== []
-            && is_scalar($value)) {
-            $query->where($target, $value);
+            $query->where($target, $canonical);
 
             return;
         }

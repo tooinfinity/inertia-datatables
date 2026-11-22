@@ -469,6 +469,18 @@ describe('QueryProcessor: new filter types (date_range, number_range, multi_sele
             ->toThrow(InvalidFilterException::class, 'Invalid filter value for column [role]: "guest"');
     });
 
+    it('applies a valid scalar multi_select value as a literal equality', function () use ($processor): void {
+        // A scalar value that is a configured option must match only the literal
+        // option (equality), not be reinterpreted as an operator such as
+        // whereNotNull when the option happens to be named "not_null".
+        $filters = new FilterCollection([new Filter('role', 'admin')]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        expect($result->paginator->total())->toBe(2); // John (admin), Alice (admin)
+    });
+
     it('rejects invalid date_range from date', function () use ($processor): void {
         $filters = new FilterCollection([new Filter('created_at', ['from' => 'not-a-date', 'to' => '2026-12-31'])]);
         $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
