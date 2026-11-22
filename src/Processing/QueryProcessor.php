@@ -93,13 +93,27 @@ final readonly class QueryProcessor
         /** @var int $maxPerPage */
         $maxPerPage = config('inertia-datatables.max_per_page', 100);
         $perPage = $this->resolvePerPage($request, $perPageOverride, $maxPerPage);
-        $paginator = $query->paginate($perPage, page: $request->page);
+
+        // Clamp the page using the final effective page size so the pagination
+        // offset (page - 1) * perPage cannot overflow PHP integer arithmetic.
+        // The bound is calculated after the table-level perPage override and
+        // max_per_page are resolved, so the paginator always receives a page
+        // whose offset fits in a signed integer. Since the offset is
+        // (page - 1) * perPage, the largest safe page is floor(PHP_INT_MAX /
+        // perPage) + 1; page 1 always yields offset 0.
+        $safePerPage = max(1, $perPage);
+        $maxPage = $safePerPage > 1
+            ? intdiv(PHP_INT_MAX, $safePerPage) + 1
+            : PHP_INT_MAX;
+        $page = min($maxPage, max(1, $request->page));
+
+        $paginator = $query->paginate($perPage, page: $page);
 
         /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator<array-key, TModel> $paginator */
         return new DataTableResult(
             paginator: $paginator,
             columns: array_map(fn (Column $column): array => $column->toArray(), $this->columns),
-            query: $this->buildQueryState($request, $perPage, $sorts),
+            query: $this->buildQueryState($request, $page, $perPage, $sorts),
             config: $this->buildConfig($perPage, $maxPerPage),
             exposeAll: $this->exposeAll,
             responseKey: $this->responseKey,
@@ -110,9 +124,10 @@ final readonly class QueryProcessor
     /**
      * @return array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>}
      */
-    private function buildQueryState(DataTableRequest $request, int $perPage, SortCollection $sorts): array
+    private function buildQueryState(DataTableRequest $request, int $page, int $perPage, SortCollection $sorts): array
     {
         $queryState = $request->toArray();
+        $queryState['page'] = $page;
         $queryState['per_page'] = $perPage;
         $queryState['sort'] = $sorts->toArray();
 
