@@ -299,7 +299,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
             // filters keep their existing truncation behavior.
             $sanitizedItem = $item;
             if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
-                throw InvalidFilterException::invalidValue($column ?? 'filter', $sanitizedItem);
+                throw InvalidFilterException::invalidValue($column ?? 'filter', $sanitizedItem)->forRequest();
             }
             $sanitized[$key] = $sanitizedItem;
         }

@@ -13,6 +13,7 @@ it('renders invalid request parameters as unprocessable validation errors', func
         Column::make('name')->searchable()->sortable(),
         Column::make('email')->filterable(),
         Column::make('status')->filterable()->sortable(),
+        Column::make('created_at')->filterable()->filterType('date_range'),
     ]);
 
     $response = $this->getJson('/exception-handling?'.$query);
@@ -36,6 +37,10 @@ it('renders invalid request parameters as unprocessable validation errors', func
     'non-filterable column' => [
         'filters[name]=john',
         'Column [name] is not filterable.',
+    ],
+    'overlong range bound' => [
+        'filters[created_at][from]='.str_repeat('a', 501),
+        'Invalid filter value for column [created_at]: "'.str_repeat('a', 501).'"',
     ],
     'unknown search column' => [
         'searches[unknown_column]=john',

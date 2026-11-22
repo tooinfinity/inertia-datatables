@@ -643,16 +643,17 @@ final readonly class FilterApplier
         }
         $mantissa = $parts[0];
         $exponentRaw = $parts[1] ?? '0';
+        $exponentDigits = ltrim($exponentRaw, '+-0') ?: '0';
+        $normalizedExponent = str_starts_with($exponentRaw, '-') && $exponentDigits !== '0'
+            ? '-'.$exponentDigits
+            : $exponentDigits;
+
         // Keep the exponent as a native int when it fits, otherwise preserve it
         // as a string so distinct out-of-range exponents do not saturate to the
         // same value under the (int) cast (e.g. 1e-9223372036854775809 vs
         // 1e-9223372036854775810).
-        $exponentInt = (int) $exponentRaw;
-        if ((string) $exponentInt === ltrim($exponentRaw, '+')) {
-            $exponent = $exponentInt;
-        } else {
-            $exponent = $exponentRaw;
-        }
+        $exponentInt = (int) $normalizedExponent;
+        $exponent = (string) $exponentInt === $normalizedExponent ? $exponentInt : $normalizedExponent;
 
         // Track digits after the decimal point in the original mantissa.
         $decimalDigits = str_contains($mantissa, '.') ? strlen(explode('.', $mantissa, 2)[1]) : 0;

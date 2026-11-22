@@ -650,6 +650,23 @@ describe('QueryProcessor: new filter types (date_range, number_range, multi_sele
             ->toThrow(InvalidFilterException::class, "Invalid range: 'from' must be before or equal to 'to'");
     });
 
+    it('accepts a scientific lower bound of ten with or without exponent padding', function (string $bound) use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => $bound, 'to' => '20'])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        $result = $processor->process(User::query(), $request);
+
+        expect($result->paginator->total())->toBe(0);
+    })->with(['1e01', '1e1']);
+
+    it('rejects a scientific upper bound of ten with or without exponent padding', function (string $bound) use ($processor): void {
+        $filters = new FilterCollection([new Filter('id', ['from' => '20', 'to' => $bound])]);
+        $request = new DataTableRequest(1, 25, '', new SortCollection, new SearchCollection, $filters);
+
+        expect(fn (): TooInfinity\InertiaDataTables\DataTableResult => $processor->process(User::query(), $request))
+            ->toThrow(InvalidFilterException::class, "Invalid range: 'from' must be before or equal to 'to'");
+    })->with(['1e01', '1e1']);
+
     it('accepts dot-leading scientific notation for number_range', function () use ($processor): void {
         // .5e1 = 5, no users have id >= 5, so 0 results but no exception.
         $filters = new FilterCollection([new Filter('id', ['from' => '.5e1', 'to' => '10'])]);
