@@ -642,7 +642,7 @@ final readonly class FilterApplier
             $parts = [$value];
         }
         $mantissa = $parts[0];
-        $exponentRaw = isset($parts[1]) ? $parts[1] : '0';
+        $exponentRaw = $parts[1] ?? '0';
         // Keep the exponent as a native int when it fits, otherwise preserve it
         // as a string so distinct out-of-range exponents do not saturate to the
         // same value under the (int) cast (e.g. 1e-9223372036854775809 vs
