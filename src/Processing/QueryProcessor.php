@@ -98,8 +98,13 @@ final readonly class QueryProcessor
         // offset (page - 1) * perPage cannot overflow PHP integer arithmetic.
         // The bound is calculated after the table-level perPage override and
         // max_per_page are resolved, so the paginator always receives a page
-        // whose offset fits in a signed integer.
-        $maxPage = intdiv(PHP_INT_MAX, max(1, $perPage));
+        // whose offset fits in a signed integer. Since the offset is
+        // (page - 1) * perPage, the largest safe page is floor(PHP_INT_MAX /
+        // perPage) + 1; page 1 always yields offset 0.
+        $safePerPage = max(1, $perPage);
+        $maxPage = $safePerPage > 1
+            ? intdiv(PHP_INT_MAX, $safePerPage) + 1
+            : PHP_INT_MAX;
         $page = min($maxPage, max(1, $request->page));
 
         $paginator = $query->paginate($perPage, page: $page);

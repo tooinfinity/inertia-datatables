@@ -735,7 +735,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25) + 1);
         expect($response->json('data'))->toHaveCount(0);
     });
 
@@ -752,7 +752,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25) + 1);
         expect($response->json('data'))->toHaveCount(0);
     });
 
@@ -769,7 +769,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25) + 1);
         expect($response->json('data'))->toHaveCount(0);
     });
 
@@ -804,7 +804,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100) + 1);
         expect($response->json('data'))->toHaveCount(0);
     });
 
@@ -824,7 +824,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
         expect($response->json('data'))->toHaveCount(0);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 2));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 2) + 1);
     });
 
     it('keeps page 2 intact when max_per_page is PHP_INT_MAX', function (): void {
@@ -844,6 +844,31 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
         expect($response->json('meta.total'))->toBe(30);
         expect($response->json('meta.current_page'))->toBe(2);
         expect($response->json('data'))->toHaveCount(5);
+    });
+
+    it('retains page 2 when per_page equals PHP_INT_MAX', function (): void {
+        config(['inertia-datatables.max_per_page' => PHP_INT_MAX]);
+
+        makeTestRoute('/security-page-perpage-int-max', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 30; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        // Offset for page 2 with per_page = PHP_INT_MAX is exactly PHP_INT_MAX,
+        // which is representable and must not be clamped to page 1. With only 30
+        // records, page 2 is legitimately empty; the key assertion is that the
+        // page value survives unchanged through the clamp.
+        $response = $this->get('/security-page-perpage-int-max?page=2&per_page='.PHP_INT_MAX);
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(30);
+        expect($response->json('meta.current_page'))->toBe(2);
+        expect($response->json('data'))->toHaveCount(0);
+        expect($response->json('query.page'))->toBe(2);
+        expect($response->json('query.per_page'))->toBe(PHP_INT_MAX);
     });
 
     it('stays safe with a table-level per_page override greater than default_per_page', function (): void {
@@ -866,10 +891,10 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100) + 1);
         expect($response->json('data'))->toHaveCount(0);
         // Serialized query state must agree with the paginator.
-        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 100) + 1);
         expect($response->json('query.per_page'))->toBe(100);
     });
 
@@ -893,9 +918,9 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
-        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25) + 1);
         expect($response->json('data'))->toHaveCount(0);
-        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 25) + 1);
         expect($response->json('query.per_page'))->toBe(25);
     });
 
