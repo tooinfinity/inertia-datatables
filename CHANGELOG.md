@@ -50,6 +50,7 @@
 - Generate shadcn registry artifacts from the canonical root manifest and reject stale output in CI (fixes #24)
 - Composer dist archives now exclude the frontend registry, raw GitHub artifacts, lockfiles, and TypeScript tooling, reducing the downloaded package size by roughly 80% (fixes #26)
 - Global and column searches are now case-insensitive on PostgreSQL, matching the existing behaviour on SQLite and MySQL (fixes #27)
+- Extremely large `page` values can no longer cause an integer overflow that returns first-page rows; huge pages are clamped to a safe bound based on the effective page size and return an empty result set instead (fixes #105)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 
