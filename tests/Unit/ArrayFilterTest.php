@@ -86,13 +86,12 @@ describe('FilterCollection: Array filter handling', function (): void {
             ->toThrow(InvalidFilterException::class, 'Nested arrays are not allowed');
     });
 
-    it('truncates string values in associative arrays exceeding max length', function (): void {
+    it('rejects overlong string values in associative arrays instead of truncating', function (): void {
         $longValue = str_repeat('a', 600);
         $request = Request::create("/test?filters[created_at][from]={$longValue}&filters[created_at][to]=2026-01-31");
-        $collection = FilterCollection::fromRequest($request, 'filters', 20, 500);
 
-        expect($collection->get('created_at')->value['from'])->toHaveLength(500);
-        expect($collection->get('created_at')->value['to'])->toBe('2026-01-31');
+        expect(fn (): FilterCollection => FilterCollection::fromRequest($request, 'filters', 20, 500))
+            ->toThrow(InvalidFilterException::class);
     });
 
     it('rejects associative arrays exceeding max values', function (): void {

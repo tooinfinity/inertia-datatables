@@ -49,7 +49,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
                 continue;
             }
 
-            $value = self::sanitizeValue($value, $maxValues, $maxValueLength);
+            $value = self::sanitizeValue($value, $maxValues, $maxValueLength, $column);
             $filters[] = Filter::make($column, $value);
         }
 
@@ -130,7 +130,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
         foreach ($this->filters as $filter) {
             $value = $filter->value;
 
-            $value = self::sanitizeValue($value, $maxValues, $maxLength);
+            $value = self::sanitizeValue($value, $maxValues, $maxLength, $filter->column);
 
             $sanitized[] = Filter::make($filter->column, $value);
         }
@@ -195,7 +195,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
      *
      * @throws InvalidFilterException If value is a nested array/object or exceeds limits
      */
-    private static function sanitizeValue(mixed $value, int $maxValues, int $maxValueLength): mixed
+    private static function sanitizeValue(mixed $value, int $maxValues, int $maxValueLength, ?string $column = null): mixed
     {
         // Reject objects
         if (is_object($value)) {
@@ -218,7 +218,7 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
                 }
             }
 
-            return self::sanitizeAssociativeArray($value, $maxValues, $maxValueLength);
+            return self::sanitizeAssociativeArray($value, $maxValues, $maxValueLength, $column);
         }
 
         // Scalar value - truncate string if too long
@@ -276,26 +276,30 @@ final readonly class FilterCollection implements Countable, IteratorAggregate, J
      *
      * @throws InvalidFilterException If a value is nested or exceeds limits
      */
-    private static function sanitizeAssociativeArray(array $value, int $maxValues, int $maxValueLength): array
+    private static function sanitizeAssociativeArray(array $value, int $maxValues, int $maxValueLength, ?string $column = null): array
     {
         // Limit number of keys
         if (count($value) > $maxValues) {
-            throw InvalidFilterException::invalidValue('filter', "Filter value array exceeds maximum of {$maxValues} items");
+            throw InvalidFilterException::invalidValue($column ?? 'filter', "Filter value array exceeds maximum of {$maxValues} items");
         }
 
         $sanitized = [];
         foreach ($value as $key => $item) {
             if (is_array($item) || is_object($item)) {
-                throw InvalidFilterException::invalidValue('filter', 'Nested arrays are not allowed');
+                throw InvalidFilterException::invalidValue($column ?? 'filter', 'Nested arrays are not allowed');
             }
 
             if (! is_scalar($item) && $item !== null) {
-                throw InvalidFilterException::invalidValue('filter', 'Filter values must be scalar or null');
+                throw InvalidFilterException::invalidValue($column ?? 'filter', 'Filter values must be scalar or null');
             }
 
+            // Range bounds ({from, to}) must be rejected when overlong rather than
+            // truncated, because truncating can turn an invalid bound into a valid
+            // prefix (e.g. "1" + 499 spaces + "x" becomes "1"). Ordinary scalar
+            // filters keep their existing truncation behavior.
             $sanitizedItem = $item;
             if (is_string($sanitizedItem) && strlen($sanitizedItem) > $maxValueLength) {
-                $sanitizedItem = mb_substr($sanitizedItem, 0, $maxValueLength);
+                throw InvalidFilterException::invalidValue($column ?? 'filter', $sanitizedItem);
             }
             $sanitized[$key] = $sanitizedItem;
         }

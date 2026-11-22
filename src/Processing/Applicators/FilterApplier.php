@@ -6,6 +6,7 @@ namespace TooInfinity\InertiaDataTables\Processing\Applicators;
 
 use Closure;
 use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\PostgresConnection;
@@ -90,9 +91,19 @@ final readonly class FilterApplier
         string $target,
         mixed $value,
     ): void {
-        // Handle range filters (date_range / number_range): { from, to }
+        // Built-in range columns require a { from, to } map. A scalar value
+        // does not name a bound and must be rejected instead of falling through
+        // to an equality filter. Custom callback precedence is handled earlier
+        // in applyFilter(); one-sided range maps (only from or only to) remain
+        // valid and are handled by applyRangeFilter.
         if (($column->filterType === 'date_range' || $column->filterType === 'number_range')
-            && is_array($value)) {
+            && ! is_array($value)) {
+            throw InvalidFilterException::invalidValue($column->name, 'Range filter requires "from" and/or "to" bounds')->forRequest();
+        }
+
+        // Handle range filters (date_range / number_range): { from, to }
+        // Non-array values on range columns were already rejected above.
+        if ($column->filterType === 'date_range' || $column->filterType === 'number_range') {
             $this->applyRangeFilter($query, $column, $target, $value);
 
             return;
@@ -150,6 +161,18 @@ final readonly class FilterApplier
             }
 
             $value = $canonical;
+        }
+
+        // A validated scalar select/multi_select option is applied as a literal
+        // equality predicate. This prevents option values such as "not_null"
+        // from being interpreted as operators (e.g. whereNotNull) and ensures
+        // a scalar multi_select matches only the literal option.
+        if (in_array($column->filterType, ['select', 'multi_select'], true)
+            && $column->filterOptions !== []
+            && is_scalar($value)) {
+            $query->where($target, $value);
+
+            return;
         }
 
         // Handle boolean string values ("true"/"false"/"1"/"0") only for columns
@@ -270,20 +293,20 @@ final readonly class FilterApplier
         $aNeg = str_starts_with($a, '-');
         $bNeg = str_starts_with($b, '-');
 
+        // Strip sign and leading zeros to get the significant digits.
+        $aDigits = ltrim($a, '+-0') ?: '0';
+        $bDigits = ltrim($b, '+-0') ?: '0';
+
+        // Zero is zero regardless of sign (e.g. 0 vs -0 or +0).
+        if ($aDigits === '0' && $bDigits === '0') {
+            return 0;
+        }
+
         if ($aNeg && ! $bNeg) {
             return -1;
         }
         if (! $aNeg && $bNeg) {
             return 1;
-        }
-
-        $aDigits = ltrim($a, '+-0');
-        $bDigits = ltrim($b, '+-0');
-        if ($aDigits === '') {
-            $aDigits = '0';
-        }
-        if ($bDigits === '') {
-            $bDigits = '0';
         }
 
         $lengthCmp = strlen($aDigits) <=> strlen($bDigits);
@@ -496,6 +519,11 @@ final readonly class FilterApplier
         $pa = $this->parseScientificNotation($a);
         $pb = $this->parseScientificNotation($b);
 
+        // Zero is zero regardless of exponent or sign (e.g. 0e5 vs 0e-2).
+        if ($pa['mantissa'] === '0' && $pb['mantissa'] === '0') {
+            return 0;
+        }
+
         // Compare signs.
         if ($pa['sign'] !== $pb['sign']) {
             return $pa['sign'] === '-' ? -1 : 1;
@@ -505,11 +533,11 @@ final readonly class FilterApplier
         // Effective exponent accounts for mantissa length AND the original
         // decimal-point position: 1.23e5 == 123e3, so combine exponent with
         // mantissa length and decimal digits to compare magnitudes exactly.
-        $expA = $pa['exponent'] - $pa['decimalDigits'] + strlen($pa['mantissa']);
-        $expB = $pb['exponent'] - $pb['decimalDigits'] + strlen($pb['mantissa']);
-
-        if ($expA !== $expB) {
-            return $sign * ($expA <=> $expB);
+        // Out-of-range exponents are stored as strings and compared without the
+        // saturating (int) cast.
+        $expCmp = $this->compareEffectiveExponents($pa, $pb);
+        if ($expCmp !== null) {
+            return $sign * $expCmp;
         }
 
         // Same effective exponent: compare mantissas digit by digit.
@@ -522,11 +550,88 @@ final readonly class FilterApplier
     }
 
     /**
+     * Compare the effective exponents of two parsed scientific values.
+     *
+     * Returns null when the effective exponents are equal (callers should fall
+     * back to a mantissa comparison), or -1/0/1 when the order is decided by
+     * the exponent alone. Out-of-range exponents (strings) dominate any
+     * in-range exponent by their sign; two out-of-range exponents are compared
+     * as signed numeric strings so they never saturate to equality.
+     *
+     * @param  array{sign: string, mantissa: string, exponent: int|string, decimalDigits: int}  $pa  A parsed scientific value.
+     * @param  array{sign: string, mantissa: string, exponent: int|string, decimalDigits: int}  $pb  A parsed scientific value.
+     * @return int|null -1, 0, or 1, or null when exponents are equal.
+     */
+    private function compareEffectiveExponents(array $pa, array $pb): ?int
+    {
+        $aExponent = $pa['exponent'];
+        $bExponent = $pb['exponent'];
+        $aIsString = is_string($aExponent);
+        $bIsString = is_string($bExponent);
+
+        if (! $aIsString && ! $bIsString) {
+            // Both exponents are native ints; combine with mantissa length and
+            // decimal digits to compare magnitudes exactly.
+            $expA = $aExponent - $pa['decimalDigits'] + strlen($pa['mantissa']);
+            $expB = $bExponent - $pb['decimalDigits'] + strlen($pb['mantissa']);
+
+            return $expA === $expB ? null : ($expA <=> $expB);
+        }
+
+        if ($aIsString && $bIsString) {
+            $cmp = $this->compareExponentStrings($aExponent, $bExponent);
+
+            return $cmp !== 0 ? $cmp : null;
+        }
+
+        // Exactly one exponent is out of range (a string). It dominates any
+        // in-range exponent by its sign.
+        if ($aIsString) {
+            $stringSign = str_starts_with($aExponent, '-') ? -1 : 1;
+
+            return $stringSign === -1 ? -1 : 1;
+        }
+
+        $stringSign = str_starts_with($bExponent, '-') ? -1 : 1;
+
+        return $stringSign === -1 ? 1 : -1;
+    }
+
+    /**
+     * Compare two signed numeric exponent strings without casting to int.
+     *
+     * @return int -1, 0, or 1.
+     */
+    private function compareExponentStrings(string $a, string $b): int
+    {
+        $aNeg = str_starts_with($a, '-');
+        $bNeg = str_starts_with($b, '-');
+
+        if ($aNeg && ! $bNeg) {
+            return -1;
+        }
+        if (! $aNeg && $bNeg) {
+            return 1;
+        }
+
+        $sign = $aNeg ? -1 : 1;
+        $aDigits = ltrim($a, '-+0') ?: '0';
+        $bDigits = ltrim($b, '-+0') ?: '0';
+
+        $lengthCmp = strlen($aDigits) <=> strlen($bDigits);
+        if ($lengthCmp !== 0) {
+            return $sign * $lengthCmp;
+        }
+
+        return $sign * (strcmp($aDigits, $bDigits));
+    }
+
+    /**
      * Parse a numeric string (possibly in scientific notation) into sign,
      * mantissa digits, and exponent.
      *
      * @param  string  $value  A numeric string.
-     * @return array{sign: string, mantissa: string, exponent: int, decimalDigits: int}
+     * @return array{sign: string, mantissa: string, exponent: int|string, decimalDigits: int}
      */
     private function parseScientificNotation(string $value): array
     {
@@ -543,7 +648,17 @@ final readonly class FilterApplier
             $parts = [$value];
         }
         $mantissa = $parts[0];
-        $exponent = isset($parts[1]) ? (int) $parts[1] : 0;
+        $exponentRaw = isset($parts[1]) ? $parts[1] : '0';
+        // Keep the exponent as a native int when it fits, otherwise preserve it
+        // as a string so distinct out-of-range exponents do not saturate to the
+        // same value under the (int) cast (e.g. 1e-9223372036854775809 vs
+        // 1e-9223372036854775810).
+        $exponentInt = (int) $exponentRaw;
+        if ((string) $exponentInt === ltrim($exponentRaw, '+')) {
+            $exponent = $exponentInt;
+        } else {
+            $exponent = $exponentRaw;
+        }
 
         // Track digits after the decimal point in the original mantissa.
         $decimalDigits = str_contains($mantissa, '.') ? strlen(explode('.', $mantissa, 2)[1]) : 0;
@@ -621,7 +736,7 @@ final readonly class FilterApplier
      * @template TQueryModel of Model
      *
      * @param  EloquentBuilder<TQueryModel>|QueryBuilder  $query
-     * @param  array{from?: mixed, to?: mixed}  $value
+     * @param  array<mixed, mixed>  $value
      */
     private function applyRangeFilter(
         EloquentBuilder|QueryBuilder $query,
@@ -634,6 +749,14 @@ final readonly class FilterApplier
 
         $hasFrom = $from !== null && $from !== '';
         $hasTo = $to !== null && $to !== '';
+
+        // Reject unknown keys so a typo such as [t0] cannot silently drop a
+        // bound. A map with only "from" or only "to" remains valid.
+        foreach (array_keys($value) as $key) {
+            if (! in_array($key, ['from', 'to'], true)) {
+                throw InvalidFilterException::invalidValue($column->name, 'Range filter requires "from" and/or "to" bounds')->forRequest();
+            }
+        }
 
         if (! $hasFrom && ! $hasTo) {
             // Empty range applies no constraint.
@@ -680,6 +803,9 @@ final readonly class FilterApplier
                 ) {
                     throw InvalidFilterException::invalidValue($column->name, "Invalid 'from' date: {$from}")->forRequest();
                 }
+                // Normalize to UTC so validation and SQL binding use the same
+                // instant regardless of the input offset.
+                $fromDate = $fromDate->setTimezone(new DateTimeZone('UTC'));
             }
             if ($hasTo) {
                 if (! is_string($to)) {
@@ -694,31 +820,41 @@ final readonly class FilterApplier
                 ) {
                     throw InvalidFilterException::invalidValue($column->name, "Invalid 'to' date: {$to}")->forRequest();
                 }
-                // Expand a date-only upper bound to the final fractional
-                // second of its calendar day so the bound includes the
-                // whole selected day.
+                // Expand a date-only upper bound to the end of its calendar day
+                // in its original timezone, then normalize to UTC so the bound
+                // includes the whole selected day everywhere.
                 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) === 1) {
                     $toDate = $toDate->setTime(23, 59, 59, 999999);
                 }
+                $toDate = $toDate->setTimezone(new DateTimeZone('UTC'));
             }
         }
 
         if ($hasFrom) {
             if ($validateNumeric && $query->getConnection() instanceof PostgresConnection) {
-                // PostgreSQL cannot cast a float bound parameter to a bigint
-                // column. Cast the bound parameter to double precision so the
-                // comparison works against integer columns. The column itself
-                // is passed through where() so Laravel qualifies it correctly.
-                $query->where($target, '>=', new Expression('?::double precision'));
-                $query->addBinding((float) $resolvedFrom);
+                // PostgreSQL can compare against an exact `numeric` parameter,
+                // preserving precision for large integer and decimal bounds
+                // without first converting them to a (lossy) PHP float. The
+                // column itself is passed through where() so Laravel qualifies
+                // it correctly, and PostgreSQL casts the bound to numeric.
+                $query->where($target, '>=', new Expression('?::numeric'));
+                $query->addBinding($resolvedFrom);
             } else {
-                $query->where($target, '>=', $validateNumeric ? (float) $resolvedFrom : $this->formatDateTime($fromDate));
+                // For a date-only lower bound, bind the calendar date itself so
+                // SQLite DATE columns stored as date-only text include rows on
+                // the inclusive lower endpoint (text '2026-02-15' sorts before
+                // '2026-02-15 00:00:00'). Time-bearing bounds keep their time.
+                $lowerBound = $this->formatDateTime($fromDate);
+                if (! $validateNumeric && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($from)) === 1) {
+                    $lowerBound = trim($from);
+                }
+                $query->where($target, '>=', $validateNumeric ? (float) $resolvedFrom : $lowerBound);
             }
         }
         if ($hasTo) {
             if ($validateNumeric && $query->getConnection() instanceof PostgresConnection) {
-                $query->where($target, '<=', new Expression('?::double precision'));
-                $query->addBinding((float) $resolvedTo);
+                $query->where($target, '<=', new Expression('?::numeric'));
+                $query->addBinding($resolvedTo);
             } else {
                 $query->where($target, '<=', $validateNumeric ? (float) $resolvedTo : $this->formatDateTime($toDate));
             }

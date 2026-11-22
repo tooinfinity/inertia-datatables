@@ -122,13 +122,11 @@ export function DataTableFilterChip({
             : filterValue !== '' && filterValue !== null && filterValue !== undefined
                 ? [filterValue]
                 : [];
-        const index = current.findIndex((item) => filterValueMatches(item, value));
-        if (index >= 0) {
-            current.splice(index, 1);
-        } else {
-            current.push(value);
-        }
-        onFilterChange(columnId, current);
+        const isSelected = current.some((item) => filterValueMatches(item, value));
+        const next = isSelected
+            ? current.filter((item) => !filterValueMatches(item, value))
+            : [...current, value];
+        onFilterChange(columnId, next);
     };
 
     const handleFilterTextChange = (value: string) => {
@@ -313,7 +311,7 @@ export function DataTableFilterChip({
                                                   // as "2026-02-15 10:00:00". Strip the time portion so the
                                                   // control shows a valid date while preserving the full bound.
                                                   return filterType === 'date_range' && typeof raw === 'string'
-                                                      ? raw.split(' ')[0]
+                                                      ? raw.split(/[ T]/)[0]
                                                       : raw;
                                               })()
                                             : ''}
