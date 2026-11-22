@@ -719,6 +719,130 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
         expect($response->json('data'))->toHaveCount(0);
     });
 
+    it('never returns first-page rows for page equal to PHP_INT_MAX', function (): void {
+        makeTestRoute('/security-page-int-max', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-int-max?page='.PHP_INT_MAX.'&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('data'))->toHaveCount(0);
+    });
+
+    it('never returns first-page rows for page equal to PHP_INT_MAX minus one', function (): void {
+        makeTestRoute('/security-page-int-max-minus-one', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-int-max-minus-one?page='.(PHP_INT_MAX - 1).'&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('data'))->toHaveCount(0);
+    });
+
+    it('never returns first-page rows for a numeric string larger than PHP_INT_MAX', function (): void {
+        makeTestRoute('/security-page-string-overflow', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-string-overflow?page=99999999999999999999&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('data'))->toHaveCount(0);
+    });
+
+    it('keeps normal pagination behavior unchanged', function (): void {
+        makeTestRoute('/security-page-normal', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 30; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-normal?page=2&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(30);
+        expect($response->json('meta.current_page'))->toBe(2);
+        expect($response->json('data'))->toHaveCount(5);
+        expect($response->json('data.0.name'))->toBe('User 25');
+    });
+
+    it('stays safe at the maximum configured per_page', function (): void {
+        makeTestRoute('/security-page-max-per-page', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-max-per-page?page='.PHP_INT_MAX.'&per_page=100');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('data'))->toHaveCount(0);
+    });
+
+    it('respects a custom max_per_page when capping huge pages', function (): void {
+        config(['inertia-datatables.max_per_page' => 2]);
+
+        makeTestRoute('/security-page-custom-max', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-custom-max?page='.PHP_INT_MAX.'&per_page=2');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('data'))->toHaveCount(0);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 2));
+    });
+
+    it('keeps page 2 intact when max_per_page is PHP_INT_MAX', function (): void {
+        config(['inertia-datatables.max_per_page' => PHP_INT_MAX]);
+
+        makeTestRoute('/security-page-huge-max', [
+            Column::make('name')->sortable(),
+        ]);
+
+        for ($i = 0; $i < 30; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        $response = $this->get('/security-page-huge-max?page=2&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(30);
+        expect($response->json('meta.current_page'))->toBe(2);
+        expect($response->json('data'))->toHaveCount(5);
+    });
+
     it('handles non-numeric per_page gracefully', function (): void {
         makeTestRoute('/security-non-numeric-perpage', [
             Column::make('name')->sortable(),

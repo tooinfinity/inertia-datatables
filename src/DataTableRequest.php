@@ -26,9 +26,6 @@ final readonly class DataTableRequest implements JsonSerializable
     {
         $queryConfig ??= QueryConfig::fromConfig();
 
-        $pageQuery = $request->query($queryConfig->page);
-        $page = max(1, is_scalar($pageQuery) ? (int) $pageQuery : 1);
-
         /** @var int $defaultPerPage */
         $defaultPerPage = config('inertia-datatables.default_per_page', 25);
         /** @var int $maxPerPage */
@@ -40,6 +37,16 @@ final readonly class DataTableRequest implements JsonSerializable
             $maxPerPage,
             is_scalar($perPageQuery) ? (int) $perPageQuery : $defaultPerPage,
         ));
+
+        $pageQuery = $request->query($queryConfig->page);
+        $page = max(1, is_scalar($pageQuery) ? (int) $pageQuery : 1);
+
+        // Cap page using the effective perPage so the offset (page - 1) * perPage
+        // cannot overflow PHP integer arithmetic. Using the effective perPage keeps
+        // the bound correct even when max_per_page is configured to PHP_INT_MAX,
+        // which would otherwise reduce the page bound to 1 and break pagination.
+        $maxPage = intdiv(PHP_INT_MAX, max(1, $perPage));
+        $page = min($maxPage, $page);
 
         $searchQuery = $request->query($queryConfig->search);
         $search = is_scalar($searchQuery) ? (string) $searchQuery : '';
