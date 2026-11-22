@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\DataTable;
+use TooInfinity\InertiaDataTables\DataTableRequest;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidSortException;
@@ -728,7 +731,7 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
             createUser(['name' => 'User '.$i]);
         }
 
-        $response = $this->get('/security-page-int-max?page='.PHP_INT_MAX.'&per_page=25');
+        $response = $this->get('/security-page-int-max?page='.PHP_INT_MAX);
 
         $response->assertOk();
         expect($response->json('meta.total'))->toBe(10);
@@ -841,6 +844,59 @@ describe('Security: Pagination Limits and Invalid Values', function (): void {
         expect($response->json('meta.total'))->toBe(30);
         expect($response->json('meta.current_page'))->toBe(2);
         expect($response->json('data'))->toHaveCount(5);
+    });
+
+    it('stays safe with a table-level per_page override greater than default_per_page', function (): void {
+        Route::get('/security-page-table-override', function (Request $request) {
+            $dataTableRequest = DataTableRequest::fromRequest($request);
+
+            $table = DataTable::query(User::query())
+                ->columns([Column::make('name')->sortable()])
+                ->perPage(100);
+
+            return response()->json($table->handle($dataTableRequest)->toArray());
+        })->name('test.security-page-table-override');
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        // No explicit per_page: the table-level perPage(100) is the effective size.
+        $response = $this->get('/security-page-table-override?page='.PHP_INT_MAX);
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('data'))->toHaveCount(0);
+        // Serialized query state must agree with the paginator.
+        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 100));
+        expect($response->json('query.per_page'))->toBe(100);
+    });
+
+    it('stays safe when an explicit per_page accompanies a table-level override', function (): void {
+        Route::get('/security-page-explicit-perpage-override', function (Request $request) {
+            $dataTableRequest = DataTableRequest::fromRequest($request);
+
+            $table = DataTable::query(User::query())
+                ->columns([Column::make('name')->sortable()])
+                ->perPage(100);
+
+            return response()->json($table->handle($dataTableRequest)->toArray());
+        })->name('test.security-page-explicit-perpage-override');
+
+        for ($i = 0; $i < 10; $i++) {
+            createUser(['name' => 'User '.$i]);
+        }
+
+        // Explicit per_page takes precedence over the table-level override.
+        $response = $this->get('/security-page-explicit-perpage-override?page='.PHP_INT_MAX.'&per_page=25');
+
+        $response->assertOk();
+        expect($response->json('meta.total'))->toBe(10);
+        expect($response->json('meta.current_page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('data'))->toHaveCount(0);
+        expect($response->json('query.page'))->toBe(intdiv(PHP_INT_MAX, 25));
+        expect($response->json('query.per_page'))->toBe(25);
     });
 
     it('handles non-numeric per_page gracefully', function (): void {
