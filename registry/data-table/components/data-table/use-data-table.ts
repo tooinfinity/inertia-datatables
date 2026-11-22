@@ -842,7 +842,24 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         manualSorting: true,
         manualFiltering: true,
         pageCount: initialData.meta.last_page,
-        ...(rowKey ? { getRowId: (row: TData, index: number) => rowKey(row, index) } : {}),
+        getRowId: (row: TData, index: number) => {
+            // A custom `rowKey` always wins, preserving the public API.
+            if (rowKey) {
+                return rowKey(row, index);
+            }
+            // Derive a stable row id from the response data so row selection does
+            // not collide across server-side pages (each page restarts its local
+            // indexes at zero). Fall back to the page-local index when no stable
+            // identifier can be derived, keeping the previous behaviour for tables
+            // without an id.
+            const rawId = (row as Record<string, unknown>).id;
+            const id =
+                typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : undefined;
+            // Derived row ids and fallback indexes live in disjoint identity
+            // domains, so mixed rows (some with an id, some without) cannot
+            // collide within a page or across server-side pages.
+            return id ?? `row-${index}`;
+        },
     });
 
     return {

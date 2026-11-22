@@ -733,6 +733,26 @@ is called with the clicked row:
 />
 ```
 
+#### Row selection across pages
+
+When row selection is enabled, the table keeps a stable id for every row so
+selection does not collide across server-side pages (each page restarts its
+local indexes at zero). Without an explicit `rowKey`, a row's `id` field is
+used when present; otherwise the page-local index falls back, which can collide
+across pages. Selection persists across page changes when a stable id is
+available. Supply a `rowKey` whenever rows do not carry a stable `id`, or when
+you want to control the identifier used for selection:
+
+```tsx
+<DataTable
+    data={users}
+    dataPropName="users"
+    enableRowSelection
+    onRowSelectionChange={(selection) => setSelection(selection)}
+    rowKey={(user) => String(user.id)}
+/>
+```
+
 ## Loading and Error State
 
 While an Inertia visit is in flight, the table marks itself as `aria-busy` and

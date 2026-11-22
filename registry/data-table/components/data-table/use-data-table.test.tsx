@@ -1930,4 +1930,136 @@ describe('useDataTable', () => {
         expect(columns[3].id).toBe('extra');
         expect(columns[3].enableSorting).toBe(false);
     });
+
+    describe('row selection ids', () => {
+        it('derives a stable row id from the row `id` when rowKey is omitted', () => {
+            const initialData = createMockData({
+                data: [
+                    { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
+                    { id: 2, name: 'Bob', email: 'bob@example.com', status: 'inactive' },
+                ],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({ data: initialData, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            const getRowId = (
+                capturedResult!.table as unknown as {
+                    getRowId: (row: unknown, index: number) => string;
+                }
+            ).getRowId;
+
+            expect(getRowId(initialData.data[0], 0)).toBe('1');
+            expect(getRowId(initialData.data[1], 0)).toBe('2');
+        });
+
+        it('does not collide between different rows at the same local index across pages', () => {
+            const page1Row = { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' };
+            const page2Row = { id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' };
+
+            const initialData = createMockData({ data: [page1Row, page2Row] });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({ data: initialData, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            const getRowId = (
+                capturedResult!.table as unknown as {
+                    getRowId: (row: unknown, index: number) => string;
+                }
+            ).getRowId;
+
+            // Same local index (0) on two different pages, but different stable ids.
+            expect(getRowId(page1Row, 0)).not.toBe(getRowId(page2Row, 0));
+        });
+
+        it('uses the custom rowKey callback when provided', () => {
+            const initialData = createMockData({
+                data: [{ id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({
+                    data: initialData,
+                    enableRowSelection: true,
+                    rowKey: (row) => `custom-${String((row as { id: unknown }).id)}`,
+                });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            const getRowId = (
+                capturedResult!.table as unknown as {
+                    getRowId: (row: unknown, index: number) => string;
+                }
+            ).getRowId;
+
+            expect(getRowId(initialData.data[0], 0)).toBe('custom-1');
+        });
+
+        it('falls back to a prefixed page-local index when no rowKey and no row id exist', () => {
+            const initialData = createMockData({
+                data: [{ name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({ data: initialData, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            const getRowId = (
+                capturedResult!.table as unknown as {
+                    getRowId: (row: unknown, index: number) => string;
+                }
+            ).getRowId;
+
+            expect(getRowId(initialData.data[0], 0)).toBe('row-0');
+        });
+
+        it('keeps derived row ids and fallback indexes in disjoint identity domains', () => {
+            // Mixed ID availability: Alice has an id, Bob does not. Both share
+            // local index 1 in different positions, but their ids must differ.
+            const initialData = createMockData({
+                data: [
+                    { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
+                    { name: 'Bob', email: 'bob@example.com', status: 'inactive' },
+                ],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({ data: initialData, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            const getRowId = (
+                capturedResult!.table as unknown as {
+                    getRowId: (row: unknown, index: number) => string;
+                }
+            ).getRowId;
+
+            const aliceId = getRowId(initialData.data[0], 0);
+            const bobId = getRowId(initialData.data[1], 1);
+
+            expect(aliceId).toBe('1');
+            expect(bobId).toBe('row-1');
+            expect(aliceId).not.toBe(bobId);
+        });
+    });
 });
