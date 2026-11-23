@@ -1994,23 +1994,63 @@ describe('useDataTable', () => {
                     }
                 ).getRowId;
 
-            // Alice on page 1 index 0 -> fallback:1:0
-            expect(getRowId()(initialData.data[0], 0)).toBe('fallback:1:0');
+            // Alice on page 1 index 0 -> fallback:0:1:0 (generation:page:index)
+            expect(getRowId()(initialData.data[0], 0)).toBe('fallback:0:1:0');
 
             // Select Alice on page 1
-            act(() => capturedResult!.setRowSelection({ 'fallback:1:0': true }));
-            expect(capturedResult!.rowSelection).toEqual({ 'fallback:1:0': true });
+            act(() => capturedResult!.setRowSelection({ 'fallback:0:1:0': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'fallback:0:1:0': true });
 
-            // Navigate to page 2: Charlie at index 0 -> fallback:2:0 (different id, not selected)
+            // Navigate to page 2: Charlie at index 0 -> fallback:0:2:0 (different id, not selected)
             act(() => capturedResult!.handlePageChange(2));
             expect(
                 getRowId()({ name: 'Charlie', email: 'charlie@example.com', status: 'active' }, 0)
-            ).toBe('fallback:2:0');
-            expect(capturedResult!.rowSelection).not.toHaveProperty('fallback:2:0');
+            ).toBe('fallback:0:2:0');
+            expect(capturedResult!.rowSelection).not.toHaveProperty('fallback:0:2:0');
 
             // Return to page 1: fallback id matches again, selection persists
             act(() => capturedResult!.handlePageChange(1));
-            expect(capturedResult!.rowSelection).toEqual({ 'fallback:1:0': true });
+            expect(capturedResult!.rowSelection).toEqual({ 'fallback:0:1:0': true });
+        });
+
+        it('does not inherit selection when data changes on the same page for rows without a stable id', () => {
+            const initialData = createMockData({
+                data: [{ name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = ({ data }: { data: ReturnType<typeof createMockData> }) => {
+                const result = useDataTable({ data, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            const { rerender } = render(<TestWrapper data={initialData} />);
+
+            const getRowId = () =>
+                (
+                    capturedResult!.table as unknown as {
+                        getRowId: (row: unknown, index: number) => string;
+                    }
+                ).getRowId;
+
+            // Select the row at page 1 index 0
+            expect(getRowId()(initialData.data[0], 0)).toBe('fallback:0:1:0');
+            act(() => capturedResult!.setRowSelection({ 'fallback:0:1:0': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'fallback:0:1:0': true });
+
+            // Replace the dataset with a different row at page 1 index 0 (simulates
+            // a search/filter result change while staying on page 1). The generation
+            // bumps, so the fallback id changes and selection does not leak to the
+            // new row.
+            const updatedData = createMockData({
+                data: [{ name: 'Charlie', email: 'charlie@example.com', status: 'active' }],
+            });
+            rerender(<TestWrapper data={updatedData} />);
+
+            expect(getRowId()(updatedData.data[0], 0)).not.toBe('fallback:0:1:0');
+            expect(capturedResult!.rowSelection).not.toHaveProperty(
+                getRowId()(updatedData.data[0], 0)
+            );
         });
 
         it('custom rowKey takes precedence and works across pages', () => {
@@ -2080,8 +2120,8 @@ describe('useDataTable', () => {
 
             // id: 'row-0' is namespaced to id:row-0
             expect(getRowId(initialData.data[0], 0)).toBe('id:row-0');
-            // Missing id at page 1 index 1 -> fallback:1:1
-            expect(getRowId(initialData.data[1], 1)).toBe('fallback:1:1');
+            // Missing id at page 1 index 1 -> fallback:0:1:1 (generation:page:index)
+            expect(getRowId(initialData.data[1], 1)).toBe('fallback:0:1:1');
             // They cannot collide
             expect(getRowId(initialData.data[0], 0)).not.toBe(getRowId(initialData.data[1], 1));
         });

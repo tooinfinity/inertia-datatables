@@ -318,6 +318,24 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
 
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+    // Tracks how many times the dataset has been replaced while the hook is
+    // mounted. Used to namespace fallback row ids so that rows without a stable
+    // id cannot silently inherit another row's selection when the data on the
+    // current page changes (search, filter, sort, per-page) but the page does
+    // not.
+    const [dataGeneration, setDataGeneration] = useState(0);
+    const prevDataRef = useRef(initialData.data);
+
+    // Detect dataset replacement while mounted and bump the generation so that
+    // fallback ids for rows without a stable id change, preventing selection
+    // from leaking to a different row at the same page/index after a data
+    // update. Rows with a stable id (or custom rowKey) are unaffected.
+    useEffect(() => {
+        if (prevDataRef.current !== initialData.data) {
+            prevDataRef.current = initialData.data;
+            setDataGeneration((gen) => gen + 1);
+        }
+    }, [initialData.data]);
 
     const handleRowSelectionChange = useCallback(
         (updater: StateUpdater<RowSelectionState>) => {
@@ -858,13 +876,14 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             if (id !== undefined) {
                 return `id:${id}`;
             }
-            // Rows without a stable id get page-scoped fallback ids
-            // (`fallback:<page>:<index>`). Because the page number is part of
-            // the id, selection cannot silently transfer to an unrelated row at
-            // the same local index on another server-side page. Selection is
-            // effectively page-scoped for rows without a stable identifier;
-            // consumers whose rows lack stable ids should supply a `rowKey`.
-            return `fallback:${state.page}:${index}`;
+            // Rows without a stable id get generation-scoped fallback ids
+            // (`fallback:<generation>:<page>:<index>`). The generation changes
+            // whenever the dataset is replaced, so selection cannot silently
+            // transfer to a different row at the same page/index after a data
+            // update (search, filter, sort, per-page). Rows without a stable
+            // identifier should supply a `rowKey` for reliable cross-page and
+            // cross-update selection.
+            return `fallback:${dataGeneration}:${state.page}:${index}`;
         },
     });
 

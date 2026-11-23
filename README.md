@@ -742,15 +742,17 @@ local indexes at zero). Row ids are determined as follows:
 1. If a `rowKey` callback is provided, its return value is used unchanged.
 2. Otherwise, if the row has an `id` field (string or number), it is used with
    an `id:` namespace prefix (e.g. `id:42`).
-3. Otherwise, a page-scoped fallback id is generated
-   (`fallback:<page>:<rowIndex>`). Because the page number is part of the id,
-   selection cannot silently transfer to an unrelated row at the same local
-   index on another page. Selection is effectively page-scoped for rows without
-   a stable identifier.
+3. Otherwise, a generation-scoped fallback id is generated
+   (`fallback:<generation>:<page>:<rowIndex>`). The generation changes whenever
+   the dataset is replaced, so selection cannot silently transfer to a different
+   row at the same page/index after a search, filter, sort, or per-page change.
+   Rows without a stable identifier should supply a `rowKey` for reliable
+   selection across pages and dataset updates.
 
-Selection persists across page changes when stable ids are available. When rows
-lack stable ids and no `rowKey` is supplied, selection does not carry over to
-other pages (the fallback ids differ per page).
+Selection persists across page changes and dataset updates when stable ids are
+available. When rows lack stable ids and no `rowKey` is supplied, selection does
+not carry over to other pages or after a dataset change (the fallback ids
+change whenever the data changes).
 
 Supply a `rowKey` whenever rows do not carry a stable `id`, or when you want to
 control the identifier used for selection:
