@@ -2247,4 +2247,237 @@ describe('useDataTable', () => {
             expect(capturedResult!.rowSelection).toEqual({ 'id:1': true, 'id:2': true });
         });
     });
+
+    describe('pagination out-of-range recovery', () => {
+        function outOfRangeData() {
+            return createMockData({
+                meta: {
+                    current_page: 3,
+                    per_page: 25,
+                    from: null,
+                    to: null,
+                    total: 50,
+                    last_page: 2,
+                },
+                query: {
+                    page: 3,
+                    per_page: 25,
+                    search: '',
+                    sort: [],
+                    searches: [],
+                    filters: [],
+                },
+            });
+        }
+
+        function validData() {
+            return createMockData({
+                meta: {
+                    current_page: 2,
+                    per_page: 25,
+                    from: 26,
+                    to: 50,
+                    total: 50,
+                    last_page: 2,
+                },
+                query: {
+                    page: 2,
+                    per_page: 25,
+                    search: '',
+                    sort: [],
+                    searches: [],
+                    filters: [],
+                },
+            });
+        }
+
+        it('recovers to the last page when current_page exceeds last_page', () => {
+            const TestWrapper = ({ data }: { data: ReturnType<typeof outOfRangeData> }) => {
+                useDataTable({ data });
+                return null;
+            };
+            render(<TestWrapper data={outOfRangeData()} />);
+
+            expect(router.visit).toHaveBeenLastCalledWith(
+                '/?page=2',
+                expect.objectContaining({ replace: true, only: ['data'] })
+            );
+        });
+
+        it('does not navigate when the current page is already valid', () => {
+            const TestWrapper = ({ data }: { data: ReturnType<typeof validData> }) => {
+                useDataTable({ data });
+                return null;
+            };
+            render(<TestWrapper data={validData()} />);
+
+            expect(router.visit).not.toHaveBeenCalled();
+        });
+
+        it('does not navigate when last_page is 0', () => {
+            const data = {
+                ...createMockData(),
+                meta: { ...createMockData().meta, current_page: 1, last_page: 0, total: 0 },
+                query: { ...createMockData().query, page: 1 },
+            };
+
+            const TestWrapper = ({
+                data,
+            }: {
+                data: ReturnType<typeof createMockData>;
+            }) => {
+                useDataTable({ data });
+                return null;
+            };
+            render(<TestWrapper data={data} />);
+
+            expect(router.visit).not.toHaveBeenCalled();
+        });
+
+        it('uses replace: true for the recovery visit', () => {
+            const TestWrapper = ({ data }: { data: ReturnType<typeof outOfRangeData> }) => {
+                useDataTable({ data });
+                return null;
+            };
+            render(<TestWrapper data={outOfRangeData()} />);
+
+            const calls = (router.visit as ReturnType<typeof vi.fn>).mock.calls;
+            const recoveryCall = calls.find((call) => call[0] === '/?page=2');
+            expect(recoveryCall).toBeDefined();
+            expect(recoveryCall![1].replace).toBe(true);
+        });
+
+        it('preserves existing filters, sorting and unrelated params during recovery', () => {
+            const data = createMockData({
+                meta: {
+                    current_page: 3,
+                    per_page: 25,
+                    from: null,
+                    to: null,
+                    total: 50,
+                    last_page: 2,
+                },
+                query: {
+                    page: 3,
+                    per_page: 50,
+                    search: 'john',
+                    sort: [{ column: 'name', direction: 'asc' }],
+                    searches: [{ column: 'email', value: 'x' }],
+                    filters: [{ column: 'status', value: 'active' }],
+                },
+            });
+            global.location.search =
+                '?page=3&per_page=50&sort=name&search=john&filters%5Bstatus%5D=active&custom=preserve';
+
+            const TestWrapper = ({ data }: { data: ReturnType<typeof createMockData> }) => {
+                useDataTable({ data });
+                return null;
+            };
+            render(<TestWrapper data={data} />);
+
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('page=2'),
+                expect.objectContaining({ replace: true })
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('per_page=50'),
+                expect.any(Object)
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('sort=name'),
+                expect.any(Object)
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('search=john'),
+                expect.any(Object)
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('custom=preserve'),
+                expect.any(Object)
+            );
+        });
+
+        it('preserves every array filter value during explicit-endpoint recovery', () => {
+            const data = createMockData({
+                meta: {
+                    current_page: 3,
+                    per_page: 25,
+                    from: null,
+                    to: null,
+                    total: 50,
+                    last_page: 2,
+                },
+                query: {
+                    page: 3,
+                    per_page: 25,
+                    search: '',
+                    sort: [],
+                    searches: [],
+                    filters: [{ column: 'status', value: ['active', 'pending'] }],
+                },
+            });
+
+            const TestWrapper = ({ data }: { data: ReturnType<typeof createMockData> }) => {
+                useDataTable({ data, url: '/users' });
+                return null;
+            };
+            render(<TestWrapper data={data} />);
+
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('/users?'),
+                expect.objectContaining({ replace: true })
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('filters%5Bstatus%5D%5B%5D=active'),
+                expect.any(Object)
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('filters%5Bstatus%5D%5B%5D=pending'),
+                expect.any(Object)
+            );
+            expect(router.visit).toHaveBeenLastCalledWith(
+                expect.stringContaining('page=2'),
+                expect.any(Object)
+            );
+        });
+
+        it('does not execute the recovery repeatedly on re-render with the same out-of-range data', () => {
+            const TestWrapper = ({ data }: { data: ReturnType<typeof outOfRangeData> }) => {
+                useDataTable({ data });
+                return null;
+            };
+            const { rerender } = render(<TestWrapper data={outOfRangeData()} />);
+
+            rerender(<TestWrapper data={outOfRangeData()} />);
+
+            const page2Calls = (router.visit as ReturnType<typeof vi.fn>).mock.calls.filter(
+                (call) => call[0] === '/?page=2'
+            );
+            expect(page2Calls).toHaveLength(1);
+        });
+
+        it('does not trigger recovery when a subsequent response is valid', () => {
+            const TestWrapper = ({
+                data,
+            }: {
+                data: ReturnType<typeof outOfRangeData> | ReturnType<typeof validData>;
+            }) => {
+                useDataTable({ data });
+                return null;
+            };
+            const { rerender } = render(<TestWrapper data={outOfRangeData()} />);
+
+            expect(router.visit).toHaveBeenLastCalledWith(
+                '/?page=2',
+                expect.objectContaining({ replace: true })
+            );
+
+            rerender(<TestWrapper data={validData()} />);
+
+            const page2Calls = (router.visit as ReturnType<typeof vi.fn>).mock.calls.filter(
+                (call) => call[0] === '/?page=2'
+            );
+            expect(page2Calls).toHaveLength(1);
+        });
+    });
 });
