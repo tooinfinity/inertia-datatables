@@ -121,7 +121,7 @@ describe('DataTablePagination summary', () => {
 
         const summary = screen.getByText(/Showing/).textContent;
         expect(summary).not.toMatch(/51 to/);
-        expect(summary).toBe('Showing 50 to 50 of 50 results');
+        expect(summary).toBe('Showing 26 to 50 of 50 results');
     });
 
     it('shows the clamped page indicator and marks the last page active when current_page exceeds last_page', () => {
@@ -135,6 +135,7 @@ describe('DataTablePagination summary', () => {
             />
         );
 
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 26 to 50 of 50 results');
         expect(screen.getByText(/Page 2 of 2/)).toBeInTheDocument();
 
         const lastPageButton = screen.getByRole('button', { name: 'Page 2' });
