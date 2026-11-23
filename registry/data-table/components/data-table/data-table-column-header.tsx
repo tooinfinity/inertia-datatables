@@ -40,11 +40,17 @@ export function DataTableColumnHeader<TData extends RowData>({
         : nextSortingOrder === 'desc'
             ? 'Click to sort descending.'
             : 'Click to sort ascending.';
+    const sortIndex = column.getSortIndex();
+    // 1-based position in the sorting state; only meaningful when sorted.
+    const sortPriority = sortIndex === -1 ? undefined : sortIndex + 1;
+    const priorityText = sortPriority !== undefined && sortPriority > 1
+        ? `Secondary sort, priority ${sortPriority}. `
+        : '';
 
     // Accessible label that communicates the column, its current sorting state,
-    // and the action the next click will perform.
+    // its priority within multi-sort, and the action the next click will perform.
     const ariaLabel = canSort
-        ? `Sort by ${headerTitle}, currently ${currentState}. ${nextActionText}`
+        ? `Sort by ${headerTitle}, ${priorityText}currently ${currentState}. ${nextActionText}`
         : headerTitle;
 
     return (
@@ -52,17 +58,15 @@ export function DataTableColumnHeader<TData extends RowData>({
             className="px-4 py-3 text-left align-middle font-medium text-muted-foreground"
             scope="col"
             aria-sort={
-                // `aria-sort` identifies the primary sorted column only. With
-                // multi-column sorting, secondary sorted columns get "none"
-                // instead of "ascending"/"descending" to avoid ambiguous
-                // multi-column sort announcements; their state is conveyed
-                // through the accessible label instead.
-                canSort
-                    ? column.getSortIndex() === 0
-                        ? isSorted === 'asc'
-                            ? 'ascending'
-                            : 'descending'
-                        : 'none'
+                // Apply aria-sort to the primary sorted column only. Omit the
+                // attribute from secondary and unsorted sortable columns so
+                // screen readers announce a single sort state at a time, per
+                // WAI-ARIA / MDN guidance. Multi-sort priority and state are
+                // communicated through the accessible label instead.
+                canSort && column.getSortIndex() === 0
+                    ? isSorted === 'asc'
+                        ? 'ascending'
+                        : 'descending'
                     : undefined
             }
         >
