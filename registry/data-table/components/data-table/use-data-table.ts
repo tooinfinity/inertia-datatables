@@ -1,6 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+
+// useLayoutEffect in the browser to apply generation changes before paint;
+// falls back to useEffect during server-side rendering to avoid SSR warnings.
+const useIsomorphicLayoutEffect =
+    typeof window !== 'undefined' && typeof window.document !== 'undefined'
+        ? useLayoutEffect
+        : useEffect;
 import {
     createColumnHelper,
     useTable,
@@ -339,7 +346,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     // generation is applied before the updated table commits, avoiding any
     // transient selection leak for rows without a stable id. Rows with a stable
     // id (or custom rowKey) are unaffected.
-    useLayoutEffect(() => {
+    useIsomorphicLayoutEffect(() => {
         if (prevDataRef.current !== initialData.data) {
             prevDataRef.current = initialData.data;
             setDataGeneration((gen) => gen + 1);
