@@ -124,6 +124,45 @@ describe('DataTable accessibility (issue #36)', () => {
         );
     });
 
+    it('applies aria-sort to the primary sorted column only during multi-sort', () => {
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [
+                            { column: 'name', direction: 'asc' },
+                            { column: 'role', direction: 'desc' },
+                        ],
+                        searches: [],
+                        filters: [],
+                    },
+                })}
+            />
+        );
+
+        const nameButton = screen.getByRole('button', { name: /Sort by Name/ });
+        const roleButton = screen.getByRole('button', { name: /Sort by Role/ });
+        const nameHeader = nameButton.closest('th')!;
+        const roleHeader = roleButton.closest('th')!;
+
+        // Primary sort column keeps aria-sort.
+        expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
+        // Secondary sort column does not get "ascending"/"descending"; it is
+        // marked "none" so only the primary column announces a sort direction.
+        // Its state is conveyed through the accessible label instead.
+        expect(roleHeader).toHaveAttribute('aria-sort', 'none');
+
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to sort descending.'
+        );
+        expect(roleButton).toHaveAccessibleName(
+            'Sort by Role, currently sorted descending. Click to clear sorting.'
+        );
+    });
+
     it('associates the column search label with its input via htmlFor/id', () => {
         render(
             <DataTable

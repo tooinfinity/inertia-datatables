@@ -52,12 +52,17 @@ export function DataTableColumnHeader<TData extends RowData>({
             className="px-4 py-3 text-left align-middle font-medium text-muted-foreground"
             scope="col"
             aria-sort={
+                // `aria-sort` identifies the primary sorted column only. With
+                // multi-column sorting, secondary sorted columns get "none"
+                // instead of "ascending"/"descending" to avoid ambiguous
+                // multi-column sort announcements; their state is conveyed
+                // through the accessible label instead.
                 canSort
-                    ? isSorted === 'asc'
-                        ? 'ascending'
-                        : isSorted === 'desc'
-                            ? 'descending'
-                            : 'none'
+                    ? column.getSortIndex() === 0
+                        ? isSorted === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                        : 'none'
                     : undefined
             }
         >

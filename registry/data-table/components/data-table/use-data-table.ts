@@ -911,6 +911,10 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         enableSorting: true,
         enableMultiSort: true,
         enableSortingRemoval: true,
+        // Pin the first sort direction to ascending so it never flips when the
+        // server returns a different dataset (e.g. a page of null values). An
+        // explicit column-level `sortDescFirst` override still wins.
+        sortDescFirst: false,
         // Matches the backend `max_sorts` default (config `validation.max_sorts`).
         // The backend enforces its configured maximum on every request; this is
         // the frontend-side cap that prevents exceeding it before the round trip.

@@ -365,4 +365,60 @@ describe('useDataTable sorting (real TanStack Table)', () => {
         act(() => name().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent)); // [email asc]
         expect(result.table.state.sorting).toEqual([{ id: 'email', desc: false }]);
     });
+
+    it('keeps flipping direction instead of clearing after a dataset replacement with null values', () => {
+        const initialData = createIntegrationData({
+            data: [{ id: 1, name: 'Ada', email: 'ada@example.com', status: 'active' }],
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [],
+                searches: [],
+                filters: [],
+            },
+        });
+        let capturedResult: any = null;
+        const TestWrapper = ({ data }: { data: typeof initialData }) => {
+            capturedResult = useDataTable({ data });
+            return null;
+        };
+        const { rerender } = render(<TestWrapper data={initialData} />);
+
+        const name = () =>
+            capturedResult.table.getAllLeafColumns().find((column: { id: string }) => column.id === 'name')!;
+
+        // First click → ascending.
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(capturedResult.table.state.sorting).toEqual([{ id: 'name', desc: false }]);
+
+        // Server replaces the dataset with a page whose first ten values are null,
+        // echoing back the current ascending sort so it is preserved.
+        const nullData = createIntegrationData({
+            data: Array.from({ length: 10 }, (_, i) => ({
+                id: i + 2,
+                name: null,
+                email: null,
+                status: null,
+            })),
+            query: {
+                page: 1,
+                per_page: 25,
+                search: '',
+                sort: [{ column: 'name', direction: 'asc' }],
+                searches: [],
+                filters: [],
+            },
+        });
+        rerender(<TestWrapper data={nullData} />);
+
+        // Sorting state survived the replacement.
+        expect(capturedResult.table.state.sorting).toEqual([{ id: 'name', desc: false }]);
+
+        // Second click must flip to descending, not clear the sort. Without a
+        // stable first direction, the null values would flip the inferred first
+        // direction to descending and clear the existing sort instead.
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(capturedResult.table.state.sorting).toEqual([{ id: 'name', desc: true }]);
+    });
 });
