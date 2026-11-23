@@ -27,14 +27,30 @@ vi.mock('@tanstack/react-table', () => ({
     rowSelectionFeature: {},
     rowSortingFeature: {},
     metaHelper: () => ({}),
-    useTable: (options: Record<string, unknown>) => ({
-        ...options,
-        getHeaderGroups: () => [],
-        getRowModel: () => ({ rows: [] }),
-        getAllLeafColumns: () => options.columns ?? [],
-        state: options.state ?? {},
-        setState: vi.fn(),
-    }),
+    useTable: (options: Record<string, unknown>) => {
+        const data: Array<Record<string, unknown>> = options.data ?? [];
+        const getRowId = options.getRowId ?? ((_row: unknown, index: number) => String(index));
+        const rows = data.map((row, index) => {
+            const rowId = getRowId(row, index);
+            return {
+                id: rowId,
+                original: row,
+                index,
+                getIsSelected: () => {
+                    const rowSelection = (options.state?.rowSelection ?? {}) as Record<string, boolean>;
+                    return !!rowSelection[rowId];
+                },
+            };
+        });
+        return {
+            ...options,
+            getHeaderGroups: () => [],
+            getRowModel: () => ({ rows }),
+            getAllLeafColumns: () => options.columns ?? [],
+            state: options.state ?? {},
+            setState: vi.fn(),
+        };
+    },
 }));
 
 Object.defineProperty(global, 'location', {
@@ -2083,6 +2099,49 @@ describe('useDataTable', () => {
             // Restore original data - ID 1 selection persists
             rerender(<TestWrapper data={initialData} />);
             expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+        });
+
+        it('actual TanStack row selection state does not leak across dataset changes', () => {
+            const initialData = createMockData({
+                data: [{ id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = ({ data }: { data: ReturnType<typeof createMockData> }) => {
+                const result = useDataTable({ data, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            const { rerender } = render(<TestWrapper data={initialData} />);
+
+            // Select Alice (id:1) - verify the actual TanStack row reports selected
+            act(() => capturedResult!.setRowSelection({ 'id:1': true }));
+            const aliceRow = capturedResult!.table.getRowModel().rows.find(
+                (row: { id: string }) => row.id === 'id:1'
+            );
+            expect(aliceRow).toBeDefined();
+            expect(aliceRow!.getIsSelected()).toBe(true);
+
+            // Replace data with ID 99 at page 1 index 0 (simulates search/filter change)
+            const updatedData = createMockData({
+                data: [{ id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' }],
+            });
+            rerender(<TestWrapper data={updatedData} />);
+
+            // ID 99's actual TanStack row must NOT be selected - no inheritance from id:1
+            const zedRow = capturedResult!.table.getRowModel().rows.find(
+                (row: { id: string }) => row.id === 'id:99'
+            );
+            expect(zedRow).toBeDefined();
+            expect(zedRow!.getIsSelected()).toBe(false);
+
+            // Restore original data - ID 1's actual TanStack row remains selected
+            rerender(<TestWrapper data={initialData} />);
+            const aliceRowAgain = capturedResult!.table.getRowModel().rows.find(
+                (row: { id: string }) => row.id === 'id:1'
+            );
+            expect(aliceRowAgain).toBeDefined();
+            expect(aliceRowAgain!.getIsSelected()).toBe(true);
         });
 
         it('custom rowKey takes precedence and works across pages', () => {
