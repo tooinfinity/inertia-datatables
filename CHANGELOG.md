@@ -53,6 +53,7 @@
 - Extremely large `page` values can no longer cause an integer overflow that returns first-page rows; huge pages are clamped to a safe bound based on the effective page size and return an empty result set instead (fixes #105)
 - Row selection no longer collides across server-side pages or dataset updates when `rowKey` is omitted: row ids are derived from the row's `id` field (namespaced with `id:`) or, when no stable id exists, a generation-scoped fallback (`fallback:<generation>:<page>:<index>`) that changes when the dataset is replaced. Selection persists across pages and updates for stable ids; rows without a stable id or `rowKey` are effectively page- and dataset-scoped (fixes #102)
 - React layer: automatically recover from an out-of-range pagination page (`current_page > last_page`) by navigating to the last available page with a replace-only visit, and clamp the pagination summary so it never reports an invalid `from > to` range (fixes #106)
+- React layer: column headers now support three-state sorting (unsorted → ascending → descending → unsorted) so sorting can be cleared, Shift-click multi-column sorting to add secondary sort columns without replacing the current selection, and accessible labels that state the column, current sort state, priority, and the next sorting action; `aria-sort` is applied to the primary sorted column only (fixes #97)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 

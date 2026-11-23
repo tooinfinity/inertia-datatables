@@ -334,7 +334,7 @@ describe('DataTable customization', () => {
         // Column headers stay clean: only the sort indicator, no filter dropdown
         const table = screen.getByRole('table');
         expect(within(table).queryByRole('button', { name: /Name •/ })).not.toBeInTheDocument();
-        expect(within(table).getByRole('button', { name: 'Sort by Name' })).toBeInTheDocument();
+        expect(within(table).getByRole('button', { name: /Sort by Name/ })).toBeInTheDocument();
     });
 
     it('shows the selected count on a filter chip for multi-value filters', () => {

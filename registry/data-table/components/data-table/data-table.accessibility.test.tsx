@@ -74,36 +74,96 @@ describe('DataTable accessibility (issue #36)', () => {
         expect(results.violations).toHaveLength(0);
     });
 
-    it('exposes aria-sort on sortable column headers', () => {
+    it('exposes aria-sort only on the sorted sortable column header', () => {
         render(<DataTable data={createData()} />);
 
         const columnHeaders = screen.getAllByRole('columnheader');
 
-        // "Name" and "Role" are sortable; "ID" and "Status" are not.
-        const sortable = columnHeaders.filter((header) => header.hasAttribute('aria-sort'));
-        const unsortable = columnHeaders.filter((header) => !header.hasAttribute('aria-sort'));
-        expect(sortable).toHaveLength(2);
-        expect(unsortable).toHaveLength(2);
-        expect(sortable.every((header) => header.getAttribute('aria-sort') === 'none')).toBe(true);
+        // Nothing is sorted initially: no header carries aria-sort.
+        expect(columnHeaders.every((h) => !h.hasAttribute('aria-sort'))).toBe(true);
+
+        // Sortable columns are still exposed as sort buttons with accessible names.
+        expect(screen.getByRole('button', { name: /Sort by Name/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Sort by Role/ })).toBeInTheDocument();
     });
 
     it('updates aria-sort when the sort state changes', () => {
         render(<DataTable data={createData()} />);
 
-        const nameButton = screen.getByRole('button', { name: 'Sort by Name' });
+        const nameButton = screen.getByRole('button', { name: /Sort by Name/ });
         const nameHeader = nameButton.closest('th')!;
 
-        expect(nameHeader).toHaveAttribute('aria-sort', 'none');
+        expect(nameHeader).not.toHaveAttribute('aria-sort');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
 
         act(() => {
             fireEvent.click(nameButton);
         });
         expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to sort descending.'
+        );
 
         act(() => {
             fireEvent.click(nameButton);
         });
         expect(nameHeader).toHaveAttribute('aria-sort', 'descending');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted descending. Click to clear sorting.'
+        );
+
+        // Third click clears sorting and returns to unsorted. No header
+        // should carry aria-sort when sorting is cleared.
+        act(() => {
+            fireEvent.click(nameButton);
+        });
+        expect(nameHeader).not.toHaveAttribute('aria-sort');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
+    });
+
+    it('applies aria-sort to the primary sorted column only during multi-sort', () => {
+        render(
+            <DataTable
+                data={createData({
+                    query: {
+                        page: 1,
+                        per_page: 25,
+                        search: '',
+                        sort: [
+                            { column: 'name', direction: 'asc' },
+                            { column: 'role', direction: 'desc' },
+                        ],
+                        searches: [],
+                        filters: [],
+                    },
+                })}
+            />
+        );
+
+        const nameButton = screen.getByRole('button', { name: /Sort by Name/ });
+        const roleButton = screen.getByRole('button', { name: /Sort by Role/ });
+        const nameHeader = nameButton.closest('th')!;
+        const roleHeader = roleButton.closest('th')!;
+
+        // Primary sort column keeps aria-sort; no other header does.
+        expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
+        expect(roleHeader).not.toHaveAttribute('aria-sort');
+        // At most one header carries aria-sort while multi-sort is active.
+        const sortedHeaders = screen.getAllByRole('columnheader').filter((h) =>
+            h.hasAttribute('aria-sort')
+        );
+        expect(sortedHeaders).toHaveLength(1);
+
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to sort descending.'
+        );
+        expect(roleButton).toHaveAccessibleName(
+            'Sort by Role, Secondary sort, priority 2. currently sorted descending. Click to clear sorting.'
+        );
     });
 
     it('associates the column search label with its input via htmlFor/id', () => {
@@ -198,7 +258,7 @@ describe('DataTable accessibility (issue #36)', () => {
     it('marks decorative sort arrow glyphs as hidden', () => {
         render(<DataTable data={createData()} />);
 
-        const nameHeader = screen.getByRole('button', { name: 'Sort by Name' });
+        const nameHeader = screen.getByRole('button', { name: /Sort by Name/ });
         const arrows = nameHeader.querySelectorAll('[aria-hidden="true"]');
         expect(arrows.length).toBeGreaterThan(0);
     });

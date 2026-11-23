@@ -106,30 +106,61 @@ describe('DataTableColumnHeader sort indicator with React Compiler', () => {
         expect(button).not.toHaveTextContent('↑');
     });
 
-    it('cycles back to ascending (↑) after clicking three times (no tri-state)', () => {
+    it('cycles through unsorted → ascending → descending → unsorted (tri-state)', () => {
         render(<DataTable data={createData()} />);
 
         const button = sortButton('Name');
+
+        expect(button).toHaveTextContent('↕');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
 
         act(() => {
             fireEvent.click(button);
         });
         expect(button).toHaveTextContent('↑');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to sort descending.'
+        );
 
         act(() => {
             fireEvent.click(button);
         });
         expect(button).toHaveTextContent('↓');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently sorted descending. Click to clear sorting.'
+        );
 
         act(() => {
             fireEvent.click(button);
         });
-        expect(button).toHaveTextContent('↑');
-        expect(button).not.toHaveTextContent('↕');
-        expect(button).not.toHaveTextContent('↓');
+        expect(button).toHaveTextContent('↕');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
     });
 
-    it('triggers an Inertia visit with the sort parameter on click', () => {
+    it('keeps cycling through the three states on repeated clicks', () => {
+        render(<DataTable data={createData()} />);
+
+        const button = sortButton('Name');
+
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↑');
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↓');
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↕');
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↑');
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↓');
+        act(() => fireEvent.click(button));
+        expect(button).toHaveTextContent('↕');
+    });
+
+    it('removes the sort parameter from the Inertia visit when sorting is cleared', () => {
         render(<DataTable data={createData()} />);
 
         const button = sortButton('Name');
@@ -137,10 +168,59 @@ describe('DataTableColumnHeader sort indicator with React Compiler', () => {
         act(() => {
             fireEvent.click(button);
         });
+        expect(router.visit).toHaveBeenCalledWith('/?sort=name', expect.objectContaining({ replace: true }));
 
-        expect(router.visit).toHaveBeenCalledWith(
-            '/?sort=name',
-            expect.objectContaining({ replace: true })
+        // Second click → descending.
+        act(() => {
+            fireEvent.click(button);
+        });
+        expect(router.visit).toHaveBeenCalledWith('/?sort=-name', expect.objectContaining({ replace: true }));
+
+        // Third click → clearing sorting removes the parameter entirely.
+        act(() => {
+            fireEvent.click(button);
+        });
+        const lastCall = (router.visit as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+        const lastUrl = lastCall[0] as string;
+        expect(lastUrl).not.toContain('sort=');
+    });
+
+    it('starts descending on a sortDescFirst column', () => {
+        render(
+            <DataTable
+                data={createData()}
+                columns={[{ id: 'name', sortDescFirst: true }]}
+            />
+        );
+
+        const button = sortButton('Name');
+
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort descending.'
+        );
+
+        act(() => {
+            fireEvent.click(button);
+        });
+        expect(button).toHaveTextContent('↓');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently sorted descending. Click to sort ascending.'
+        );
+
+        act(() => {
+            fireEvent.click(button);
+        });
+        expect(button).toHaveTextContent('↑');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to clear sorting.'
+        );
+
+        act(() => {
+            fireEvent.click(button);
+        });
+        expect(button).toHaveTextContent('↕');
+        expect(button).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort descending.'
         );
     });
 });
