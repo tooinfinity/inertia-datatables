@@ -51,6 +51,7 @@
 - Composer dist archives now exclude the frontend registry, raw GitHub artifacts, lockfiles, and TypeScript tooling, reducing the downloaded package size by roughly 80% (fixes #26)
 - Global and column searches are now case-insensitive on PostgreSQL, matching the existing behaviour on SQLite and MySQL (fixes #27)
 - Extremely large `page` values can no longer cause an integer overflow that returns first-page rows; huge pages are clamped to a safe bound based on the effective page size and return an empty result set instead (fixes #105)
+- Row selection no longer collides across server-side pages or dataset updates when `rowKey` is omitted: row ids are derived from the row's `id` field (namespaced with `id:`) or, when no stable id exists, a generation-scoped fallback (`fallback:<generation>:<page>:<index>`) that changes when the dataset is replaced. Selection persists across pages and updates for stable ids; rows without a stable id or `rowKey` are effectively page- and dataset-scoped (fixes #102)
 - React layer: automatically recover from an out-of-range pagination page (`current_page > last_page`) by navigating to the last available page with a replace-only visit, and clamp the pagination summary so it never reports an invalid `from > to` range (fixes #106)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx

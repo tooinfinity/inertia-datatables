@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+
+// useLayoutEffect in the browser to apply generation changes before paint;
+// falls back to useEffect during server-side rendering to avoid SSR warnings.
+const useIsomorphicLayoutEffect =
+    typeof window !== 'undefined' && typeof window.document !== 'undefined'
+        ? useLayoutEffect
+        : useEffect;
 import {
     createColumnHelper,
     useTable,
@@ -324,6 +331,27 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
 
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+    // Tracks how many times the dataset has been replaced while the hook is
+    // mounted. Used to namespace fallback row ids so that rows without a stable
+    // id cannot silently inherit another row's selection when the data on the
+    // current page changes (search, filter, sort, per-page) but the page does
+    // not.
+    const [dataGeneration, setDataGeneration] = useState(0);
+    const prevDataRef = useRef(initialData.data);
+
+    // Detect dataset replacement while mounted and bump the generation so that
+    // fallback ids for rows without a stable id change, preventing selection
+    // from leaking to a different row at the same page/index after a data
+    // update. Runs synchronously before paint (layout effect) so the new
+    // generation is applied before the updated table commits, avoiding any
+    // transient selection leak for rows without a stable id. Rows with a stable
+    // id (or custom rowKey) are unaffected.
+    useIsomorphicLayoutEffect(() => {
+        if (prevDataRef.current !== initialData.data) {
+            prevDataRef.current = initialData.data;
+            setDataGeneration((gen) => gen + 1);
+        }
+    }, [initialData.data]);
 
     const handleRowSelectionChange = useCallback(
         (updater: StateUpdater<RowSelectionState>) => {
@@ -875,7 +903,31 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         manualSorting: true,
         manualFiltering: true,
         pageCount: initialData.meta.last_page,
-        ...(rowKey ? { getRowId: (row: TData, index: number) => rowKey(row, index) } : {}),
+        getRowId: (row: TData, index: number) => {
+            // A custom `rowKey` always wins, preserving the public API.
+            if (rowKey) {
+                return rowKey(row, index);
+            }
+            // Derive a stable row id from the response data so row selection does
+            // not collide across server-side pages (each page restarts its local
+            // indexes at zero). The `id:` namespace keeps derived ids separate
+            // from fallback ids, so a row with `id: 'fallback:1:0'` cannot
+            // collide with a fallback-generated id.
+            const rawId = (row as Record<string, unknown>).id;
+            const id =
+                typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : undefined;
+            if (id !== undefined) {
+                return `id:${id}`;
+            }
+            // Rows without a stable id get generation-scoped fallback ids
+            // (`fallback:<generation>:<page>:<index>`). The generation changes
+            // whenever the dataset is replaced, so selection cannot silently
+            // transfer to a different row at the same page/index after a data
+            // update (search, filter, sort, per-page). Rows without a stable
+            // identifier should supply a `rowKey` for reliable cross-page and
+            // cross-update selection.
+            return `fallback:${dataGeneration}:${state.page}:${index}`;
+        },
     });
 
     return {

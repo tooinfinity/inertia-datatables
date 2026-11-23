@@ -182,7 +182,19 @@ export interface DataTableOptions<TData extends RowData = Record<string, unknown
     actions?: DataTableRowActions<TData>;
     /** Options forwarded to the Inertia `router.visit` call. */
     visitOptions?: DataTableVisitOptions;
-    /** Derives a stable row id from the row data. */
+    /**
+     * Derives a stable row id from the row data.
+     *
+     * Used as the TanStack Table row id, so it must be unique and stable across
+     * server-side pages and dataset updates. When omitted, a row's `id` field is
+     * used when present (namespaced with `id:`). Otherwise a generation-scoped
+     * fallback id (`fallback:<generation>:<page>:<index>`) is used; the
+     * generation changes whenever the dataset is replaced, so selection does not
+     * silently transfer to a different row at the same page/index after a
+     * search, filter, sort, or per-page change. Row selection persists across
+     * pages for stable ids; rows without a stable id should supply a `rowKey`
+     * for reliable selection across pages and dataset updates.
+     */
     rowKey?: (_row: TData, _index: number) => string;
     /** Whether row selection is enabled, or a predicate receiving the row. */
     enableRowSelection?: boolean | ((row: Row<DataTableFeatures, TData>) => boolean);
