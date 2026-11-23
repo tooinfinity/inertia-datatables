@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     createColumnHelper,
     useTable,
@@ -335,8 +335,11 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     // Detect dataset replacement while mounted and bump the generation so that
     // fallback ids for rows without a stable id change, preventing selection
     // from leaking to a different row at the same page/index after a data
-    // update. Rows with a stable id (or custom rowKey) are unaffected.
-    useEffect(() => {
+    // update. Runs synchronously before paint (layout effect) so the new
+    // generation is applied before the updated table commits, avoiding any
+    // transient selection leak for rows without a stable id. Rows with a stable
+    // id (or custom rowKey) are unaffected.
+    useLayoutEffect(() => {
         if (prevDataRef.current !== initialData.data) {
             prevDataRef.current = initialData.data;
             setDataGeneration((gen) => gen + 1);

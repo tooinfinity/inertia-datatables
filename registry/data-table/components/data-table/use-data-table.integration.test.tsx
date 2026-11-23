@@ -167,4 +167,48 @@ describe('useDataTable row selection integration (real TanStack Table)', () => {
         expect(aliceRowAgain).toBeDefined();
         expect(aliceRowAgain!.getIsSelected()).toBe(true);
     });
+
+    it('does not leak fallback selection across server-side page changes', () => {
+        const page1Data = createIntegrationData({
+            data: [{ name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            meta: { current_page: 1, per_page: 25, from: 1, to: 1, total: 2, last_page: 2 },
+            query: { page: 1, per_page: 25, search: '', sort: [], searches: [], filters: [] },
+        });
+        const page2Data = createIntegrationData({
+            data: [{ name: 'Zed', email: 'zed@example.com', status: 'active' }],
+            meta: { current_page: 2, per_page: 25, from: 2, to: 2, total: 2, last_page: 2 },
+            query: { page: 2, per_page: 25, search: '', sort: [], searches: [], filters: [] },
+        });
+
+        let capturedResult: any = null;
+        const TestWrapper = ({ data }: { data: typeof page1Data }) => {
+            const result = useDataTable({ data, enableRowSelection: true });
+            capturedResult = result;
+            return null;
+        };
+
+        const { rerender } = render(<TestWrapper data={page1Data} />);
+
+        // Select Alice (no id, fallback id based on page 1 index 0)
+        const aliceRow = capturedResult.table.getRowModel().rows[0];
+        act(() => capturedResult.setRowSelection({ [aliceRow.id]: true }));
+        expect(aliceRow.getIsSelected()).toBe(true);
+        expect(aliceRow.id).toBe('fallback:0:1:0');
+
+        // Navigate to page 2: Zed at index 0 gets a different fallback id, must NOT be selected
+        rerender(<TestWrapper data={page2Data} />);
+        const zedRow = capturedResult.table.getRowModel().rows[0];
+        expect(zedRow).toBeDefined();
+        expect(zedRow.id).not.toBe(aliceRow.id);
+        expect(zedRow.getIsSelected()).toBe(false);
+
+        // Return to page 1: data reference changed, generation bumped, so Alice
+        // gets a new fallback id. Old selection does not carry over for
+        // fallback ids (they are page- and generation-scoped).
+        rerender(<TestWrapper data={page1Data} />);
+        const aliceRowAgain = capturedResult.table.getRowModel().rows.find(
+            (r: { id: string }) => r.id === aliceRow.id
+        );
+        expect(aliceRowAgain).toBeUndefined();
+    });
 });
