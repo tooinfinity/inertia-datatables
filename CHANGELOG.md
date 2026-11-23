@@ -46,7 +46,7 @@
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors
 - Suppress default reporting for handled client input errors and add the `handle_exceptions` opt-out configuration
 - Remove the obsolete `HandlesInertiaDataTablesExceptions` trait; exception handling now works without app-side wiring
-- Boolean filter values (`"true"`, `"false"`, `"1"`, `"0"`) are now automatically detected and converted for any filterable column, not just those with `filterType('boolean')` (fixes #22)
+- Boolean filter values (`"true"`, `"false"`, `"1"`, `"0"`) are converted only for columns that explicitly opt in with `filterType('boolean')`, preserving exact matches for literal `"0"` and `"1"` strings on standard columns (fixes #73, refs #22)
 - Generate shadcn registry artifacts from the canonical root manifest and reject stale output in CI (fixes #24)
 - Composer dist archives now exclude the frontend registry, raw GitHub artifacts, lockfiles, and TypeScript tooling, reducing the downloaded package size by roughly 80% (fixes #26)
 - Global and column searches are now case-insensitive on PostgreSQL, matching the existing behaviour on SQLite and MySQL (fixes #27)
