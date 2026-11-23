@@ -849,16 +849,22 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             }
             // Derive a stable row id from the response data so row selection does
             // not collide across server-side pages (each page restarts its local
-            // indexes at zero). Fall back to the page-local index when no stable
-            // identifier can be derived, keeping the previous behaviour for tables
-            // without an id.
+            // indexes at zero). The `id:` namespace keeps derived ids separate
+            // from fallback ids, so a row with `id: 'fallback:1:0'` cannot
+            // collide with a fallback-generated id.
             const rawId = (row as Record<string, unknown>).id;
             const id =
                 typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : undefined;
-            // Derived row ids and fallback indexes live in disjoint identity
-            // domains, so mixed rows (some with an id, some without) cannot
-            // collide within a page or across server-side pages.
-            return id ?? `row-${index}`;
+            if (id !== undefined) {
+                return `id:${id}`;
+            }
+            // Rows without a stable id get page-scoped fallback ids
+            // (`fallback:<page>:<index>`). Because the page number is part of
+            // the id, selection cannot silently transfer to an unrelated row at
+            // the same local index on another server-side page. Selection is
+            // effectively page-scoped for rows without a stable identifier;
+            // consumers whose rows lack stable ids should supply a `rowKey`.
+            return `fallback:${state.page}:${index}`;
         },
     });
 

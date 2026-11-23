@@ -735,13 +735,25 @@ is called with the clicked row:
 
 #### Row selection across pages
 
-When row selection is enabled, the table keeps a stable id for every row so
+When row selection is enabled, the table assigns a stable id to every row so
 selection does not collide across server-side pages (each page restarts its
-local indexes at zero). Without an explicit `rowKey`, a row's `id` field is
-used when present; otherwise the page-local index falls back, which can collide
-across pages. Selection persists across page changes when a stable id is
-available. Supply a `rowKey` whenever rows do not carry a stable `id`, or when
-you want to control the identifier used for selection:
+local indexes at zero). Row ids are determined as follows:
+
+1. If a `rowKey` callback is provided, its return value is used unchanged.
+2. Otherwise, if the row has an `id` field (string or number), it is used with
+   an `id:` namespace prefix (e.g. `id:42`).
+3. Otherwise, a page-scoped fallback id is generated
+   (`fallback:<page>:<rowIndex>`). Because the page number is part of the id,
+   selection cannot silently transfer to an unrelated row at the same local
+   index on another page. Selection is effectively page-scoped for rows without
+   a stable identifier.
+
+Selection persists across page changes when stable ids are available. When rows
+lack stable ids and no `rowKey` is supplied, selection does not carry over to
+other pages (the fallback ids differ per page).
+
+Supply a `rowKey` whenever rows do not carry a stable `id`, or when you want to
+control the identifier used for selection:
 
 ```tsx
 <DataTable

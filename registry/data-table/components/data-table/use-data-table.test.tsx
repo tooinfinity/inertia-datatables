@@ -1931,8 +1931,8 @@ describe('useDataTable', () => {
         expect(columns[3].enableSorting).toBe(false);
     });
 
-    describe('row selection ids', () => {
-        it('derives a stable row id from the row `id` when rowKey is omitted', () => {
+    describe('row selection across pages', () => {
+        it('persists selection by stable id across pages without leaking to unrelated rows', () => {
             const initialData = createMockData({
                 data: [
                     { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
@@ -1954,15 +1954,30 @@ describe('useDataTable', () => {
                 }
             ).getRowId;
 
-            expect(getRowId(initialData.data[0], 0)).toBe('1');
-            expect(getRowId(initialData.data[1], 0)).toBe('2');
+            // Stable ids are namespaced with `id:`
+            expect(getRowId(initialData.data[0], 0)).toBe('id:1');
+            expect(getRowId(initialData.data[1], 0)).toBe('id:2');
+
+            // Select Alice (id:1) on page 1
+            act(() => capturedResult!.setRowSelection({ 'id:1': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+
+            // Navigate to page 2: Zed (id:99) gets id:99, which is not selected
+            act(() => capturedResult!.handlePageChange(2));
+            expect(
+                getRowId({ id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' }, 0)
+            ).toBe('id:99');
+            expect(capturedResult!.rowSelection).not.toHaveProperty('id:99');
+
+            // Return to page 1: selection by stable id persists
+            act(() => capturedResult!.handlePageChange(1));
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
         });
 
-        it('does not collide between different rows at the same local index across pages', () => {
-            const page1Row = { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' };
-            const page2Row = { id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' };
-
-            const initialData = createMockData({ data: [page1Row, page2Row] });
+        it('keeps selection page-scoped for rows without a stable id', () => {
+            const initialData = createMockData({
+                data: [{ name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
 
             let capturedResult: ReturnType<typeof useDataTable> | null = null;
             const TestWrapper = () => {
@@ -1972,19 +1987,38 @@ describe('useDataTable', () => {
             };
             render(<TestWrapper />);
 
-            const getRowId = (
-                capturedResult!.table as unknown as {
-                    getRowId: (row: unknown, index: number) => string;
-                }
-            ).getRowId;
+            const getRowId = () =>
+                (
+                    capturedResult!.table as unknown as {
+                        getRowId: (row: unknown, index: number) => string;
+                    }
+                ).getRowId;
 
-            // Same local index (0) on two different pages, but different stable ids.
-            expect(getRowId(page1Row, 0)).not.toBe(getRowId(page2Row, 0));
+            // Alice on page 1 index 0 -> fallback:1:0
+            expect(getRowId()(initialData.data[0], 0)).toBe('fallback:1:0');
+
+            // Select Alice on page 1
+            act(() => capturedResult!.setRowSelection({ 'fallback:1:0': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'fallback:1:0': true });
+
+            // Navigate to page 2: Charlie at index 0 -> fallback:2:0 (different id, not selected)
+            act(() => capturedResult!.handlePageChange(2));
+            expect(
+                getRowId()({ name: 'Charlie', email: 'charlie@example.com', status: 'active' }, 0)
+            ).toBe('fallback:2:0');
+            expect(capturedResult!.rowSelection).not.toHaveProperty('fallback:2:0');
+
+            // Return to page 1: fallback id matches again, selection persists
+            act(() => capturedResult!.handlePageChange(1));
+            expect(capturedResult!.rowSelection).toEqual({ 'fallback:1:0': true });
         });
 
-        it('uses the custom rowKey callback when provided', () => {
+        it('custom rowKey takes precedence and works across pages', () => {
             const initialData = createMockData({
-                data: [{ id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' }],
+                data: [
+                    { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
+                    { id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' },
+                ],
             });
 
             let capturedResult: ReturnType<typeof useDataTable> | null = null;
@@ -2005,38 +2039,28 @@ describe('useDataTable', () => {
                 }
             ).getRowId;
 
+            // Custom rowKey is used regardless of page
             expect(getRowId(initialData.data[0], 0)).toBe('custom-1');
+            expect(getRowId(initialData.data[1], 0)).toBe('custom-99');
+
+            // Select custom-1 on page 1
+            act(() => capturedResult!.setRowSelection({ 'custom-1': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'custom-1': true });
+
+            // Navigate to page 2: custom-99 is not selected
+            act(() => capturedResult!.handlePageChange(2));
+            expect(capturedResult!.rowSelection).not.toHaveProperty('custom-99');
+
+            // Return to page 1: custom-1 still selected
+            act(() => capturedResult!.handlePageChange(1));
+            expect(capturedResult!.rowSelection).toEqual({ 'custom-1': true });
         });
 
-        it('falls back to a prefixed page-local index when no rowKey and no row id exist', () => {
-            const initialData = createMockData({
-                data: [{ name: 'Alice', email: 'alice@example.com', status: 'active' }],
-            });
-
-            let capturedResult: ReturnType<typeof useDataTable> | null = null;
-            const TestWrapper = () => {
-                const result = useDataTable({ data: initialData, enableRowSelection: true });
-                capturedResult = result;
-                return null;
-            };
-            render(<TestWrapper />);
-
-            const getRowId = (
-                capturedResult!.table as unknown as {
-                    getRowId: (row: unknown, index: number) => string;
-                }
-            ).getRowId;
-
-            expect(getRowId(initialData.data[0], 0)).toBe('row-0');
-        });
-
-        it('keeps derived row ids and fallback indexes in disjoint identity domains', () => {
-            // Mixed ID availability: Alice has an id, Bob does not. Both share
-            // local index 1 in different positions, but their ids must differ.
+        it('record with id "row-0" does not collide with missing-id row at index 0', () => {
             const initialData = createMockData({
                 data: [
-                    { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
-                    { name: 'Bob', email: 'bob@example.com', status: 'inactive' },
+                    { id: 'row-0', name: 'HasId', email: 'hasid@example.com', status: 'active' },
+                    { name: 'NoId', email: 'noid@example.com', status: 'inactive' },
                 ],
             });
 
@@ -2054,12 +2078,42 @@ describe('useDataTable', () => {
                 }
             ).getRowId;
 
-            const aliceId = getRowId(initialData.data[0], 0);
-            const bobId = getRowId(initialData.data[1], 1);
+            // id: 'row-0' is namespaced to id:row-0
+            expect(getRowId(initialData.data[0], 0)).toBe('id:row-0');
+            // Missing id at page 1 index 1 -> fallback:1:1
+            expect(getRowId(initialData.data[1], 1)).toBe('fallback:1:1');
+            // They cannot collide
+            expect(getRowId(initialData.data[0], 0)).not.toBe(getRowId(initialData.data[1], 1));
+        });
 
-            expect(aliceId).toBe('1');
-            expect(bobId).toBe('row-1');
-            expect(aliceId).not.toBe(bobId);
+        it('selection state updates correctly through setRowSelection', () => {
+            const initialData = createMockData({
+                data: [
+                    { id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' },
+                    { id: 2, name: 'Bob', email: 'bob@example.com', status: 'inactive' },
+                ],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = () => {
+                const result = useDataTable({ data: initialData, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            render(<TestWrapper />);
+
+            // Select Alice
+            act(() => capturedResult!.setRowSelection({ 'id:1': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+
+            // Deselect Alice
+            act(() => capturedResult!.setRowSelection({}));
+            expect(capturedResult!.rowSelection).toEqual({});
+
+            // Add Bob using functional updater
+            act(() => capturedResult!.setRowSelection({ 'id:1': true }));
+            act(() => capturedResult!.setRowSelection((prev) => ({ ...prev, 'id:2': true })));
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true, 'id:2': true });
         });
     });
 });
