@@ -19,9 +19,11 @@ vi.mock('@inertiajs/react', () => ({
 // Local test-only mock of the dropdown-menu shim. Mirrors real Radix
 // DropdownMenu behaviour so the fixed trigger (no redundant onClick) can be
 // exercised: the trigger toggles the controlled `open` state through
-// `onOpenChange` on click and composes (does not replace) the child's own
-// onClick. `openChangeCalls` records each state-update request so tests can
-// assert exactly one request per click.
+// `onOpenChange` on pointerDown (matching real Radix DropdownMenuTrigger,
+// which toggles on pointerDown via composeEventHandlers), composing the
+// child's handler first then the trigger's toggle. `openChangeCalls`
+// records each state-update request so tests can assert exactly one request
+// per click.
 const openChangeCalls = vi.hoisted(() => [] as boolean[]);
 const DropdownMenuContext = React.createContext<{
     open: boolean;
@@ -49,7 +51,10 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     }: MenuProps & { asChild?: boolean }) => {
         const ctx = React.useContext(DropdownMenuContext);
 
-        const handleClick = () => {
+        // Real Radix DropdownMenuTrigger toggles on pointerDown (not click) and
+        // composes handlers with composeEventHandlers: the child's handler runs
+        // first, then the trigger's toggle, unless the event is defaultPrevented.
+        const handlePointerDown = () => {
             if (ctx.onOpenChange && typeof ctx.open === 'boolean') {
                 const next = !ctx.open;
                 openChangeCalls.push(next);
@@ -59,21 +64,19 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 
         if (asChild && React.isValidElement(children)) {
             const child = children as React.ReactElement;
+            const childOnPointerDown = (child.props as { onPointerDown?: React.PointerEventHandler<HTMLButtonElement> }).onPointerDown;
             const childOnClick = (child.props as { onClick?: React.MouseEventHandler<HTMLButtonElement> }).onClick;
             return React.cloneElement(child, {
                 ...props,
-                onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
-                    // The trigger owns the interaction: toggle state first
-                    // (mirrors real Radix DropdownMenuTrigger), then compose the
-                    // child's own onClick. Order matters — a competing child
-                    // handler that mutates state directly can fight the trigger.
-                    handleClick();
-                    childOnClick?.(event);
+                onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+                    childOnPointerDown?.(event);
+                    handlePointerDown();
                 },
+                onClick: childOnClick,
             } as any);
         }
 
-        return <div {...props} onClick={() => handleClick()}>{children}</div>;
+        return <div {...props} onPointerDown={handlePointerDown}>{children}</div>;
     },
     DropdownMenuContent: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
         <div {...props}>{children}</div>
@@ -387,7 +390,8 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument();
     });
 
-    it('moves filter controls to a toolbar chip beside the search field', () => {
+    it('moves filter controls to a toolbar chip beside the search field', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -410,7 +414,7 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Name • 1 selected' })).toBeInTheDocument();
 
         // Clicking the chip opens a dropdown with the column's filter controls
-        fireEvent.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
+        await user.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
 
         // Column headers stay clean: only the sort indicator, no filter dropdown
@@ -419,7 +423,8 @@ describe('DataTable customization', () => {
         expect(within(table).getByRole('button', { name: /Sort by Name/ })).toBeInTheDocument();
     });
 
-    it('shows the selected count on a filter chip for multi-value filters', () => {
+    it('shows the selected count on a filter chip for multi-value filters', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -454,13 +459,14 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Status • 2 selected' })).toBeInTheDocument();
 
         // Opening the chip should show the restored multi-value options as checked.
-        fireEvent.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+        await user.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
         expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
         expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked();
         expect(screen.getByRole('checkbox', { name: 'Archived' })).not.toBeChecked();
     });
 
-    it('keeps a filter entrypoint for eligible columns when no filter is active', () => {
+    it('keeps a filter entrypoint for eligible columns when no filter is active', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -479,12 +485,13 @@ describe('DataTable customization', () => {
         expect(screen.queryByLabelText('Search Name')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Filter Name value')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Name' }));
+        await user.click(screen.getByRole('button', { name: 'Name' }));
         expect(screen.getByLabelText('Search Name')).toBeInTheDocument();
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
     });
 
-    it('toggles the filter dropdown open and closed, preserving aria-expanded', () => {
+    it('toggles the filter dropdown open and closed, preserving aria-expanded', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -516,14 +523,15 @@ describe('DataTable customization', () => {
         );
 
         const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveAttribute('aria-haspopup', 'true');
         expect(chip).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
 
-        fireEvent.click(chip);
+        await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
 
-        fireEvent.click(chip);
+        await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
     });

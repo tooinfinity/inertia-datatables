@@ -1,6 +1,7 @@
 'use client';
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 import { usePage } from '@inertiajs/react';
 import { axe } from 'vitest-axe';
 import * as React from 'react';
@@ -19,10 +20,11 @@ vi.mock('@inertiajs/react', () => ({
 
 // Local test-only mock of the dropdown-menu shim. Mirrors real Radix
 // DropdownMenu behaviour: the trigger toggles the controlled `open` state
-// through `onOpenChange` on click and composes (does not replace) the child's
-// own onClick. Required here because the fix removes the redundant Button
-// onClick, so clicking the chip only opens the dropdown when the trigger
-// itself manages open state.
+// through `onOpenChange` on pointerDown (matching real Radix
+// DropdownMenuTrigger, which toggles on pointerDown via composeEventHandlers),
+// composing the child's handler first then the trigger's toggle. Required here
+// because the fix removes the redundant Button onClick, so clicking the chip
+// only opens the dropdown when the trigger itself manages open state.
 const openChangeCalls = vi.hoisted(() => [] as boolean[]);
 const DropdownMenuContext = React.createContext<{
     open: boolean;
@@ -50,7 +52,10 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
     }: MenuProps & { asChild?: boolean }) => {
         const ctx = React.useContext(DropdownMenuContext);
 
-        const handleClick = () => {
+        // Real Radix DropdownMenuTrigger toggles on pointerDown (not click) and
+        // composes handlers with composeEventHandlers: the child's handler runs
+        // first, then the trigger's toggle, unless the event is defaultPrevented.
+        const handlePointerDown = () => {
             if (ctx.onOpenChange && typeof ctx.open === 'boolean') {
                 const next = !ctx.open;
                 openChangeCalls.push(next);
@@ -60,17 +65,19 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 
         if (asChild && React.isValidElement(children)) {
             const child = children as React.ReactElement;
+            const childOnPointerDown = (child.props as { onPointerDown?: React.PointerEventHandler<HTMLButtonElement> }).onPointerDown;
             const childOnClick = (child.props as { onClick?: React.MouseEventHandler<HTMLButtonElement> }).onClick;
             return React.cloneElement(child, {
                 ...props,
-                onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
-                    handleClick();
-                    childOnClick?.(event);
+                onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+                    childOnPointerDown?.(event);
+                    handlePointerDown();
                 },
+                onClick: childOnClick,
             } as any);
         }
 
-        return <div {...props} onClick={() => handleClick()}>{children}</div>;
+        return <div {...props} onPointerDown={handlePointerDown}>{children}</div>;
     },
     DropdownMenuContent: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
         <div {...props}>{children}</div>
@@ -242,7 +249,8 @@ describe('DataTable accessibility (issue #36)', () => {
         );
     });
 
-    it('associates the column search label with its input via htmlFor/id', () => {
+    it('associates the column search label with its input via htmlFor/id', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -259,9 +267,7 @@ describe('DataTable accessibility (issue #36)', () => {
         );
 
         const chip = screen.getByRole('button', { name: 'Name • 1 selected' });
-        act(() => {
-            fireEvent.click(chip);
-        });
+        await user.click(chip);
 
         // getByLabelText returns the associated form control (the input);
         // the <label> element is found by its visible text.
@@ -273,7 +279,8 @@ describe('DataTable accessibility (issue #36)', () => {
         expect(label.tagName).toBe('LABEL');
     });
 
-    it('gives the filter value input an accessible name', () => {
+    it('gives the filter value input an accessible name', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -291,9 +298,7 @@ describe('DataTable accessibility (issue #36)', () => {
 
         // The "Name" column uses filter_type: 'text', so it renders a text filter input.
         const chip = screen.getByRole('button', { name: 'Name • 1 selected' });
-        act(() => {
-            fireEvent.click(chip);
-        });
+        await user.click(chip);
 
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
     });
