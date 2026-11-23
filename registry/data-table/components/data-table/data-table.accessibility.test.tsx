@@ -90,20 +90,38 @@ describe('DataTable accessibility (issue #36)', () => {
     it('updates aria-sort when the sort state changes', () => {
         render(<DataTable data={createData()} />);
 
-        const nameButton = screen.getByRole('button', { name: 'Sort by Name' });
+        const nameButton = screen.getByRole('button', { name: /Sort by Name/ });
         const nameHeader = nameButton.closest('th')!;
 
         expect(nameHeader).toHaveAttribute('aria-sort', 'none');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
 
         act(() => {
             fireEvent.click(nameButton);
         });
         expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted ascending. Click to sort descending.'
+        );
 
         act(() => {
             fireEvent.click(nameButton);
         });
         expect(nameHeader).toHaveAttribute('aria-sort', 'descending');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently sorted descending. Click to clear sorting.'
+        );
+
+        // Third click clears sorting and returns to unsorted.
+        act(() => {
+            fireEvent.click(nameButton);
+        });
+        expect(nameHeader).toHaveAttribute('aria-sort', 'none');
+        expect(nameButton).toHaveAccessibleName(
+            'Sort by Name, currently unsorted. Click to sort ascending.'
+        );
     });
 
     it('associates the column search label with its input via htmlFor/id', () => {
@@ -198,7 +216,7 @@ describe('DataTable accessibility (issue #36)', () => {
     it('marks decorative sort arrow glyphs as hidden', () => {
         render(<DataTable data={createData()} />);
 
-        const nameHeader = screen.getByRole('button', { name: 'Sort by Name' });
+        const nameHeader = screen.getByRole('button', { name: /Sort by Name/ });
         const arrows = nameHeader.querySelectorAll('[aria-hidden="true"]');
         expect(arrows.length).toBeGreaterThan(0);
     });

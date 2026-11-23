@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render } from '@testing-library/react';
+import { router } from '@inertiajs/react';
 import { useDataTable } from './use-data-table';
 
 // Only mock Inertia, not TanStack Table - we want the real table implementation
@@ -210,5 +211,158 @@ describe('useDataTable row selection integration (real TanStack Table)', () => {
             (r: { id: string }) => r.id === aliceRow.id
         );
         expect(aliceRowAgain).toBeUndefined();
+    });
+});
+
+describe('useDataTable sorting (real TanStack Table)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    function renderSortableTable() {
+        const initialData = createIntegrationData({
+            data: [
+                { id: 1, name: 'Ada', email: 'ada@example.com', status: 'active' },
+                { id: 2, name: 'Linus', email: 'linus@example.com', status: 'inactive' },
+            ],
+        });
+        let capturedResult: any = null;
+        const TestWrapper = () => {
+            const result = useDataTable({ data: initialData });
+            capturedResult = result;
+            return null;
+        };
+        render(<TestWrapper />);
+        // Expose a live reader: `capturedResult` is reassigned on every render, so
+        // a getter always reflects the latest TanStack Table instance (and its
+        // controlled sorting state).
+        return {
+            get table() {
+                return capturedResult.table;
+            },
+        };
+    }
+
+    function columnById(result: any, id: string) {
+        return result.table.getAllLeafColumns().find((column: { id: string }) => column.id === id)!;
+    }
+
+    it('configures multi-sort, sorting removal, and the max column count', () => {
+        const result = renderSortableTable();
+
+        expect(result.table.options.enableMultiSort).toBe(true);
+        expect(result.table.options.enableSortingRemoval).toBe(true);
+        // Matches the backend `max_sorts` default; the backend remains
+        // authoritative and caps sorts per request via SortCollection::limit().
+        expect(result.table.options.maxMultiSortColCount).toBe(10);
+    });
+
+    it('cycles a column through unsorted → ascending → descending → unsorted', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+
+        expect(result.table.state.sorting).toEqual([]);
+        expect(name().getIsSorted()).toBe(false);
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([{ id: 'name', desc: false }]);
+        expect(name().getIsSorted()).toBe('asc');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([{ id: 'name', desc: true }]);
+        expect(name().getIsSorted()).toBe('desc');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([]);
+        expect(name().getIsSorted()).toBe(false);
+    });
+
+    it('normal click replaces the existing sort instead of appending', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+        const email = () => columnById(result, 'email');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([{ id: 'name', desc: false }]);
+
+        act(() => email().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([{ id: 'email', desc: false }]);
+    });
+
+    it('shift-click adds a second and third sorting column', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+        const email = () => columnById(result, 'email');
+        const status = () => columnById(result, 'status');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        act(() => email().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([
+            { id: 'name', desc: false },
+            { id: 'email', desc: false },
+        ]);
+
+        act(() => status().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([
+            { id: 'name', desc: false },
+            { id: 'email', desc: false },
+            { id: 'status', desc: false },
+        ]);
+    });
+
+    it('serializes multi-sorting to the Inertia visit as comma-separated columns', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+        const email = () => columnById(result, 'email');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        act(() => email().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent));
+
+        const lastCall = (router.visit as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+        // URLSearchParams percent-encodes the comma; the server decodes query
+        // strings, so decode to assert the intended serialization.
+        expect(decodeURIComponent(lastCall[0])).toBe('/?sort=name,email');
+        expect(lastCall[1]).toMatchObject({ replace: true });
+    });
+
+    it('shift-click changes the direction of an already sorted column without losing others', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+        const email = () => columnById(result, 'email');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent));
+        act(() => email().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([
+            { id: 'name', desc: false },
+            { id: 'email', desc: false },
+        ]);
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent));
+        expect(result.table.state.sorting).toEqual([
+            { id: 'name', desc: true },
+            { id: 'email', desc: false },
+        ]);
+    });
+
+    it('clearing one sorting column preserves the others', () => {
+        const result = renderSortableTable();
+        const name = () => columnById(result, 'name');
+        const email = () => columnById(result, 'email');
+
+        act(() => name().getToggleSortingHandler()({ shiftKey: false } as unknown as MouseEvent)); // [name asc]
+        act(() => email().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent)); // [name asc, email asc]
+        act(() => name().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent)); // [name desc, email asc]
+        expect(result.table.state.sorting).toEqual([
+            { id: 'name', desc: true },
+            { id: 'email', desc: false },
+        ]);
+
+        // Shift-click name again → removed, email preserved.
+        act(() => name().getToggleSortingHandler()({ shiftKey: true } as unknown as MouseEvent)); // [email asc]
+        expect(result.table.state.sorting).toEqual([{ id: 'email', desc: false }]);
     });
 });

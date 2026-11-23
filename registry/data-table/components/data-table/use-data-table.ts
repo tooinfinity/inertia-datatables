@@ -903,6 +903,18 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         manualSorting: true,
         manualFiltering: true,
         pageCount: initialData.meta.last_page,
+        // Let TanStack Table own the sorting state transitions (three-state
+        // cycling and shift-click multi-sorting). The backend remains
+        // authoritative: `SortCollection::limit($queryConfig->maxSorts)` caps
+        // the number of sort columns per request, and the server echoes the
+        // accepted sort state back which this hook re-syncs locally.
+        enableSorting: true,
+        enableMultiSort: true,
+        enableSortingRemoval: true,
+        // Matches the backend `max_sorts` default (config `validation.max_sorts`).
+        // The backend enforces its configured maximum on every request; this is
+        // the frontend-side cap that prevents exceeding it before the round trip.
+        maxMultiSortColCount: 10,
         getRowId: (row: TData, index: number) => {
             // A custom `rowKey` always wins, preserving the public API.
             if (rowKey) {
