@@ -83,11 +83,12 @@ function seedEndpointQuery(
     query.filters.forEach((f) => {
         const key = `${keys.filters}[${f.column}]`;
         if (Array.isArray(f.value)) {
-            f.value.forEach((v) => {
-                if (!params.has(`${key}[]`)) {
-                    params.append(`${key}[]`, String(v));
-                }
-            });
+            // Preserve an existing endpoint filter entirely; otherwise append
+            // every selected value so an initial/recovery visit does not
+            // silently drop array members already present on the URL.
+            if (!params.has(`${key}[]`)) {
+                f.value.forEach((v) => params.append(`${key}[]`, String(v)));
+            }
         } else if (f.value !== '' && f.value !== null && f.value !== undefined) {
             setIfMissing(key, String(f.value as string));
         }
@@ -165,6 +166,11 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
         searches: Object.fromEntries(initialData.query.searches.map((s) => [s.column, s.value])),
         filters: Object.fromEntries(initialData.query.filters.map((f) => [f.column, f.value])),
     });
+    // Tracks the recovery context (page + endpoint) for which an
+    // out-of-range recovery visit was already initiated, so repeated renders
+    // (incl. StrictMode double-invoke) do not issue duplicate recovery visits.
+    // Cleared once a valid response arrives or the page becomes valid again.
+    const recoveredPageRef = useRef<{ page: number; url: string | null } | null>(null);
 
     const [state, setState] = useState<DataTableState>({
         page: initialData.query.page,
@@ -358,7 +364,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
     }, [sorting]);
 
     const visitWithParams = useCallback(
-        (params: Record<string, unknown>, overrides: { replace?: boolean } = {}) => {
+        (params: Record<string, unknown>, overrides: { replace?: boolean; forceReplace?: boolean } = {}) => {
             // Target the explicit endpoint URL when one is configured
             // (e.g. a Laravel Wayfinder generated URL), otherwise the current
             // page pathname. The URL is treated as same-origin: only its
@@ -425,7 +431,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                 preserveState: true,
                 ...restVisitOptions,
                 only: only ?? [dataPropName],
-                replace: replace ?? overrides.replace ?? false,
+                replace: overrides.forceReplace ? true : replace ?? overrides.replace ?? false,
                 onStart: () => {
                     setIsLoading(true);
                     setError(null);
@@ -759,6 +765,33 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
             endpointQueryRef.current = nextQuery;
         }
     }, [initialData.query, KEYS, url]);
+
+    // Automatically recover from an out-of-range page. When records are deleted
+    // or modified, the server may report a current_page greater than last_page
+    // while returning an empty result for that page. Navigate to the last
+    // available page so the table does not stay stuck on an invalid page.
+    useEffect(() => {
+        const { current_page, last_page } = initialData.meta;
+        const endpoint = url ?? window.location.pathname;
+
+        // Nothing to recover: no pages at all, or the current page is valid.
+        if (last_page < 1 || current_page <= last_page) {
+            recoveredPageRef.current = null;
+            return;
+        }
+
+        // Avoid issuing duplicate recovery visits for the same recovery context
+        // (page + endpoint). A different endpoint or page still recovers.
+        if (
+            recoveredPageRef.current?.page === current_page &&
+            recoveredPageRef.current?.url === endpoint
+        ) {
+            return;
+        }
+
+        recoveredPageRef.current = { page: current_page, url: endpoint };
+        visitWithParams({ [KEYS.page]: last_page }, { forceReplace: true });
+    }, [initialData.meta, visitWithParams, KEYS.page, url]);
 
     useEffect(() => {
         return () => {

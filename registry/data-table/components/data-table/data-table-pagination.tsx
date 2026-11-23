@@ -28,8 +28,13 @@ export function DataTablePagination({
     selectedCount,
 }: DataTablePaginationProps) {
     const pageCount = Math.max(1, totalPages);
-    const from = totalItems === 0 ? 0 : (currentPage - 1) * perPage + 1;
-    const to = Math.min(currentPage * perPage, totalItems);
+    // Clamp the displayed range so it never reports `from > to`, which can
+    // happen when the requested page is out of range (current_page >
+    // last_page) or when the result set is empty. The out-of-range page is
+    // recovered automatically in useDataTable, but the summary must stay
+    // valid while that navigation is in flight.
+    const from = totalItems === 0 ? 0 : Math.min(Math.max(1, (currentPage - 1) * perPage + 1), totalItems);
+    const to = totalItems === 0 ? 0 : Math.min(currentPage * perPage, totalItems);
     const pages = getPageNumbers(currentPage, pageCount);
     const effectivePerPageOptions = perPageOptions
         ? perPageOptions.includes(perPage)

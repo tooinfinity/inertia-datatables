@@ -78,3 +78,77 @@ describe('DataTablePagination narrow-viewport behavior', () => {
         expect(controls!.className).toContain('flex-wrap');
     });
 });
+
+describe('DataTablePagination summary', () => {
+    it('shows a valid range on the first page', () => {
+        render(
+            <DataTablePagination
+                currentPage={1}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={2}
+                totalItems={50}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 1 to 25 of 50 results');
+    });
+
+    it('shows a valid range on the last page', () => {
+        render(
+            <DataTablePagination
+                currentPage={2}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={2}
+                totalItems={50}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 26 to 50 of 50 results');
+    });
+
+    it('never shows an invalid from > to range when current_page exceeds last_page', () => {
+        render(
+            <DataTablePagination
+                currentPage={3}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={2}
+                totalItems={50}
+            />
+        );
+
+        const summary = screen.getByText(/Showing/).textContent;
+        expect(summary).not.toMatch(/51 to/);
+        expect(summary).toBe('Showing 50 to 50 of 50 results');
+    });
+
+    it('shows the zero-results wording when there are no records', () => {
+        render(
+            <DataTablePagination
+                currentPage={1}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={1}
+                totalItems={0}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
+    });
+
+    it('shows the zero-results wording on an out-of-range page with no records', () => {
+        render(
+            <DataTablePagination
+                currentPage={3}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={2}
+                totalItems={0}
+            />
+        );
+
+        expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
+    });
+});
