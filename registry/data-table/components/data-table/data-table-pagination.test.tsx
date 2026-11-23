@@ -124,6 +124,23 @@ describe('DataTablePagination summary', () => {
         expect(summary).toBe('Showing 50 to 50 of 50 results');
     });
 
+    it('shows the clamped page indicator and marks the last page active when current_page exceeds last_page', () => {
+        render(
+            <DataTablePagination
+                currentPage={3}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={2}
+                totalItems={50}
+            />
+        );
+
+        expect(screen.getByText(/Page 2 of 2/)).toBeInTheDocument();
+
+        const lastPageButton = screen.getByRole('button', { name: 'Page 2' });
+        expect(lastPageButton).toHaveAttribute('aria-current', 'page');
+    });
+
     it('shows the zero-results wording when there are no records', () => {
         render(
             <DataTablePagination

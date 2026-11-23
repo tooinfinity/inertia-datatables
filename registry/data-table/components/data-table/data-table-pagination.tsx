@@ -35,7 +35,12 @@ export function DataTablePagination({
     // valid while that navigation is in flight.
     const from = totalItems === 0 ? 0 : Math.min(Math.max(1, (currentPage - 1) * perPage + 1), totalItems);
     const to = totalItems === 0 ? 0 : Math.min(currentPage * perPage, totalItems);
-    const pages = getPageNumbers(currentPage, pageCount);
+    // Normalize the displayed page so the indicator and active page stay valid
+    // when current_page exceeds last_page (out of range). Recovery in
+    // useDataTable navigates to the last page, but the footer must stay
+    // consistent while that navigation is in flight.
+    const displayPage = Math.min(Math.max(1, currentPage), pageCount);
+    const pages = getPageNumbers(displayPage, pageCount);
     const effectivePerPageOptions = perPageOptions
         ? perPageOptions.includes(perPage)
             ? perPageOptions
@@ -82,7 +87,7 @@ export function DataTablePagination({
                     </div>
                 )}
                 <div className="flex items-center justify-center text-sm font-medium whitespace-nowrap">
-                    Page {currentPage} of {pageCount}
+                    Page {displayPage} of {pageCount}
                 </div>
                 <div className="flex items-center gap-1">
                     <Button
@@ -90,7 +95,7 @@ export function DataTablePagination({
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={() => onPageChange(1)}
-                        disabled={currentPage <= 1}
+                        disabled={displayPage <= 1}
                         aria-label="First page"
                     >
                         <span className="sr-only">First</span>
@@ -100,8 +105,8 @@ export function DataTablePagination({
                         variant="outline"
                         size="sm"
                         className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(currentPage - 1)}
-                        disabled={currentPage <= 1}
+                        onClick={() => onPageChange(displayPage - 1)}
+                        disabled={displayPage <= 1}
                         aria-label="Previous page"
                     >
                         <span className="sr-only">Previous</span>
@@ -111,12 +116,12 @@ export function DataTablePagination({
                         pages.map((page, index) => (
                             <Button
                                 key={index}
-                                variant={page === currentPage ? 'default' : 'outline'}
+                                variant={page === displayPage ? 'default' : 'outline'}
                                 size="sm"
                                 className="h-8 min-w-[2rem] px-2 text-xs"
                                 onClick={() => onPageChange(page)}
                                 aria-label={`Page ${page}`}
-                                aria-current={page === currentPage ? 'page' : undefined}
+                                aria-current={page === displayPage ? 'page' : undefined}
                             >
                                 {page}
                             </Button>
@@ -125,8 +130,8 @@ export function DataTablePagination({
                         variant="outline"
                         size="sm"
                         className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(currentPage + 1)}
-                        disabled={currentPage >= pageCount}
+                        onClick={() => onPageChange(displayPage + 1)}
+                        disabled={displayPage >= pageCount}
                         aria-label="Next page"
                     >
                         <span className="sr-only">Next</span>
@@ -137,7 +142,7 @@ export function DataTablePagination({
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={() => onPageChange(pageCount)}
-                        disabled={currentPage >= pageCount}
+                        disabled={displayPage >= pageCount}
                         aria-label="Last page"
                     >
                         <span className="sr-only">Last</span>
