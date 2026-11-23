@@ -2053,6 +2053,38 @@ describe('useDataTable', () => {
             );
         });
 
+        it('does not inherit stable-id selection when data changes on the same page', () => {
+            const initialData = createMockData({
+                data: [{ id: 1, name: 'Alice', email: 'alice@example.com', status: 'active' }],
+            });
+
+            let capturedResult: ReturnType<typeof useDataTable> | null = null;
+            const TestWrapper = ({ data }: { data: ReturnType<typeof createMockData> }) => {
+                const result = useDataTable({ data, enableRowSelection: true });
+                capturedResult = result;
+                return null;
+            };
+            const { rerender } = render(<TestWrapper data={initialData} />);
+
+            // Select Alice (id:1) on page 1
+            act(() => capturedResult!.setRowSelection({ 'id:1': true }));
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+
+            // Replace data with ID 99 at page 1 index 0 (simulates search/filter change)
+            const updatedData = createMockData({
+                data: [{ id: 99, name: 'Zed', email: 'zed@example.com', status: 'active' }],
+            });
+            rerender(<TestWrapper data={updatedData} />);
+
+            // ID 99's id (id:99) is not in rowSelection - no inheritance from id:1
+            expect(capturedResult!.rowSelection).not.toHaveProperty('id:99');
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+
+            // Restore original data - ID 1 selection persists
+            rerender(<TestWrapper data={initialData} />);
+            expect(capturedResult!.rowSelection).toEqual({ 'id:1': true });
+        });
+
         it('custom rowKey takes precedence and works across pages', () => {
             const initialData = createMockData({
                 data: [
@@ -2099,8 +2131,8 @@ describe('useDataTable', () => {
         it('record with id "row-0" does not collide with missing-id row at index 0', () => {
             const initialData = createMockData({
                 data: [
-                    { id: 'row-0', name: 'HasId', email: 'hasid@example.com', status: 'active' },
                     { name: 'NoId', email: 'noid@example.com', status: 'inactive' },
+                    { id: 'row-0', name: 'HasId', email: 'hasid@example.com', status: 'active' },
                 ],
             });
 
@@ -2118,11 +2150,11 @@ describe('useDataTable', () => {
                 }
             ).getRowId;
 
-            // id: 'row-0' is namespaced to id:row-0
-            expect(getRowId(initialData.data[0], 0)).toBe('id:row-0');
-            // Missing id at page 1 index 1 -> fallback:0:1:1 (generation:page:index)
-            expect(getRowId(initialData.data[1], 1)).toBe('fallback:0:1:1');
-            // They cannot collide
+            // Missing id at page 1 index 0 -> fallback:0:1:0
+            expect(getRowId(initialData.data[0], 0)).toBe('fallback:0:1:0');
+            // id: 'row-0' at page 1 index 1 -> id:row-0 (namespaced)
+            expect(getRowId(initialData.data[1], 1)).toBe('id:row-0');
+            // They cannot collide despite both involving "row-0"
             expect(getRowId(initialData.data[0], 0)).not.toBe(getRowId(initialData.data[1], 1));
         });
 
