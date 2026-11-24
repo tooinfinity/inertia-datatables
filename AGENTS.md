@@ -41,7 +41,7 @@ Always run `npm run registry:validate` and `npm run registry:build` before commi
 
 ## shadcn/ui Component Ownership and Protection
 
-The shadcn/ui primitives under `registry/data-table/components/ui/` are package-maintained compatibility shims (not verbatim official shadcn/ui components). They are protected during ordinary development. AI coding agents and contributors must not unintentionally modify, replace, refactor, or customize them.
+The `registry/data-table/components/ui/` directory contains seven package-maintained compatibility shims serving the same UI roles as shadcn/ui primitives (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`). Of these, only `table.tsx` structurally mirrors the official shadcn/ui `Table` primitive; the others are not verified upstream copies. They are protected to preserve internal package stability during ordinary development. AI coding agents and contributors must not unintentionally modify, replace, refactor, or customize them.
 
 Rules:
 
@@ -56,7 +56,7 @@ Rules:
 9. Intentional updates to protected primitives require explicit maintainer authorization and a dedicated maintenance PR.
 10. Inspect the final Git diff and explicitly report changes affecting protected paths (`registry/data-table/components/ui/` and `public/r/`).
 
-Protected paths: `registry/data-table/components/ui/` (package-maintained shadcn primitives; `table.tsx` mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
+Protected paths: `registry/data-table/components/ui/` (package-maintained shadcn primitives; `table.tsx` structurally mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
 
 Generated artifacts (`public/r/`) are produced by `npm run registry:validate` and `npm run registry:build` from `registry.json` and registry sources. Never edit them manually. CI enforcement and automated upstream drift detection are deferred to PR 2 and PR 3 of this effort.
 
