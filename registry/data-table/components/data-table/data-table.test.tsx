@@ -30,6 +30,13 @@ const DropdownMenuContext = React.createContext<{
     onOpenChange: ((open: boolean) => void) | undefined;
 }>({ open: false, onOpenChange: undefined });
 
+// Shared radio-group value so Yes/No items stay mutually exclusive within one
+// menu. Mirrors the local test-only stub in ui/dropdown-menu.tsx.
+const DropdownMenuRadioGroupContext = React.createContext<{
+    value: string | undefined;
+    onValueChange: ((value: string) => void) | undefined;
+}>({ value: undefined, onValueChange: undefined });
+
 type MenuProps = {
     children?: React.ReactNode;
     open?: boolean;
@@ -91,6 +98,60 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
             onSelect?.(new Event('select'));
         };
         return <div {...props} onClick={onClick}>{children}</div>;
+    },
+    DropdownMenuCheckboxItem: ({
+        children,
+        checked = false,
+        onCheckedChange,
+        ...props
+    }: { checked?: boolean; onCheckedChange?: (checked: boolean) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+            props.onClick?.(event);
+            onCheckedChange?.(!checked);
+        };
+
+        return (
+            <div {...props} role="menuitemcheckbox" aria-checked={checked} onClick={onClick}>
+                {children}
+            </div>
+        );
+    },
+    DropdownMenuRadioGroup: ({
+        children,
+        value,
+        onValueChange: externalOnValueChange,
+        ...props
+    }: { value?: string; onValueChange?: (value: string) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const onValueChange = (next: string) => {
+            externalOnValueChange?.(next);
+        };
+
+        return (
+            <DropdownMenuRadioGroupContext.Provider value={{ value, onValueChange }}>
+                <div {...props} role="group" aria-orientation="vertical">{children}</div>
+            </DropdownMenuRadioGroupContext.Provider>
+        );
+    },
+    DropdownMenuRadioItem: ({
+        children,
+        value,
+        onCheckedChange,
+        ...props
+    }: { value: string; onCheckedChange?: (checked: boolean) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const { value: groupValue, onValueChange } = React.useContext(DropdownMenuRadioGroupContext);
+        const checked = groupValue === value;
+
+        const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+            props.onClick?.(event);
+            onCheckedChange?.(!checked);
+            onValueChange?.(value);
+        };
+
+        return (
+            <div {...props} role="menuitemradio" aria-checked={checked} onClick={onClick}>
+                {children}
+            </div>
+        );
     },
     DropdownMenuSeparator: ({ ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props} />,
     DropdownMenuLabel: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -460,9 +521,9 @@ describe('DataTable customization', () => {
 
         // Opening the chip should show the restored multi-value options as checked.
         await user.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
-        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
-        expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked();
-        expect(screen.getByRole('checkbox', { name: 'Archived' })).not.toBeChecked();
+        expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('menuitemcheckbox', { name: 'Archived' })).toHaveAttribute('aria-checked', 'false');
     });
 
     it('keeps a filter entrypoint for eligible columns when no filter is active', async () => {
@@ -525,15 +586,15 @@ describe('DataTable customization', () => {
         const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
         expect(chip).toHaveAttribute('aria-haspopup', 'true');
         expect(chip).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Active' })).not.toBeInTheDocument();
 
         await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+        expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toBeChecked();
 
         await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Active' })).not.toBeInTheDocument();
     });
 
     it('renders 0 to 0 of 0 results when total is 0', () => {
@@ -794,7 +855,7 @@ describe('DataTable filter chip dropdown regression (#98)', () => {
 
         const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
         expect(chip).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Active' })).not.toBeInTheDocument();
 
         await user.click(chip);
 
@@ -805,7 +866,7 @@ describe('DataTable filter chip dropdown regression (#98)', () => {
 
         // Dropdown stays open immediately after opening.
         expect(chip).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+        expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toBeChecked();
         expect(chip).toHaveAttribute('aria-expanded', 'true');
     });
 
@@ -821,7 +882,7 @@ describe('DataTable filter chip dropdown regression (#98)', () => {
         await user.click(chip);
         expect(openChangeCalls).toEqual([true, false]);
         expect(chip).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Active' })).not.toBeInTheDocument();
     });
 
     it('keeps displaying the active filter count while interacting', async () => {
@@ -861,7 +922,7 @@ describe('DataTable filter chip dropdown regression (#98)', () => {
         await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'true');
 
-        fireEvent.click(screen.getByRole('checkbox', { name: 'Inactive' }));
+        fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Inactive' }));
         expect(onFilterChange).toHaveBeenCalledWith('status', 'inactive');
 
         // Selecting a filter value closes the chip dropdown.

@@ -7,6 +7,7 @@ import { axe } from 'vitest-axe';
 import * as React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
+import { DataTableFilterChip } from './data-table-toolbar';
 import type { DataTableResponse } from './types';
 
 vi.unmock('@tanstack/react-table');
@@ -30,6 +31,13 @@ const DropdownMenuContext = React.createContext<{
     open: boolean;
     onOpenChange: ((open: boolean) => void) | undefined;
 }>({ open: false, onOpenChange: undefined });
+
+// Shared radio-group value so Yes/No items stay mutually exclusive within one
+// menu. Mirrors the local test-only stub in ui/dropdown-menu.tsx.
+const DropdownMenuRadioGroupContext = React.createContext<{
+    value: string | undefined;
+    onValueChange: ((value: string) => void) | undefined;
+}>({ value: undefined, onValueChange: undefined });
 
 type MenuProps = {
     children?: React.ReactNode;
@@ -92,6 +100,60 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
             onSelect?.(new Event('select'));
         };
         return <div {...props} onClick={onClick}>{children}</div>;
+    },
+    DropdownMenuCheckboxItem: ({
+        children,
+        checked = false,
+        onCheckedChange,
+        ...props
+    }: { checked?: boolean; onCheckedChange?: (checked: boolean) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+            props.onClick?.(event);
+            onCheckedChange?.(!checked);
+        };
+
+        return (
+            <div {...props} role="menuitemcheckbox" aria-checked={checked} onClick={onClick}>
+                {children}
+            </div>
+        );
+    },
+    DropdownMenuRadioGroup: ({
+        children,
+        value,
+        onValueChange: externalOnValueChange,
+        ...props
+    }: { value?: string; onValueChange?: (value: string) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const onValueChange = (next: string) => {
+            externalOnValueChange?.(next);
+        };
+
+        return (
+            <DropdownMenuRadioGroupContext.Provider value={{ value, onValueChange }}>
+                <div {...props} role="group" aria-orientation="vertical">{children}</div>
+            </DropdownMenuRadioGroupContext.Provider>
+        );
+    },
+    DropdownMenuRadioItem: ({
+        children,
+        value,
+        onCheckedChange,
+        ...props
+    }: { value: string; onCheckedChange?: (checked: boolean) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const { value: groupValue, onValueChange } = React.useContext(DropdownMenuRadioGroupContext);
+        const checked = groupValue === value;
+
+        const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+            props.onClick?.(event);
+            onCheckedChange?.(!checked);
+            onValueChange?.(value);
+        };
+
+        return (
+            <div {...props} role="menuitemradio" aria-checked={checked} onClick={onClick}>
+                {children}
+            </div>
+        );
     },
     DropdownMenuSeparator: ({ ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props} />,
     DropdownMenuLabel: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -325,7 +387,7 @@ describe('DataTable accessibility (issue #36)', () => {
 
         // Toggle behavior (open/close on click) is covered by the DataTable
         // filter chip dropdown regression tests in data-table.test.tsx.
-        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Active' })).not.toBeInTheDocument();
     });
 
     it('marks decorative sort arrow glyphs as hidden', () => {
@@ -428,5 +490,394 @@ describe('DataTable pagination accessibility (issue #107)', () => {
         });
 
         expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 100 results');
+    });
+});
+
+describe('DataTable filter chip menu accessibility (issue #108)', () => {
+    const selectOptions = [
+        { value: 'active', label: 'Active' },
+        { value: 'inactive', label: 'Inactive' },
+        { value: 'archived', label: 'Archived' },
+    ];
+
+    function renderSelectChip(filterValue: unknown) {
+        return render(
+            <DataTableFilterChip
+                columnId="status"
+                label="Status"
+                filterValue={filterValue}
+                searchValue=""
+                filterType="select"
+                filterOptions={selectOptions}
+                canSearch={false}
+                canFilter={true}
+                onFilterChange={vi.fn()}
+                onColumnSearchChange={vi.fn()}
+                onClearFilter={vi.fn()}
+            />
+        );
+    }
+
+    function renderBooleanChip(filterValue: boolean | undefined) {
+        return render(
+            <DataTableFilterChip
+                columnId="published"
+                label="Published"
+                filterValue={filterValue}
+                searchValue=""
+                filterType="boolean"
+                filterOptions={[]}
+                canSearch={false}
+                canFilter={true}
+                onFilterChange={vi.fn()}
+                onColumnSearchChange={vi.fn()}
+                onClearFilter={vi.fn()}
+            />
+        );
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    describe('select / multi-select filter options', () => {
+        it('exposes each option as a menuitemcheckbox with aria-checked reflecting selection', async () => {
+            const user = userEvent.setup();
+            renderSelectChip('active');
+
+            const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+            await user.click(chip);
+
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute(
+                'aria-checked',
+                'false'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Archived' })).toHaveAttribute(
+                'aria-checked',
+                'false'
+            );
+        });
+
+        it('does not render a nested interactive checkbox inside a menu item', async () => {
+            const user = userEvent.setup();
+            renderSelectChip('active');
+
+            await user.click(screen.getByRole('button', { name: 'Status • 1 selected' }));
+
+            expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+            // Only the menuitemcheckbox itself carries the checked state.
+            expect(screen.getAllByRole('menuitemcheckbox')).toHaveLength(3);
+        });
+
+        it('updates aria-checked when selecting and deselecting an option', async () => {
+            const user = userEvent.setup();
+            const onFilterChange = vi.fn();
+            const { rerender } = render(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue="active"
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={selectOptions}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            // Selecting an option closes the dropdown (existing behavior), so each
+            // selection is followed by a re-render that applies the new filter value
+            // before the menu is reopened to verify the resulting checked state.
+
+            await user.click(screen.getByRole('button', { name: 'Status • 1 selected' }));
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute('aria-checked', 'false');
+
+            await user.click(screen.getByRole('menuitemcheckbox', { name: 'Inactive' }));
+            expect(onFilterChange).toHaveBeenCalledWith('status', 'inactive');
+
+            rerender(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue="inactive"
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={selectOptions}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Status • 1 selected' }));
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute('aria-checked', 'false');
+
+            await user.click(screen.getByRole('menuitemcheckbox', { name: 'Active' }));
+            expect(onFilterChange).toHaveBeenCalledWith('status', 'active');
+        });
+
+        it('deselects an already-checked option when activated again', async () => {
+            const user = userEvent.setup();
+            const onFilterChange = vi.fn();
+            render(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue="active"
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={selectOptions}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Status • 1 selected' }));
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+
+            // Activating an already-checked checkbox option deselects it.
+            await user.click(screen.getByRole('menuitemcheckbox', { name: 'Active' }));
+            expect(onFilterChange).toHaveBeenCalledWith('status', undefined);
+            expect(screen.getByRole('button', { name: 'Status • 1 selected' })).toHaveAttribute(
+                'aria-expanded',
+                'false'
+            );
+        });
+
+        it('matches restored string values against numeric options', async () => {
+            const user = userEvent.setup();
+            render(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue="1"
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={[
+                        { value: 1, label: 'Active' },
+                        { value: 2, label: 'Inactive' },
+                    ]}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={vi.fn()}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Status • 1 selected' }));
+
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute(
+                'aria-checked',
+                'false'
+            );
+        });
+
+        it('matches array values when any member corresponds to the option', async () => {
+            const user = userEvent.setup();
+            renderSelectChip(['active', 'inactive']);
+
+            await user.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Archived' })).toHaveAttribute(
+                'aria-checked',
+                'false'
+            );
+        });
+
+        it('preserves existing array members when selecting an additional option', async () => {
+            const user = userEvent.setup();
+            const onFilterChange = vi.fn();
+            const { rerender } = render(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue={['active', 'inactive']}
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={selectOptions}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            // Selecting an option closes the dropdown (existing behavior), so each
+            // selection is followed by a re-render that applies the new filter value
+            // before the menu is reopened to verify the resulting checked state.
+
+            await user.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+
+            // Select Archived while Active and Inactive remain selected.
+            await user.click(screen.getByRole('menuitemcheckbox', { name: 'Archived' }));
+            expect(onFilterChange).toHaveBeenCalledWith('status', [
+                'active',
+                'inactive',
+                'archived',
+            ]);
+
+            rerender(
+                <DataTableFilterChip
+                    columnId="status"
+                    label="Status"
+                    filterValue={['active', 'inactive', 'archived']}
+                    searchValue=""
+                    filterType="select"
+                    filterOptions={selectOptions}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Status • 3 selected' }));
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Active' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Inactive' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemcheckbox', { name: 'Archived' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+        });
+    });
+
+    describe('boolean Yes/No filter options', () => {
+        it('exposes Yes and No as mutually exclusive menuitemradio items', async () => {
+            const user = userEvent.setup();
+            renderBooleanChip(true);
+
+            await user.click(screen.getByRole('button', { name: 'Published • 1 selected' }));
+
+            expect(screen.getByRole('menuitemradio', { name: 'Yes' })).toHaveAttribute(
+                'aria-checked',
+                'true'
+            );
+            expect(screen.getByRole('menuitemradio', { name: 'No' })).toHaveAttribute(
+                'aria-checked',
+                'false'
+            );
+        });
+
+        it('selecting one boolean option deselects the other', async () => {
+            const user = userEvent.setup();
+            const onFilterChange = vi.fn();
+            const { rerender } = render(
+                <DataTableFilterChip
+                    columnId="published"
+                    label="Published"
+                    filterValue={undefined}
+                    searchValue=""
+                    filterType="boolean"
+                    filterOptions={[]}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            // Selecting an option closes the dropdown (existing behavior), so each
+            // selection is followed by a re-render that applies the new filter value
+            // before the menu is reopened to verify the resulting checked state.
+
+            await user.click(screen.getByRole('button', { name: 'Published' }));
+            expect(screen.getByRole('menuitemradio', { name: 'Yes' })).toHaveAttribute('aria-checked', 'false');
+            expect(screen.getByRole('menuitemradio', { name: 'No' })).toHaveAttribute('aria-checked', 'false');
+
+            await user.click(screen.getByRole('menuitemradio', { name: 'Yes' }));
+            expect(onFilterChange).toHaveBeenCalledWith('published', true);
+
+            rerender(
+                <DataTableFilterChip
+                    columnId="published"
+                    label="Published"
+                    filterValue={true}
+                    searchValue=""
+                    filterType="boolean"
+                    filterOptions={[]}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Published • 1 selected' }));
+            expect(screen.getByRole('menuitemradio', { name: 'Yes' })).toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByRole('menuitemradio', { name: 'No' })).toHaveAttribute('aria-checked', 'false');
+
+            await user.click(screen.getByRole('menuitemradio', { name: 'No' }));
+            expect(onFilterChange).toHaveBeenCalledWith('published', false);
+
+            rerender(
+                <DataTableFilterChip
+                    columnId="published"
+                    label="Published"
+                    filterValue={false}
+                    searchValue=""
+                    filterType="boolean"
+                    filterOptions={[]}
+                    canSearch={false}
+                    canFilter={true}
+                    onFilterChange={onFilterChange}
+                    onColumnSearchChange={vi.fn()}
+                    onClearFilter={vi.fn()}
+                />
+            );
+
+            await user.click(screen.getByRole('button', { name: 'Published • 1 selected' }));
+            expect(screen.getByRole('menuitemradio', { name: 'No' })).toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByRole('menuitemradio', { name: 'Yes' })).toHaveAttribute('aria-checked', 'false');
+        });
+
+        it('does not render a nested interactive control inside either radio item', async () => {
+            const user = userEvent.setup();
+            renderBooleanChip(true);
+
+            await user.click(screen.getByRole('button', { name: 'Published • 1 selected' }));
+
+            expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+            expect(screen.getAllByRole('menuitemradio')).toHaveLength(2);
+        });
     });
 });
