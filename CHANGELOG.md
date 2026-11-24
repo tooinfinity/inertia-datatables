@@ -55,7 +55,7 @@
 - React layer: automatically recover from an out-of-range pagination page (`current_page > last_page`) by navigating to the last available page with a replace-only visit, and clamp the pagination summary so it never reports an invalid `from > to` range (fixes #106)
 - React layer: column headers now support three-state sorting (unsorted → ascending → descending → unsorted) so sorting can be cleared, Shift-click multi-column sorting to add secondary sort columns without replacing the current selection, and accessible labels that state the column, current sort state, priority, and the next sorting action; `aria-sort` is applied to the primary sorted column only (fixes #97)
 - React layer: prevented duplicate dropdown state updates when interacting with DataTable filter chips, so a single click opens or closes a chip dropdown exactly once (fixes #98)
-- React layer: pagination controls are exposed as a navigation landmark (`aria-label="Pagination"`) and the result summary is a polite live region (`role="status"`, `aria-live="polite"`) so screen-reader users can navigate pagination and hear result-summary changes (fixes #107)
+- React layer: pagination controls are exposed as a navigation landmark (`aria-label="Pagination"`) and the result summary is a polite live region (`role="status"`, `aria-live="polite"`) so screen-reader users can navigate pagination and hear result ranges from accepted responses and immediate row selection changes (fixes #107)
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 

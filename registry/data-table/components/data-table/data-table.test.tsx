@@ -715,7 +715,10 @@ describe('DataTable customization', () => {
         const row = checkbox.closest('tr')!;
         expect(row).toHaveAttribute('data-state', 'selected');
 
-        expect(screen.getByText(/row\(s\) selected/)).toHaveTextContent('1 of 2 row(s) selected.');
+        expect(screen.getByRole('status')).toHaveTextContent('1 of 2 row(s) selected.');
+
+        fireEvent.click(checkbox);
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 2 of 2 results');
     });
 
     it('includes active perPage in options when missing from perPageOptions', () => {

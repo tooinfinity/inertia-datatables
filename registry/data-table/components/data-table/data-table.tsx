@@ -242,6 +242,7 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                     perPageOptions={perPageOptions}
                     totalPages={data.meta.last_page}
                     totalItems={data.meta.total}
+                    resultRange={data.meta}
                     selectedCount={table.getSelectedRowModel().rows.length}
                 />
                 {children}

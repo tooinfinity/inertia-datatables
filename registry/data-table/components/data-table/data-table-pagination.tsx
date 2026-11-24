@@ -3,12 +3,16 @@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import type { DataTableMeta } from './types';
+
 export interface DataTablePaginationProps {
     currentPage: number;
     perPage: number;
     onPageChange: (_page: number) => void;
     totalPages: number;
     totalItems: number;
+    /** Range from the accepted response, when separate from the navigation state. */
+    resultRange?: Pick<DataTableMeta, 'from' | 'to'>;
     /** Optional callback when page size changes. */
     onPerPageChange?: (_perPage: number) => void;
     /** Available page size options. */
@@ -23,18 +27,19 @@ export function DataTablePagination({
     onPageChange,
     totalPages,
     totalItems,
+    resultRange,
     onPerPageChange,
     perPageOptions,
     selectedCount,
 }: DataTablePaginationProps) {
     const pageCount = Math.max(1, totalPages);
-    // Normalize the displayed page so the indicator, active page, and result
-    // range stay valid when current_page exceeds last_page (out of range).
-    // Recovery in useDataTable navigates to the last page, but the footer
-    // must stay consistent while that navigation is in flight.
+    // Keep the controls and the standalone range fallback valid while an
+    // out-of-range page recovers.
     const displayPage = Math.min(Math.max(1, currentPage), pageCount);
-    const from = totalItems === 0 ? 0 : Math.min(Math.max(1, (displayPage - 1) * perPage + 1), totalItems);
-    const to = totalItems === 0 ? 0 : Math.min(displayPage * perPage, totalItems);
+    const { from, to } = resultRange ?? {
+        from: totalItems === 0 ? 0 : Math.min(Math.max(1, (displayPage - 1) * perPage + 1), totalItems),
+        to: totalItems === 0 ? 0 : Math.min(displayPage * perPage, totalItems),
+    };
     const pages = getPageNumbers(displayPage, pageCount);
     const effectivePerPageOptions = perPageOptions
         ? perPageOptions.includes(perPage)
@@ -52,8 +57,8 @@ export function DataTablePagination({
                     </span>
                 ) : (
                     <span>
-                        Showing <span className="font-medium text-foreground">{from}</span> to{' '}
-                        <span className="font-medium text-foreground">{to}</span> of{' '}
+                        Showing <span className="font-medium text-foreground">{from ?? 0}</span> to{' '}
+                        <span className="font-medium text-foreground">{to ?? 0}</span> of{' '}
                         <span className="font-medium text-foreground">{totalItems}</span> results
                     </span>
                 )}
