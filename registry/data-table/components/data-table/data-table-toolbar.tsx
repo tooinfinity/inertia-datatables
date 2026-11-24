@@ -11,11 +11,13 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuCheckboxItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
     DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
-import { Checkbox } from '@/components/ui/checkbox';
 
 export interface DataTableToolbarProps<TData extends RowData = Record<string, unknown>> {
     table?: ReactTable<DataTableFeatures, TData>;
@@ -89,8 +91,30 @@ export function DataTableFilterChip({
 
     const activeCount = filterValueCount(filterValue) + (searchValue ? 1 : 0);
 
-    const handleFilterSelect = (value: string | number) => {
-        onFilterChange(columnId, value);
+    // Toggles a checkbox menu option using the next checked state supplied by
+    // `DropdownMenuCheckboxItem`. Selecting adds the option; deselecting removes
+    // it from an array value or clears a scalar value, preserving any other
+    // selected array members.
+    const handleFilterCheckboxChange = (value: string | number, checked: boolean) => {
+        if (checked) {
+            if (Array.isArray(filterValue)) {
+                // Preserve existing array members and append the new selection
+                // only when it is not already present.
+                const alreadySelected = filterValue.some((member) => filterValueMatches(member, value));
+                if (!alreadySelected) {
+                    onFilterChange(columnId, [...filterValue, value]);
+                }
+            } else {
+                onFilterChange(columnId, value);
+            }
+        } else if (Array.isArray(filterValue)) {
+            onFilterChange(
+                columnId,
+                filterValue.filter((member) => !filterValueMatches(member, value))
+            );
+        } else {
+            onFilterChange(columnId, undefined);
+        }
         setMenuOpen(false);
     };
 
@@ -177,10 +201,11 @@ export function DataTableFilterChip({
                 {canFilter && filterType === 'select' && filterOptions.length > 0 && (
                     <div className="space-y-0.5 p-1 max-h-[200px] overflow-y-auto">
                         {filterOptions.map((option) => (
-                            <DropdownMenuItem
+                            <DropdownMenuCheckboxItem
                                 key={option.value}
-                                onSelect={() => {
-                                    handleFilterSelect(option.value);
+                                checked={filterValueMatches(filterValue, option.value)}
+                                onCheckedChange={(checked) => {
+                                    handleFilterCheckboxChange(option.value, checked);
                                 }}
                                 className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
                                     filterValueMatches(filterValue, option.value)
@@ -188,50 +213,37 @@ export function DataTableFilterChip({
                                         : 'hover:bg-accent'
                                 }`}
                             >
-                                <Checkbox
-                                    aria-label={option.label}
-                                    checked={filterValueMatches(filterValue, option.value)}
-                                    className="h-3.5 w-3.5"
-                                />
                                 <span className="truncate">{option.label}</span>
-                            </DropdownMenuItem>
+                            </DropdownMenuCheckboxItem>
                         ))}
                     </div>
                 )}
 
                 {canFilter && filterType === 'boolean' && (
-                    <div className="space-y-0.5 p-1">
-                        <DropdownMenuItem
-                            onSelect={() => {
-                                handleFilterBooleanChange(true);
-                            }}
+                    <DropdownMenuRadioGroup
+                        value={filterValue === true ? 'true' : filterValue === false ? 'false' : undefined}
+                        onValueChange={(value) => {
+                            handleFilterBooleanChange(value === 'true');
+                        }}
+                        className="space-y-0.5 p-1"
+                    >
+                        <DropdownMenuRadioItem
+                            value="true"
                             className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
                                 filterValue === true ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-accent'
                             }`}
                         >
-                            <Checkbox
-                                aria-label="Yes"
-                                checked={filterValue === true}
-                                className="h-3.5 w-3.5"
-                            />
                             <span className="truncate">Yes</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onSelect={() => {
-                                handleFilterBooleanChange(false);
-                            }}
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem
+                            value="false"
                             className={`flex items-center gap-2 px-2 py-1 text-xs rounded cursor-pointer ${
                                 filterValue === false ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-accent'
                             }`}
                         >
-                            <Checkbox
-                                aria-label="No"
-                                checked={filterValue === false}
-                                className="h-3.5 w-3.5"
-                            />
                             <span className="truncate">No</span>
-                        </DropdownMenuItem>
-                    </div>
+                        </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
                 )}
 
                 {canFilter && filterType === 'text' && (
