@@ -2,7 +2,7 @@
 
 This document establishes the explicit ownership and modification policy for shadcn/ui components, package-owned DataTable components, and generated registry artifacts in `tooinfinity/inertia-datatables`.
 
-It exists so that AI coding agents and contributors never unintentionally modify, replace, refactor, or customize verified upstream shadcn/ui components during ordinary feature development.
+It exists so that AI coding agents and contributors never unintentionally modify, replace, refactor, or customize protected shadcn/ui primitives during ordinary feature development.
 
 ## Component ownership boundaries
 
@@ -13,7 +13,7 @@ It exists so that AI coding agents and contributors never unintentionally modify
 | `public/r/` | Generated artifacts | Never edit manually; regenerate from `registry.json` / registry sources |
 | `registry.json` | Package | Editable intentionally — single source of truth for the shadcn registry |
 
-## Verified upstream component provenance
+## Component provenance and classification
 
 The `registry/data-table/components/ui/` directory contains package-maintained compatibility shims that mirror shadcn/ui primitives (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`). These shims are used by the package's own frontend and tests through the `@/components/ui` alias; they are **not** distributed to consumers through `public/r/data-table.json`.
 
@@ -21,8 +21,8 @@ When a consumer installs the `data-table` registry block, the `registryDependenc
 
 They are **not** verbatim copies of the official shadcn/ui components:
 
-- They do not use the `cn()` utility, `class-variance-authority` (cva), or Radix UI Primitives that official shadcn/ui components rely on.
-- They are minimal, package-maintained implementations.
+- They are minimal implementations without the `cn()` utility, `class-variance-authority` (cva), or Radix UI Primitives that many official shadcn/ui components use.
+- They are package-maintained, not official shadcn/ui releases.
 
 ### `registry/data-table/components/ui/table.tsx`
 
@@ -50,11 +50,11 @@ Do not solve package requirements by modifying protected shadcn primitives in `c
 - `registry.json` is the single source of truth for the shadcn registry.
 - Rebuild artifacts after changing the manifest or any distributed source file.
 
-## Why upstream components are protected
+## Why protected primitives must remain unchanged
 
-Verified upstream shadcn/ui components must:
+Protected shadcn/ui primitives must:
 
-- Preserve their upstream implementation.
+- Retain their current implementation.
 - Retain upstream-compatible APIs.
 - Avoid package-specific behavior.
 - Avoid unrelated formatting or refactoring.
@@ -109,7 +109,7 @@ CI verifies that `public/r/` artifacts are up to date with registry source; any 
 - Changing row selection behavior in `use-data-table.ts`.
 - Adding a new component under `components/data-table/`.
 
-**Not allowed during ordinary development (protected, upstream-derived):**
+**Not allowed during ordinary development (protected, package-maintained):**
 
 - Reformatting `table.tsx` to match a newer code style.
 - Adding package-specific props or behavior to `button.tsx` / `table.tsx`.

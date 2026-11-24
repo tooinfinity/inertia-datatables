@@ -41,22 +41,22 @@ CI verifies that `public/r` artifacts are up to date with registry source, so an
 
 ## shadcn/ui Component Ownership and Protection
 
-Verified upstream shadcn/ui components and package-maintained shadcn primitives under `registry/data-table/components/ui/` are protected during ordinary development. AI coding agents and contributors must not unintentionally modify, replace, refactor, or customize them.
+The shadcn/ui primitives under `registry/data-table/components/ui/` are package-maintained compatibility shims (not verbatim official shadcn/ui components). They are protected during ordinary development. AI coding agents and contributors must not unintentionally modify, replace, refactor, or customize them.
 
 Rules:
 
-1. Verified upstream shadcn/ui components are read-only during ordinary development.
+1. Protected shadcn/ui primitives are read-only during ordinary development.
 2. Never modify, refactor, replace, rename, or reformat protected components as part of unrelated work.
-3. Never introduce package-specific behavior into upstream primitives.
+3. Never introduce package-specific behavior into protected primitives.
 4. Implement package-specific behavior in package-owned DataTable components under `registry/data-table/components/data-table/`.
-5. Do not replace official shadcn components with custom implementations.
+5. Do not replace shadcn components with custom implementations.
 6. Do not update protected components as a side effect of dependency upgrades.
 7. Never manually edit generated registry artifacts under `public/r/`.
-8. If an upstream limitation requires a modification, report the limitation and propose a separate maintenance task.
-9. Intentional upstream updates require explicit maintainer authorization and a dedicated maintenance PR.
+8. If a primitive lacks a capability the package needs, report the limitation and propose a separate maintenance task.
+9. Intentional updates to protected primitives require explicit maintainer authorization and a dedicated maintenance PR.
 10. Inspect the final Git diff and explicitly report changes affecting protected paths (`registry/data-table/components/ui/` and `public/r/`).
 
-Protected paths: `registry/data-table/components/ui/` (shadcn primitives; `table.tsx` is upstream-derived), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
+Protected paths: `registry/data-table/components/ui/` (package-maintained shadcn primitives; `table.tsx` mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
 
 Generated artifacts (`public/r/`) are produced by `npm run registry:validate` and `npm run registry:build` from `registry.json` and registry sources. Never edit them manually. CI enforcement and automated upstream drift detection are deferred to PR 2 and PR 3 of this effort.
 
