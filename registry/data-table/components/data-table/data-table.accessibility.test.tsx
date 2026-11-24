@@ -336,3 +336,68 @@ describe('DataTable accessibility (issue #36)', () => {
         expect(arrows.length).toBeGreaterThan(0);
     });
 });
+
+describe('DataTable pagination accessibility (issue #107)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(usePage).mockReturnValue({ props: {} } as never);
+        global.location.search = '';
+    });
+
+    it('exposes the pagination controls as a navigation landmark labelled "Pagination"', () => {
+        render(<DataTable data={createData()} />);
+
+        expect(screen.getByRole('navigation', { name: 'Pagination' })).toBeInTheDocument();
+    });
+
+    it('exposes the result summary as a polite status region containing the current range', () => {
+        render(<DataTable data={createData()} />);
+
+        const status = screen.getByRole('status');
+        expect(status).toHaveAttribute('aria-live', 'polite');
+        expect(status).toHaveTextContent('Showing 1 to 2 of 2 results');
+    });
+
+    it('updates the status region when the current page changes', () => {
+        const base = createData();
+        const multiPage = {
+            ...base,
+            query: { ...base.query, page: 1, per_page: 25 },
+            meta: { ...base.meta, current_page: 1, last_page: 2, total: 50, from: 1, to: 25 },
+        };
+
+        render(<DataTable data={multiPage} />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 50 results');
+
+        act(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 26 to 50 of 50 results');
+    });
+
+    it('updates the status region when totalItems changes', () => {
+        const base = createData();
+        const initial = {
+            ...base,
+            query: { ...base.query, page: 1, per_page: 25 },
+            meta: { ...base.meta, current_page: 1, last_page: 2, total: 50, from: 1, to: 25 },
+        };
+        const updated = {
+            ...base,
+            query: { ...base.query, page: 1, per_page: 25 },
+            meta: { ...base.meta, current_page: 1, last_page: 4, total: 100, from: 1, to: 25 },
+        };
+
+        const { rerender: rerenderTable } = render(<DataTable data={initial} />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 50 results');
+
+        act(() => {
+            rerenderTable(<DataTable data={updated} />);
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 100 results');
+    });
+});

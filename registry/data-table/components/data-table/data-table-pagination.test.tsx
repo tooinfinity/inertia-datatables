@@ -1,6 +1,6 @@
 'use client';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTablePagination } from './data-table-pagination';
 
@@ -168,5 +168,53 @@ describe('DataTablePagination summary', () => {
         );
 
         expect(screen.getByText(/Showing/).textContent).toBe('Showing 0 to 0 of 0 results');
+    });
+});
+
+describe('DataTablePagination accessibility', () => {
+    it('exposes the pagination controls as a navigation landmark labelled "Pagination"', () => {
+        render(
+            <DataTablePagination
+                currentPage={1}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={10}
+                totalItems={250}
+            />
+        );
+
+        expect(screen.getByRole('navigation', { name: 'Pagination' })).toBeInTheDocument();
+    });
+
+    it('exposes the result summary as a polite status region', () => {
+        render(
+            <DataTablePagination
+                currentPage={1}
+                perPage={25}
+                onPageChange={vi.fn()}
+                totalPages={10}
+                totalItems={250}
+            />
+        );
+
+        const status = screen.getByRole('status');
+        expect(status).toHaveAttribute('aria-live', 'polite');
+        expect(status).toHaveTextContent('Showing 1 to 25 of 250 results');
+    });
+
+    it('keeps existing pagination interactions working', () => {
+        const onPageChange = vi.fn();
+        render(
+            <DataTablePagination
+                currentPage={1}
+                perPage={25}
+                onPageChange={onPageChange}
+                totalPages={10}
+                totalItems={250}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+        expect(onPageChange).toHaveBeenCalledWith(2);
     });
 });
