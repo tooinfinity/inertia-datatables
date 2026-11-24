@@ -3,12 +3,16 @@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import type { DataTableMeta } from './types';
+
 export interface DataTablePaginationProps {
     currentPage: number;
     perPage: number;
     onPageChange: (_page: number) => void;
     totalPages: number;
     totalItems: number;
+    /** Range from the accepted response, when separate from the navigation state. */
+    resultRange?: Pick<DataTableMeta, 'from' | 'to'>;
     /** Optional callback when page size changes. */
     onPerPageChange?: (_perPage: number) => void;
     /** Available page size options. */
@@ -23,18 +27,19 @@ export function DataTablePagination({
     onPageChange,
     totalPages,
     totalItems,
+    resultRange,
     onPerPageChange,
     perPageOptions,
     selectedCount,
 }: DataTablePaginationProps) {
     const pageCount = Math.max(1, totalPages);
-    // Normalize the displayed page so the indicator, active page, and result
-    // range stay valid when current_page exceeds last_page (out of range).
-    // Recovery in useDataTable navigates to the last page, but the footer
-    // must stay consistent while that navigation is in flight.
+    // Keep the controls and the standalone range fallback valid while an
+    // out-of-range page recovers.
     const displayPage = Math.min(Math.max(1, currentPage), pageCount);
-    const from = totalItems === 0 ? 0 : Math.min(Math.max(1, (displayPage - 1) * perPage + 1), totalItems);
-    const to = totalItems === 0 ? 0 : Math.min(displayPage * perPage, totalItems);
+    const { from, to } = resultRange ?? {
+        from: totalItems === 0 ? 0 : Math.min(Math.max(1, (displayPage - 1) * perPage + 1), totalItems),
+        to: totalItems === 0 ? 0 : Math.min(displayPage * perPage, totalItems),
+    };
     const pages = getPageNumbers(displayPage, pageCount);
     const effectivePerPageOptions = perPageOptions
         ? perPageOptions.includes(perPage)
@@ -44,7 +49,7 @@ export function DataTablePagination({
 
     return (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4">
-            <div className="text-sm text-muted-foreground order-2 sm:order-1">
+            <div className="text-sm text-muted-foreground order-2 sm:order-1" role="status" aria-live="polite">
                 {typeof selectedCount === 'number' && selectedCount > 0 ? (
                     <span>
                         <span className="font-medium text-foreground">{selectedCount}</span> of{' '}
@@ -52,99 +57,101 @@ export function DataTablePagination({
                     </span>
                 ) : (
                     <span>
-                        Showing <span className="font-medium text-foreground">{from}</span> to{' '}
-                        <span className="font-medium text-foreground">{to}</span> of{' '}
+                        Showing <span className="font-medium text-foreground">{from ?? 0}</span> to{' '}
+                        <span className="font-medium text-foreground">{to ?? 0}</span> of{' '}
                         <span className="font-medium text-foreground">{totalItems}</span> results
                     </span>
                 )}
             </div>
-            <div className="flex flex-wrap items-center gap-3 sm:gap-6 order-1 sm:order-2">
-                {onPerPageChange && effectivePerPageOptions.length > 0 && (
-                    <div className="flex items-center gap-2">
-                        <label htmlFor="per-page" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-                            Rows per page
-                        </label>
-                        <Select
-                            value={String(perPage)}
-                            onValueChange={(value: string) => onPerPageChange(Number(value))}
-                        >
-                            <SelectTrigger id="per-page" aria-label="Rows per page" className="h-8 w-[72px]">
-                                <SelectValue placeholder={String(perPage)} />
-                            </SelectTrigger>
-                            <SelectContent side="top">
-                                {effectivePerPageOptions.map((option) => (
-                                    <SelectItem key={String(option)} value={String(option)}>
-                                        {option}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
-                <div className="flex items-center justify-center text-sm font-medium whitespace-nowrap">
-                    Page {displayPage} of {pageCount}
-                </div>
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(1)}
-                        disabled={displayPage <= 1}
-                        aria-label="First page"
-                    >
-                        <span className="sr-only">First</span>
-                        ««
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(displayPage - 1)}
-                        disabled={displayPage <= 1}
-                        aria-label="Previous page"
-                    >
-                        <span className="sr-only">Previous</span>
-                        «
-                    </Button>
-                    {pageCount > 1 &&
-                        pages.map((page, index) => (
-                            <Button
-                                key={index}
-                                variant={page === displayPage ? 'default' : 'outline'}
-                                size="sm"
-                                className="h-8 min-w-[2rem] px-2 text-xs"
-                                onClick={() => onPageChange(page)}
-                                aria-label={`Page ${page}`}
-                                aria-current={page === displayPage ? 'page' : undefined}
+            <nav aria-label="Pagination" className="order-1 sm:order-2">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+                    {onPerPageChange && effectivePerPageOptions.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="per-page" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                                Rows per page
+                            </label>
+                            <Select
+                                value={String(perPage)}
+                                onValueChange={(value: string) => onPerPageChange(Number(value))}
                             >
-                                {page}
-                            </Button>
-                        ))}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(displayPage + 1)}
-                        disabled={displayPage >= pageCount}
-                        aria-label="Next page"
-                    >
-                        <span className="sr-only">Next</span>
-                        »
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => onPageChange(pageCount)}
-                        disabled={displayPage >= pageCount}
-                        aria-label="Last page"
-                    >
-                        <span className="sr-only">Last</span>
-                        »»
-                    </Button>
+                                <SelectTrigger id="per-page" aria-label="Rows per page" className="h-8 w-[72px]">
+                                    <SelectValue placeholder={String(perPage)} />
+                                </SelectTrigger>
+                                <SelectContent side="top">
+                                    {effectivePerPageOptions.map((option) => (
+                                        <SelectItem key={String(option)} value={String(option)}>
+                                            {option}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    <div className="flex items-center justify-center text-sm font-medium whitespace-nowrap">
+                        Page {displayPage} of {pageCount}
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(1)}
+                            disabled={displayPage <= 1}
+                            aria-label="First page"
+                        >
+                            <span className="sr-only">First</span>
+                            ««
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(displayPage - 1)}
+                            disabled={displayPage <= 1}
+                            aria-label="Previous page"
+                        >
+                            <span className="sr-only">Previous</span>
+                            «
+                        </Button>
+                        {pageCount > 1 &&
+                            pages.map((page, index) => (
+                                <Button
+                                    key={index}
+                                    variant={page === displayPage ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-8 min-w-[2rem] px-2 text-xs"
+                                    onClick={() => onPageChange(page)}
+                                    aria-label={`Page ${page}`}
+                                    aria-current={page === displayPage ? 'page' : undefined}
+                                >
+                                    {page}
+                                </Button>
+                            ))}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(displayPage + 1)}
+                            disabled={displayPage >= pageCount}
+                            aria-label="Next page"
+                        >
+                            <span className="sr-only">Next</span>
+                            »
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(pageCount)}
+                            disabled={displayPage >= pageCount}
+                            aria-label="Last page"
+                        >
+                            <span className="sr-only">Last</span>
+                            »»
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            </nav>
         </div>
     );
 }

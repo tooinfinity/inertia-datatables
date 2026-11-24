@@ -2,7 +2,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { axe } from 'vitest-axe';
 import * as React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -334,5 +334,99 @@ describe('DataTable accessibility (issue #36)', () => {
         const nameHeader = screen.getByRole('button', { name: /Sort by Name/ });
         const arrows = nameHeader.querySelectorAll('[aria-hidden="true"]');
         expect(arrows.length).toBeGreaterThan(0);
+    });
+});
+
+describe('DataTable pagination accessibility (issue #107)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(usePage).mockReturnValue({ props: {} } as never);
+        global.location.search = '';
+    });
+
+    it('exposes the pagination controls as a navigation landmark labelled "Pagination"', () => {
+        render(<DataTable data={createData()} />);
+
+        expect(screen.getByRole('navigation', { name: 'Pagination' })).toBeInTheDocument();
+    });
+
+    it('exposes the result summary as a polite status region containing the current range', () => {
+        render(<DataTable data={createData()} />);
+
+        const status = screen.getByRole('status');
+        expect(status).toHaveAttribute('aria-live', 'polite');
+        expect(status).toHaveTextContent('Showing 1 to 2 of 2 results');
+    });
+
+    it('keeps announcing the accepted range during and after a failed page visit', () => {
+        const base = createData();
+        const initial = {
+            ...base,
+            query: { ...base.query, per_page: 2 },
+            meta: { ...base.meta, per_page: 2, last_page: 2, total: 4 },
+        };
+        const onNetworkError = vi.fn();
+        render(<DataTable data={initial} visitOptions={{ onNetworkError }} />);
+
+        const status = screen.getByRole('status');
+        expect(status).toHaveTextContent('Showing 1 to 2 of 4 results');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+        const [url, visit] = vi.mocked(router.visit).mock.lastCall!;
+        expect(url).toContain('page=2');
+        act(() => visit?.onStart?.(undefined as never));
+        expect(status).toHaveTextContent('Showing 1 to 2 of 4 results');
+
+        const error = new Error('Network unavailable');
+        act(() => visit?.onNetworkError?.(error));
+        expect(onNetworkError).toHaveBeenCalledWith(error);
+        expect(status).toHaveTextContent('Showing 1 to 2 of 4 results');
+    });
+
+    it('announces the range from the accepted page response', () => {
+        const base = createData();
+        const initial = {
+            ...base,
+            query: { ...base.query, per_page: 2 },
+            meta: { ...base.meta, per_page: 2, last_page: 2, total: 4 },
+        };
+        const accepted = {
+            ...initial,
+            data: base.data.map((row) => ({ ...row, id: row.id + 3 })),
+            query: { ...initial.query, page: 2, per_page: 3 },
+            meta: { ...initial.meta, current_page: 2, per_page: 3, from: 4, to: 5, total: 5 },
+        };
+        const { rerender } = render(<DataTable data={initial} />);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 2 of 4 results');
+
+        rerender(<DataTable data={accepted} />);
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 4 to 5 of 5 results');
+    });
+
+    it('updates the status region when totalItems changes', () => {
+        const base = createData();
+        const initial = {
+            ...base,
+            query: { ...base.query, page: 1, per_page: 25 },
+            meta: { ...base.meta, current_page: 1, last_page: 2, total: 50, from: 1, to: 25 },
+        };
+        const updated = {
+            ...base,
+            query: { ...base.query, page: 1, per_page: 25 },
+            meta: { ...base.meta, current_page: 1, last_page: 4, total: 100, from: 1, to: 25 },
+        };
+
+        const { rerender: rerenderTable } = render(<DataTable data={initial} />);
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 50 results');
+
+        act(() => {
+            rerenderTable(<DataTable data={updated} />);
+        });
+
+        expect(screen.getByRole('status')).toHaveTextContent('Showing 1 to 25 of 100 results');
     });
 });
