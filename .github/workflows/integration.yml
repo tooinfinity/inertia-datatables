@@ -42,10 +42,10 @@ jobs:
 
     steps:
       - name: Checkout package
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout starter kit at pinned commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.starter-kit }}
           ref: ${{ matrix.ref }}
