@@ -15,7 +15,9 @@ It exists so that AI coding agents and contributors never unintentionally modify
 
 ## Verified upstream component provenance
 
-The `registry/data-table/components/ui/` directory contains compatibility shims that mirror shadcn/ui primitives, distributed to consumers as registry dependencies (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`).
+The `registry/data-table/components/ui/` directory contains package-maintained compatibility shims that mirror shadcn/ui primitives (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`). These shims are used by the package's own frontend and tests through the `@/components/ui` alias; they are **not** distributed to consumers through `public/r/data-table.json`.
+
+When a consumer installs the `data-table` registry block, the `registryDependencies` (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`) are bare names that resolve to the default shadcn registry, so consumers receive the official upstream shadcn/ui components for those primitives.
 
 They are **not** verbatim copies of the official shadcn/ui components:
 
@@ -26,7 +28,7 @@ They are **not** verbatim copies of the official shadcn/ui components:
 
 `table.tsx` structurally mirrors the official shadcn/ui `Table` primitive (semantic elements `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableHead`, `TableRow`, `TableCell`, `TableCaption`) but is simplified: it has no `cn()` utility, no `className` prop, and renders `children` directly.
 
-**Classification:** upstream-derived compatibility shim. It is treated as a protected primitive because it mirrors an official shadcn/ui component and is distributed to consumers as the `table` registry dependency. Do not refactor or reformat it as part of unrelated work.
+**Classification:** package-maintained compatibility shim mirroring the official shadcn/ui `Table` primitive. It is treated as protected because it mirrors an official shadcn/ui component and is used by the package's own frontend and tests (via the `@/components/ui` alias). Do not refactor or reformat it as part of unrelated work.
 
 ## Package-owned component responsibilities
 
@@ -58,7 +60,9 @@ Verified upstream shadcn/ui components must:
 - Avoid unrelated formatting or refactoring.
 - Remain unchanged during ordinary feature development.
 
-They are protected because they are distributed to consumers as registry dependencies. Casual modification risks breaking consumer installations, diverging from upstream behavior, and creating silent upgrade hazards when shadcn/ui releases new versions.
+They are protected because they are package-maintained shadcn primitives whose APIs the package's DataTable components depend on (imported as `@/components/ui/*`). Casual modification risks breaking the package's own frontend and tests, diverging from upstream shadcn/ui behavior, and creating silent upgrade hazards when shadcn/ui releases new versions.
+
+Note: the local shims under `components/ui/` are **not** distributed to consumers through `public/r/data-table.json`. The artifact lists only the `data-table/` component files. The `registryDependencies` (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`) are bare names that resolve to the default shadcn registry when a consumer installs the block, so consumers receive the official upstream components for those primitives.
 
 ## How to identify protected components
 
