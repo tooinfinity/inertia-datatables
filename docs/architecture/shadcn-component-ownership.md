@@ -2,7 +2,7 @@
 
 This document establishes the explicit ownership and modification policy for shadcn/ui components, package-owned DataTable components, and generated registry artifacts in `tooinfinity/inertia-datatables`.
 
-It exists so that AI coding agents and contributors never unintentionally modify, replace, refactor, or customize protected shadcn/ui primitives during ordinary feature development.
+It exists so that AI coding agents and contributors never unintentionally modify, replace, refactor, or customize protected compatibility shims during ordinary feature development.
 
 ## Component ownership boundaries
 
@@ -28,7 +28,7 @@ They are **not** verbatim copies of the official shadcn/ui components:
 
 `table.tsx` structurally mirrors the official shadcn/ui `Table` primitive (semantic elements `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableHead`, `TableRow`, `TableCell`, `TableCaption`) but is simplified: it has no `cn()` utility, no `className` prop, and renders `children` directly.
 
-**Classification:** package-maintained compatibility shim. Of the seven files in `components/ui/`, `table.tsx` is the one that structurally mirrors the official shadcn/ui `Table` primitive (semantic elements `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableHead`, `TableRow`, `TableCell`, `TableCaption`) but is simplified: it has no `cn()` utility, no `className` prop, and renders `children` directly. The other six shims serve equivalent UI roles but are not verified upstream copies.
+**Classification:** package-maintained compatibility shim. Of the seven files in `components/ui/`, `table.tsx` is the one that structurally mirrors an official shadcn/ui component. The other six shims serve equivalent UI roles but are not verified upstream copies.
 
 `table.tsx` is treated as protected because it mirrors an official shadcn/ui component and is used by the package's own frontend and tests (via the `@/components/ui` alias). All seven shims are protected to preserve internal package stability: casual modification risks breaking the package's frontend and tests and creating silent upgrade hazards when shadcn/ui releases new versions. Do not refactor or reformat any of them as part of unrelated work.
 
@@ -42,7 +42,7 @@ registry/data-table/components/data-table/
 
 This includes `data-table.tsx`, `data-table-toolbar.tsx`, `data-table-pagination.tsx`, `data-table-column-header.tsx`, `data-table-column-visibility.tsx`, `data-table-empty.tsx`, `use-data-table.ts`, `types.ts`, `table-features.ts`, and `cell-formatters.ts`.
 
-Do not solve package requirements by modifying protected shadcn primitives in `components/ui/`. If a shim lacks a capability the package needs, report the limitation and propose a separate maintenance task rather than embedding package-specific behavior into a protected primitive.
+Do not solve package requirements by modifying protected compatibility shims in `components/ui/`. If a shim lacks a capability the package needs, report the limitation and propose a separate maintenance task rather than embedding package-specific behavior into a protected primitive.
 
 ## Generated registry artifacts
 
@@ -52,9 +52,9 @@ Do not solve package requirements by modifying protected shadcn primitives in `c
 - `registry.json` is the single source of truth for the shadcn registry.
 - Rebuild artifacts after changing the manifest or any distributed source file.
 
-## Why protected primitives must remain unchanged
+## Why protected compatibility shims must remain unchanged
 
-Protected shadcn/ui primitives must:
+Protected compatibility shims must:
 
 - Retain their current implementation.
 - Retain stable APIs used by the package's DataTable components.
@@ -62,7 +62,7 @@ Protected shadcn/ui primitives must:
 - Avoid unrelated formatting or refactoring.
 - Remain unchanged during ordinary feature development.
 
-They are protected because they are package-maintained shadcn primitives whose APIs the package's DataTable components depend on (imported as `@/components/ui/*`). Protection exists to preserve internal package stability: casual modification risks breaking the package's own frontend and tests and creating silent upgrade hazards when shadcn/ui releases new versions. This protection applies regardless of whether a given shim has a verified upstream counterpart.
+They are protected because they are package-maintained compatibility shims whose APIs the package's DataTable components depend on (imported as `@/components/ui/*`). Protection exists to preserve internal package stability: casual modification risks breaking the package's own frontend and tests and creating silent upgrade hazards when shadcn/ui releases new versions. This protection applies regardless of whether a given shim has a verified upstream counterpart.
 
 Note: the local shims under `components/ui/` are **not** distributed to consumers through `public/r/data-table.json`. The artifact lists only the `data-table/` component files. The `registryDependencies` (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`) are bare names that resolve to the default shadcn registry when a consumer installs the block, so consumers receive the official upstream components for those primitives.
 
@@ -80,7 +80,7 @@ When in doubt, check `registry.json`'s `registryDependencies` list: any componen
 
 ## How intentional upstream changes will be handled
 
-Intentional updates to protected shadcn/ui components require:
+Intentional updates to protected compatibility shims require:
 
 1. Explicit maintainer authorization.
 2. A dedicated maintenance PR (not bundled with unrelated feature work).

@@ -45,7 +45,7 @@ The `registry/data-table/components/ui/` directory contains seven package-mainta
 
 Rules:
 
-1. Protected shadcn/ui primitives are read-only during ordinary development.
+1. Protected compatibility shims are read-only during ordinary development.
 2. Never modify, refactor, replace, rename, or reformat protected components as part of unrelated work.
 3. Never introduce package-specific behavior into protected primitives.
 4. Implement package-specific behavior in package-owned DataTable components under `registry/data-table/components/data-table/`.
@@ -56,7 +56,7 @@ Rules:
 9. Intentional updates to protected primitives require explicit maintainer authorization and a dedicated maintenance PR.
 10. Inspect the final Git diff and explicitly report changes affecting protected paths (`registry/data-table/components/ui/` and `public/r/`).
 
-Protected paths: `registry/data-table/components/ui/` (package-maintained shadcn primitives; `table.tsx` structurally mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
+Protected paths: `registry/data-table/components/ui/` (package-maintained compatibility shims; `table.tsx` structurally mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
 
 Generated artifacts (`public/r/`) are produced by `npm run registry:validate` and `npm run registry:build` from `registry.json` and registry sources. Never edit them manually. CI enforcement and automated upstream drift detection are deferred to PR 2 and PR 3 of this effort.
 
