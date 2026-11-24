@@ -140,7 +140,6 @@ export function DataTableFilterChip({
                 <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setMenuOpen((open) => !open)}
                     className="h-8 px-2.5 text-xs gap-1.5 text-foreground hover:bg-accent"
                     aria-haspopup="true"
                     aria-expanded={menuOpen}

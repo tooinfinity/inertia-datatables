@@ -1,7 +1,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { router, usePage } from '@inertiajs/react';
+import { userEvent } from '@testing-library/user-event';
+import * as React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
+import { DataTableFilterChip } from './data-table-toolbar';
 import type { DataTableResponse } from './types';
 
 vi.unmock('@tanstack/react-table');
@@ -11,6 +14,88 @@ vi.mock('@inertiajs/react', () => ({
         visit: vi.fn(),
     },
     usePage: vi.fn(() => ({ props: {} })),
+}));
+
+// Local test-only mock of the dropdown-menu shim. Mirrors real Radix
+// DropdownMenu behaviour so the fixed trigger (no redundant onClick) can be
+// exercised: the trigger toggles the controlled `open` state through
+// `onOpenChange` on pointerDown (matching real Radix DropdownMenuTrigger,
+// which toggles on pointerDown via composeEventHandlers), composing the
+// child's handler first then the trigger's toggle. `openChangeCalls`
+// records each state-update request so tests can assert exactly one request
+// per click.
+const openChangeCalls = vi.hoisted(() => [] as boolean[]);
+const DropdownMenuContext = React.createContext<{
+    open: boolean;
+    onOpenChange: ((open: boolean) => void) | undefined;
+}>({ open: false, onOpenChange: undefined });
+
+type MenuProps = {
+    children?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, 'children'>;
+
+vi.mock('@/components/ui/dropdown-menu', () => ({
+    DropdownMenu: ({ children, open, onOpenChange, ...props }: MenuProps) => (
+        <DropdownMenuContext.Provider value={{ open: open ?? false, onOpenChange }}>
+            <div data-open={open} {...props}>{children}</div>
+        </DropdownMenuContext.Provider>
+    ),
+    DropdownMenuTrigger: ({
+        children,
+        asChild,
+        open: _open,
+        onOpenChange: _onOpenChange,
+        ...props
+    }: MenuProps & { asChild?: boolean }) => {
+        const ctx = React.useContext(DropdownMenuContext);
+
+        // Real Radix DropdownMenuTrigger toggles on pointerDown (not click) and
+        // composes handlers with composeEventHandlers: the child's handler runs
+        // first, then the trigger's toggle, unless the event is defaultPrevented.
+        const handlePointerDown = () => {
+            if (ctx.onOpenChange && typeof ctx.open === 'boolean') {
+                const next = !ctx.open;
+                openChangeCalls.push(next);
+                ctx.onOpenChange(next);
+            }
+        };
+
+        if (asChild && React.isValidElement(children)) {
+            const child = children as React.ReactElement;
+            const childOnPointerDown = (child.props as { onPointerDown?: React.PointerEventHandler<HTMLButtonElement> }).onPointerDown;
+            const childOnClick = (child.props as { onClick?: React.MouseEventHandler<HTMLButtonElement> }).onClick;
+            return React.cloneElement(child, {
+                ...props,
+                onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+                    childOnPointerDown?.(event);
+                    handlePointerDown();
+                },
+                onClick: childOnClick,
+            } as any);
+        }
+
+        return <div {...props} onPointerDown={handlePointerDown}>{children}</div>;
+    },
+    DropdownMenuContent: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+        <div {...props}>{children}</div>
+    ),
+    DropdownMenuItem: ({
+        children,
+        onSelect,
+        ...props
+    }: { onSelect?: (event: Event) => void } & React.HTMLAttributes<HTMLDivElement>) => {
+        const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
+            props.onClick?.(event);
+            onSelect?.(new Event('select'));
+        };
+        return <div {...props} onClick={onClick}>{children}</div>;
+    },
+    DropdownMenuSeparator: ({ ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props} />,
+    DropdownMenuLabel: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+        <div {...props}>{children}</div>
+    ),
 }));
 
 interface TestRow {
@@ -305,7 +390,8 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument();
     });
 
-    it('moves filter controls to a toolbar chip beside the search field', () => {
+    it('moves filter controls to a toolbar chip beside the search field', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -328,7 +414,7 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Name • 1 selected' })).toBeInTheDocument();
 
         // Clicking the chip opens a dropdown with the column's filter controls
-        fireEvent.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
+        await user.click(screen.getByRole('button', { name: 'Name • 1 selected' }));
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
 
         // Column headers stay clean: only the sort indicator, no filter dropdown
@@ -337,7 +423,8 @@ describe('DataTable customization', () => {
         expect(within(table).getByRole('button', { name: /Sort by Name/ })).toBeInTheDocument();
     });
 
-    it('shows the selected count on a filter chip for multi-value filters', () => {
+    it('shows the selected count on a filter chip for multi-value filters', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -372,13 +459,14 @@ describe('DataTable customization', () => {
         expect(screen.getByRole('button', { name: 'Status • 2 selected' })).toBeInTheDocument();
 
         // Opening the chip should show the restored multi-value options as checked.
-        fireEvent.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
+        await user.click(screen.getByRole('button', { name: 'Status • 2 selected' }));
         expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
         expect(screen.getByRole('checkbox', { name: 'Inactive' })).toBeChecked();
         expect(screen.getByRole('checkbox', { name: 'Archived' })).not.toBeChecked();
     });
 
-    it('keeps a filter entrypoint for eligible columns when no filter is active', () => {
+    it('keeps a filter entrypoint for eligible columns when no filter is active', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -397,12 +485,13 @@ describe('DataTable customization', () => {
         expect(screen.queryByLabelText('Search Name')).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Filter Name value')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Name' }));
+        await user.click(screen.getByRole('button', { name: 'Name' }));
         expect(screen.getByLabelText('Search Name')).toBeInTheDocument();
         expect(screen.getByLabelText('Filter Name value')).toBeInTheDocument();
     });
 
-    it('toggles the filter dropdown open and closed, preserving aria-expanded', () => {
+    it('toggles the filter dropdown open and closed, preserving aria-expanded', async () => {
+        const user = userEvent.setup();
         render(
             <DataTable
                 data={createData({
@@ -434,14 +523,15 @@ describe('DataTable customization', () => {
         );
 
         const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveAttribute('aria-haspopup', 'true');
         expect(chip).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
 
-        fireEvent.click(chip);
+        await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
 
-        fireEvent.click(chip);
+        await user.click(chip);
         expect(chip).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
     });
@@ -664,5 +754,114 @@ describe('DataTable customization', () => {
         render(<DataTable data={createData()} />);
 
         expect(screen.getByRole('combobox', { name: 'Rows per page' })).toBeInTheDocument();
+    });
+});
+
+describe('DataTable filter chip dropdown regression (#98)', () => {
+    const selectOptions = [
+        { value: 'active', label: 'Active' },
+        { value: 'inactive', label: 'Inactive' },
+    ];
+
+    function renderFilterChip(filters: Record<string, unknown> = { status: 'active' }) {
+        render(
+            <DataTableFilterChip
+                columnId="status"
+                label="Status"
+                filterValue={filters.status}
+                searchValue=""
+                filterType="select"
+                filterOptions={selectOptions}
+                canSearch={false}
+                canFilter={true}
+                onFilterChange={vi.fn()}
+                onColumnSearchChange={vi.fn()}
+                onClearFilter={vi.fn()}
+            />
+        );
+    }
+
+    beforeEach(() => {
+        openChangeCalls.length = 0;
+    });
+
+    it('opens a closed filter chip with exactly one state-update request', async () => {
+        const user = userEvent.setup();
+        renderFilterChip();
+
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+
+        await user.click(chip);
+
+        // Exactly one state-update request: open → true (the original defect
+        // requested open then close, producing two requests for one click).
+        expect(openChangeCalls).toHaveLength(1);
+        expect(openChangeCalls[0]).toBe(true);
+
+        // Dropdown stays open immediately after opening.
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('checkbox', { name: 'Active' })).toBeChecked();
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('closes an open filter chip with exactly one state-update request', async () => {
+        const user = userEvent.setup();
+        renderFilterChip();
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+
+        await user.click(chip);
+        expect(openChangeCalls).toEqual([true]);
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+
+        await user.click(chip);
+        expect(openChangeCalls).toEqual([true, false]);
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Active' })).not.toBeInTheDocument();
+    });
+
+    it('keeps displaying the active filter count while interacting', async () => {
+        const user = userEvent.setup();
+        renderFilterChip();
+
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        expect(chip).toHaveTextContent('Status • 1 selected');
+
+        await user.click(chip);
+        expect(chip).toHaveTextContent('Status • 1 selected');
+
+        await user.click(chip);
+        expect(chip).toHaveTextContent('Status • 1 selected');
+    });
+
+    it('keeps filter selection functional when the chip is opened and closed', async () => {
+        const user = userEvent.setup();
+        const onFilterChange = vi.fn();
+        render(
+            <DataTableFilterChip
+                columnId="status"
+                label="Status"
+                filterValue="active"
+                searchValue=""
+                filterType="select"
+                filterOptions={selectOptions}
+                canSearch={false}
+                canFilter={true}
+                onFilterChange={onFilterChange}
+                onColumnSearchChange={vi.fn()}
+                onClearFilter={vi.fn()}
+            />
+        );
+
+        const chip = screen.getByRole('button', { name: 'Status • 1 selected' });
+        await user.click(chip);
+        expect(chip).toHaveAttribute('aria-expanded', 'true');
+
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Inactive' }));
+        expect(onFilterChange).toHaveBeenCalledWith('status', 'inactive');
+
+        // Selecting a filter value closes the chip dropdown.
+        expect(chip).toHaveAttribute('aria-expanded', 'false');
     });
 });
