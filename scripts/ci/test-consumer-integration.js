@@ -2,10 +2,10 @@
 /**
  * Real consumer integration test for native shadcn registry installation.
  *
- * Sets up a clean temporary consumer application conforming to the documented prerequisites:
+ * Sets up an isolated temporary consumer application conforming to documented prerequisites:
  * - React 19 + Inertia React
- * - TypeScript + tsconfig paths (@/* -> ./resources/js/*)
- * - components.json with standard aliases
+ * - TypeScript + tsconfig paths
+ * - components.json with configurable aliases
  * - Tailwind CSS app.css
  * - Pre-existing consumer-owned UI component to verify preservation
  *
@@ -15,9 +15,9 @@
  * And asserts:
  * 1. Native CLI command succeeds.
  * 2. Pre-existing consumer UI primitives are not unexpectedly overwritten.
- * 3. All 11 package-owned DataTable files are installed into resources/js/components/data-table/.
+ * 3. All 11 package-owned DataTable files are installed into the configured components path.
  * 4. Declared npm dependencies (@tanstack/react-table, @inertiajs/react) are installed into package.json.
- * 5. Required bare shadcn primitives are installed.
+ * 5. Required bare shadcn primitives are installed into the configured ui path.
  */
 
 import { spawn } from 'node:child_process';
@@ -30,6 +30,18 @@ import { fileURLToPath } from 'node:url';
 import { EXPECTED_DATA_TABLE_FILES } from './verify-consumer-install.js';
 
 export const CONSUMER_CUSTOM_BUTTON_CONTENT = `// CONSUMER_CUSTOM_BUTTON_PRESERVED\nexport function Button() { return <button>Custom</button>; }\n`;
+
+export const DEFAULT_CONSUMER_ALIASES = {
+    components: '@/components',
+    ui: '@/components/ui',
+    utils: '@/lib/utils',
+    lib: '@/lib',
+    hooks: '@/hooks',
+};
+
+export const DEFAULT_TS_PATHS = {
+    '@/*': ['./resources/js/*'],
+};
 
 /**
  * Checks whether network access is available for the native GitHub registry test.
@@ -59,9 +71,13 @@ export async function checkNetworkAvailability(timeoutMs = 4000) {
 }
 
 /**
- * Creates the isolated temporary consumer fixture.
+ * Creates the isolated temporary consumer fixture with configurable aliases and paths.
  */
-export async function createConsumerFixture(baseDir) {
+export async function createConsumerFixture(baseDir, fixtureOptions = {}) {
+    const aliases = fixtureOptions.aliases || DEFAULT_CONSUMER_ALIASES;
+    const tsPaths = fixtureOptions.tsPaths || DEFAULT_TS_PATHS;
+    const uiDirRelative = fixtureOptions.uiDirRelative || 'resources/js/components/ui';
+
     await writeFile(
         join(baseDir, 'package.json'),
         JSON.stringify(
@@ -93,13 +109,7 @@ export async function createConsumerFixture(baseDir) {
                     cssVariables: true,
                     prefix: '',
                 },
-                aliases: {
-                    components: '@/components',
-                    utils: '@/lib/utils',
-                    ui: '@/components/ui',
-                    lib: '@/lib',
-                    hooks: '@/hooks',
-                },
+                aliases,
                 iconLibrary: 'lucide',
             },
             null,
@@ -118,9 +128,7 @@ export async function createConsumerFixture(baseDir) {
                     jsx: 'react-jsx',
                     strict: true,
                     baseUrl: '.',
-                    paths: {
-                        '@/*': ['./resources/js/*'],
-                    },
+                    paths: tsPaths,
                     noEmit: true,
                     skipLibCheck: true,
                 },
@@ -135,12 +143,13 @@ export async function createConsumerFixture(baseDir) {
     await writeFile(join(baseDir, 'resources/css/app.css'), '@import "tailwindcss";\n');
 
     // Plant existing consumer-owned button to verify preservation
-    await mkdir(join(baseDir, 'resources/js/components/ui'), { recursive: true });
-    await writeFile(join(baseDir, 'resources/js/components/ui/button.tsx'), CONSUMER_CUSTOM_BUTTON_CONTENT);
+    await mkdir(join(baseDir, uiDirRelative), { recursive: true });
+    await writeFile(join(baseDir, uiDirRelative, 'button.tsx'), CONSUMER_CUSTOM_BUTTON_CONTENT);
 }
 
 /**
  * Runs the native shadcn add command in the consumer directory.
+ * Keeps stdin open until prompt is answered to prevent write-after-end errors.
  */
 export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datatables/data-table', options = {}) {
     const { timeoutMs = 90000 } = options;
@@ -156,21 +165,33 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
         let stdout = '';
         let stderr = '';
         let closed = false;
+        let promptHandled = false;
+
+        const handlePromptResponse = () => {
+            if (promptHandled || !child.stdin.writable || child.stdin.destroyed) {
+                return;
+            }
+            promptHandled = true;
+            child.stdin.write('n\n', () => {
+                child.stdin.end();
+            });
+        };
 
         child.stdout.on('data', (d) => {
             const chunk = d.toString();
             stdout += chunk;
-            if (chunk.includes('already exists. Would you like to overwrite?') && !child.stdin.destroyed) {
-                child.stdin.write('n\n');
+            if (chunk.includes('already exists. Would you like to overwrite?')) {
+                handlePromptResponse();
             }
         });
-        child.stderr.on('data', (d) => {
-            stderr += d.toString();
-        });
 
-        // Also write initial 'n\n' in case the prompt was emitted before the listener attached
-        child.stdin.write('n\n');
-        child.stdin.end();
+        child.stderr.on('data', (d) => {
+            const chunk = d.toString();
+            stderr += chunk;
+            if (chunk.includes('already exists. Would you like to overwrite?')) {
+                handlePromptResponse();
+            }
+        });
 
         const timer = setTimeout(() => {
             if (!closed) {
@@ -208,21 +229,24 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
 /**
  * Validates the installed files, dependencies, and preservation in the consumer fixture.
  */
-export async function assertInstalledConsumer(baseDir) {
+export async function assertInstalledConsumer(baseDir, fixtureOptions = {}) {
+    const componentsDirRelative = fixtureOptions.componentsDirRelative || 'resources/js/components/data-table';
+    const uiDirRelative = fixtureOptions.uiDirRelative || 'resources/js/components/ui';
+
     // 1. Verify consumer-owned button.tsx was preserved completely unchanged
-    const buttonPath = join(baseDir, 'resources/js/components/ui/button.tsx');
+    const buttonPath = join(baseDir, uiDirRelative, 'button.tsx');
     if (!existsSync(buttonPath)) {
-        throw new Error('Consumer button.tsx does not exist.');
+        throw new Error(`Consumer button.tsx does not exist at ${buttonPath}.`);
     }
     const buttonContent = await readFile(buttonPath, 'utf8');
     if (buttonContent !== CONSUMER_CUSTOM_BUTTON_CONTENT) {
         throw new Error('Consumer-owned button.tsx was unexpectedly overwritten or modified!');
     }
 
-    // 2. Verify all 11 package-owned DataTable files are installed under resources/js/components/data-table/
+    // 2. Verify all 11 package-owned DataTable files are installed under configured components directory
     for (const expectedRelative of EXPECTED_DATA_TABLE_FILES) {
         const fileName = expectedRelative.split('/').pop();
-        const installedPath = join(baseDir, 'resources/js/components/data-table', fileName);
+        const installedPath = join(baseDir, componentsDirRelative, fileName);
         if (!existsSync(installedPath)) {
             throw new Error(`Expected installed DataTable file missing: ${installedPath}`);
         }
@@ -238,10 +262,10 @@ export async function assertInstalledConsumer(baseDir) {
         throw new Error('Consumer package.json is missing required dependency @inertiajs/react.');
     }
 
-    // 4. Verify remaining bare primitives were installed into resources/js/components/ui/
+    // 4. Verify remaining bare primitives were installed into configured ui directory
     const requiredPrimitives = ['input.tsx', 'dropdown-menu.tsx', 'select.tsx', 'checkbox.tsx', 'table.tsx', 'skeleton.tsx'];
     for (const primitive of requiredPrimitives) {
-        const primitivePath = join(baseDir, 'resources/js/components/ui', primitive);
+        const primitivePath = join(baseDir, uiDirRelative, primitive);
         if (!existsSync(primitivePath)) {
             throw new Error(`Expected installed shadcn primitive missing: ${primitivePath}`);
         }
@@ -252,9 +276,13 @@ export async function assertInstalledConsumer(baseDir) {
 
 /**
  * Executes the complete integration test lifecycle in a temporary directory.
+ * Checks both standard default aliases and custom non-default aliases.
  */
 export async function testConsumerIntegration(options = {}) {
-    const isOnline = await checkNetworkAvailability();
+    const isOnline = options.networkCheck
+        ? await options.networkCheck()
+        : await checkNetworkAvailability();
+
     if (!isOnline) {
         if (options.requireNetwork) {
             throw new Error('Network access required for consumer integration test but raw.githubusercontent.com is unreachable.');
@@ -263,28 +291,67 @@ export async function testConsumerIntegration(options = {}) {
         return { ok: true, skipped: true, reason: 'network_unavailable' };
     }
 
-    const fixtureDir = await mkdtemp(join(tmpdir(), 'shadcn-consumer-fixture-'));
+    // Configuration 1: Standard Laravel Inertia alias configuration (@/components)
+    const standardFixtureDir = await mkdtemp(join(tmpdir(), 'shadcn-consumer-standard-'));
     try {
-        console.log(`Setting up consumer fixture at ${fixtureDir}...`);
-        await createConsumerFixture(fixtureDir);
+        console.log(`Setting up standard consumer fixture at ${standardFixtureDir}...`);
+        await createConsumerFixture(standardFixtureDir);
 
-        console.log('Running npx shadcn@latest add tooinfinity/inertia-datatables/data-table...');
-        const result = await runShadcnAdd(fixtureDir, 'tooinfinity/inertia-datatables/data-table', options);
+        console.log('Running npx shadcn@latest add tooinfinity/inertia-datatables/data-table (standard aliases)...');
+        const standardResult = await runShadcnAdd(standardFixtureDir, 'tooinfinity/inertia-datatables/data-table', options);
 
-        if (result.code !== 0) {
+        if (standardResult.code !== 0) {
             throw new Error(
-                `Native shadcn add command failed with exit code ${result.code}.\nStdout: ${result.stdout}\nStderr: ${result.stderr}`
+                `Native shadcn add command failed with exit code ${standardResult.code}.\nStdout: ${standardResult.stdout}\nStderr: ${standardResult.stderr}`
             );
         }
 
-        console.log('Validating installed files, dependencies, aliases, and primitive preservation...');
-        await assertInstalledConsumer(fixtureDir);
-
-        console.log('✔ Consumer integration test passed successfully.');
-        return { ok: true, skipped: false };
+        console.log('Validating standard installed files, dependencies, and primitive preservation...');
+        await assertInstalledConsumer(standardFixtureDir);
+        console.log('✔ Standard consumer fixture verified.');
     } finally {
-        await rm(fixtureDir, { recursive: true, force: true });
+        await rm(standardFixtureDir, { recursive: true, force: true });
     }
+
+    // Configuration 2: Custom non-default aliases (@/shared/components, @/shared/components/ui)
+    const customFixtureDir = await mkdtemp(join(tmpdir(), 'shadcn-consumer-custom-'));
+    const customOptions = {
+        aliases: {
+            components: '@/shared/components',
+            ui: '@/shared/components/ui',
+            utils: '@/shared/lib/utils',
+            lib: '@/shared/lib',
+            hooks: '@/shared/hooks',
+        },
+        tsPaths: {
+            '@/shared/*': ['./resources/js/shared/*'],
+        },
+        componentsDirRelative: 'resources/js/shared/components/data-table',
+        uiDirRelative: 'resources/js/shared/components/ui',
+    };
+
+    try {
+        console.log(`Setting up custom alias consumer fixture at ${customFixtureDir}...`);
+        await createConsumerFixture(customFixtureDir, customOptions);
+
+        console.log('Running npx shadcn@latest add tooinfinity/inertia-datatables/data-table (custom aliases)...');
+        const customResult = await runShadcnAdd(customFixtureDir, 'tooinfinity/inertia-datatables/data-table', options);
+
+        if (customResult.code !== 0) {
+            throw new Error(
+                `Native shadcn add command failed on custom aliases with exit code ${customResult.code}.\nStdout: ${customResult.stdout}\nStderr: ${customResult.stderr}`
+            );
+        }
+
+        console.log('Validating custom alias installed files, dependencies, and primitive preservation...');
+        await assertInstalledConsumer(customFixtureDir, customOptions);
+        console.log('✔ Custom alias consumer fixture verified.');
+    } finally {
+        await rm(customFixtureDir, { recursive: true, force: true });
+    }
+
+    console.log('✔ All consumer integration tests passed successfully across standard and custom alias configurations.');
+    return { ok: true, skipped: false };
 }
 
 /**

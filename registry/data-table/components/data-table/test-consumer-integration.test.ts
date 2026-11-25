@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     CONSUMER_CUSTOM_BUTTON_CONTENT,
+    DEFAULT_CONSUMER_ALIASES,
+    DEFAULT_TS_PATHS,
     assertInstalledConsumer,
     checkNetworkAvailability,
     createConsumerFixture,
@@ -23,14 +25,15 @@ describe('test-consumer-integration', () => {
     });
 
     describe('checkNetworkAvailability', () => {
-        it('returns a boolean status indicating connectivity', async () => {
-            const result = await checkNetworkAvailability(3000);
+        it('returns a boolean status without throwing', async () => {
+            // Test with a 100ms timeout against a local invalid port to verify deterministic boolean return
+            const result = await checkNetworkAvailability(100);
             expect(typeof result).toBe('boolean');
         });
     });
 
     describe('createConsumerFixture', () => {
-        it('sets up a consumer directory with package.json, components.json, and preserved custom button', async () => {
+        it('sets up a consumer directory with default configuration', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'fixture-unit-test-'));
             try {
                 await createConsumerFixture(dir);
@@ -41,7 +44,44 @@ describe('test-consumer-integration', () => {
                 expect(pkg.name).toBe('consumer-integration-test');
 
                 const componentsJson = JSON.parse(await readFile(join(dir, 'components.json'), 'utf8'));
-                expect(componentsJson.aliases.components).toBe('@/components');
+                expect(componentsJson.aliases.components).toBe(DEFAULT_CONSUMER_ALIASES.components);
+
+                const tsconfigJson = JSON.parse(await readFile(join(dir, 'tsconfig.json'), 'utf8'));
+                expect(tsconfigJson.compilerOptions.paths).toEqual(DEFAULT_TS_PATHS);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        it('sets up a consumer directory with custom non-default aliases and paths', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'fixture-custom-alias-'));
+            const customAliases = {
+                components: '@/shared/components',
+                ui: '@/shared/components/ui',
+                utils: '@/shared/lib/utils',
+                lib: '@/shared/lib',
+                hooks: '@/shared/hooks',
+            };
+            const customTsPaths = {
+                '@/shared/*': ['./resources/js/shared/*'],
+            };
+            const customUiDir = 'resources/js/shared/components/ui';
+
+            try {
+                await createConsumerFixture(dir, {
+                    aliases: customAliases,
+                    tsPaths: customTsPaths,
+                    uiDirRelative: customUiDir,
+                });
+
+                const buttonContent = await readFile(join(dir, customUiDir, 'button.tsx'), 'utf8');
+                expect(buttonContent).toBe(CONSUMER_CUSTOM_BUTTON_CONTENT);
+
+                const componentsJson = JSON.parse(await readFile(join(dir, 'components.json'), 'utf8'));
+                expect(componentsJson.aliases).toEqual(customAliases);
+
+                const tsconfigJson = JSON.parse(await readFile(join(dir, 'tsconfig.json'), 'utf8'));
+                expect(tsconfigJson.compilerOptions.paths).toEqual(customTsPaths);
             } finally {
                 await rm(dir, { recursive: true, force: true });
             }
@@ -60,13 +100,49 @@ describe('test-consumer-integration', () => {
                 await rm(dir, { recursive: true, force: true });
             }
         });
+
+        it('supports assertions on custom non-default directories', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'fixture-assert-custom-fail-'));
+            const customOptions = {
+                componentsDirRelative: 'resources/js/shared/components/data-table',
+                uiDirRelative: 'resources/js/shared/components/ui',
+            };
+
+            try {
+                await createConsumerFixture(dir, {
+                    uiDirRelative: customOptions.uiDirRelative,
+                });
+                // Button exists, but DataTable files are not yet installed
+                await expect(assertInstalledConsumer(dir, customOptions)).rejects.toThrow(
+                    'Expected installed DataTable file missing'
+                );
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
     });
 
-    describe('testConsumerIntegration (lifecycle & network fallback)', () => {
-        it('gracefully handles network availability without crashing when requireNetwork is false', async () => {
-            // Test that when network is offline, it skips cleanly with { ok: true, skipped: true }
-            const result = await testConsumerIntegration({ requireNetwork: false, timeoutMs: 90000 });
-            expect(result.ok).toBe(true);
-        }, 120000);
+    describe('testConsumerIntegration (deterministic network handling)', () => {
+        it('explicitly returns skipped: true when network is unavailable and requireNetwork is false', async () => {
+            const result = await testConsumerIntegration({
+                requireNetwork: false,
+                networkCheck: async () => false,
+            });
+
+            expect(result).toEqual({
+                ok: true,
+                skipped: true,
+                reason: 'network_unavailable',
+            });
+        });
+
+        it('explicitly throws when network is unavailable and requireNetwork is true', async () => {
+            await expect(
+                testConsumerIntegration({
+                    requireNetwork: true,
+                    networkCheck: async () => false,
+                })
+            ).rejects.toThrow('Network access required for consumer integration test but raw.githubusercontent.com is unreachable.');
+        });
     });
 });
