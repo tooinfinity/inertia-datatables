@@ -242,6 +242,26 @@ Intentional updates to protected compatibility shims require:
 2. A dedicated maintenance PR (not bundled with unrelated feature work).
 3. Verification that consumer-facing behavior and the registry dependencies remain compatible.
 
+**Protected-path CI hard-rejects all changes.** The `shadcn ownership` CI
+workflow (`.github/workflows/ownership.yml`) runs `scripts/ci/protected-paths.js`
+on every PR targeting `main`. That script fails with exit status 1 when any file
+under `registry/data-table/components/ui/` is added, modified, renamed, or
+deleted — including `table.tsx`. It has no bypass parameter, no exception
+mechanism, and no approved-exception list. CODEOWNERS code-owner review takes
+effect only when a repository administrator enables branch protection requiring
+code-owner review on the default branch; that is the administrator-controlled
+gate described in "Enforcement: CODEOWNERS and CI."
+
+Consequence: as written, the maintenance-PR procedure above **cannot complete**
+for `table.tsx` or any other file under `registry/data-table/components/ui/`,
+because the protected-path CI check rejects the change before a maintainer can
+approve it. To make an authorized maintenance PR mergeable, a repository
+administrator must first add an exception/bypass to the protected-path CI check
+(or otherwise scope the check), and then the maintainer applies code-owner
+approval through the branch-protection gate. Until such an exception exists, no
+maintainer authorization or dedicated maintenance PR can get a protected-file
+change merged to `main`.
+
 ### Components requiring manual review
 
 The following components are classified as `role-equivalent-shim` with `manual` comparison strategy. They are **not** verified upstream copies, so source diff is not meaningful. Changes to upstream always require manual compatibility review:

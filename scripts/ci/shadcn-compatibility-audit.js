@@ -57,8 +57,6 @@ const REQUIRED_EXPORTS = {
         'TableCaption',
     ],
 };
-const GITHUB_API_URL =
-    'https://api.github.com/repos/shadcn-ui/ui/commits/main';
 
 /**
  * Fetch a URL with a timeout. Throws on non-2xx or network errors.
@@ -109,11 +107,14 @@ export async function fetchJsonWithTimeout(url, timeoutMs = 30000) {
 
 /**
  * Discover the latest commit SHA on the upstream branch via the GitHub API.
- * Returns null if the discovery fails (caller decides how to handle).
+ * The repository and branch are read from the manifest so drift detection
+ * follows the configured upstream instead of hard-coded values. Returns null
+ * if the discovery fails (caller decides how to handle).
  */
-export async function discoverLatestCommit() {
+export async function discoverLatestCommit(upstream) {
     try {
-        const data = await fetchJsonWithTimeout(GITHUB_API_URL);
+        const url = `https://api.github.com/repos/${upstream.repository}/commits/${upstream.branch}`;
+        const data = await fetchJsonWithTimeout(url);
         return data.sha || null;
     } catch {
         return null;
@@ -285,6 +286,17 @@ function collectJsxElementNames(sourceFile, node) {
 
     function visit(n) {
         const kindName = ts.SyntaxKind[n.kind];
+        // Do not descend into nested function declarations, function
+        // expressions, or arrow functions. JSX inside an uncalled helper is not
+        // part of this component's render path and must not be counted as an
+        // element the component renders.
+        if (
+            kindName === 'FunctionDeclaration' ||
+            kindName === 'FunctionExpression' ||
+            kindName === 'ArrowFunction'
+        ) {
+            return;
+        }
         if (kindName === 'JsxElement') {
             const tag = getJsxTagName(n.openingElement.tagName);
             if (isHtmlElement(tag)) names.add(tag.toLowerCase());
@@ -390,6 +402,27 @@ export function readLocalComponent(localPath) {
  */
 function getMissingExports(structure, requiredExports) {
     return requiredExports.filter((name) => !structure.has(name));
+}
+
+/**
+ * Return the semantic elements declared in the manifest that are missing from
+ * a component's rendered output. `requiredExports` identifies the exports to
+ * inspect and `semanticElements` (declared per component in the manifest) is
+ * the set of elements the component must collectively render. Empty array when
+ * every declared semantic element is rendered. Used to reject a local shim
+ * that still exports a name but returns null for it (e.g. TableCaption with no
+ * <caption>), which the subset rule would otherwise silently accept with an
+ * empty element set.
+ */
+function getMissingSemanticElements(structure, requiredExports, semanticElements) {
+    const rendered = new Set();
+    for (const name of requiredExports) {
+        const elements = structure.get(name);
+        if (elements) {
+            for (const element of elements) rendered.add(element);
+        }
+    }
+    return semanticElements.filter((element) => !rendered.has(element));
 }
 
 /**
@@ -502,6 +535,17 @@ export function validateManifest(manifest) {
         }
         if (!upstream.rawUrlTemplate || typeof upstream.rawUrlTemplate !== 'string') {
             errors.push('manifest.upstream.rawUrlTemplate is missing or not a string');
+        } else if (
+            typeof upstream.repository === 'string' &&
+            !upstream.rawUrlTemplate.includes(upstream.repository)
+        ) {
+            errors.push(
+                'manifest.upstream.rawUrlTemplate must identify the same repository as manifest.upstream.repository',
+            );
+        } else if (!upstream.rawUrlTemplate.includes('{commit}')) {
+            errors.push(
+                'manifest.upstream.rawUrlTemplate must substitute the commit with {commit}',
+            );
         }
     }
 
@@ -572,6 +616,18 @@ export function validateManifest(manifest) {
             );
         }
 
+        // Only `table` is eligible for automated structural comparison. Require
+        // it to use the structural strategy so a manifest change cannot silently
+        // bypass the table audit. The other six shims stay on manual review.
+        if (
+            component.name === 'table' &&
+            component.comparisonStrategy !== 'structural'
+        ) {
+            errors.push(
+                `${prefix}.comparisonStrategy must be 'structural' for the table component`,
+            );
+        }
+
         // Validate classification
         if (
             !component.classification ||
@@ -585,6 +641,28 @@ export function validateManifest(manifest) {
             errors.push(`${prefix}.upstreamSource is missing or not a string`);
         } else if (!component.upstreamSource.startsWith('https://')) {
             errors.push(`${prefix}.upstreamSource must be an HTTPS URL`);
+        }
+
+        // The baseline commit (rawUrlTemplate + baselineCommit) is the single
+        // source of truth for the pinned upstream revision, so each component's
+        // upstreamSource must point at that exact URL. Otherwise validation
+        // could pass against one revision while drift detection uses another.
+        if (
+            typeof component.upstreamComponent === 'string' &&
+            typeof upstream.rawUrlTemplate === 'string' &&
+            typeof upstream.baselineCommit === 'string'
+        ) {
+            const expectedSource = buildUpstreamUrl(
+                upstream,
+                component.upstreamComponent,
+                upstream.baselineCommit,
+            );
+            if (component.upstreamSource !== expectedSource) {
+                errors.push(
+                    `${prefix}.upstreamSource must point to the manifest baseline commit ` +
+                        `(${expectedSource})`,
+                );
+            }
         }
     }
 
@@ -600,9 +678,11 @@ export function validateManifest(manifest) {
 
 /**
  * Audit a single component in validation mode: compares the local shim
- * against the pinned baseline upstream source.
+ * against the pinned baseline upstream source. The baseline URL is derived
+ * from the manifest (rawUrlTemplate + baselineCommit) and passed in by the
+ * caller so validation and drift detection share one source of truth.
  */
-export async function auditComponent(component) {
+export async function auditComponent(component, upstreamUrl) {
     const result = {
         name: component.name,
         localPath: component.localPath,
@@ -611,7 +691,7 @@ export async function auditComponent(component) {
         classification: component.classification,
         status: 'ok',
         differences: [],
-        upstreamSource: component.upstreamSource,
+        upstreamSource: upstreamUrl,
         upstreamFetched: false,
         error: null,
     };
@@ -628,7 +708,7 @@ export async function auditComponent(component) {
     // Structural strategy: fetch upstream baseline and compare.
     let upstreamSource;
     try {
-        upstreamSource = await fetchWithTimeout(component.upstreamSource);
+        upstreamSource = await fetchWithTimeout(upstreamUrl);
         result.upstreamFetched = true;
     } catch (error) {
         result.status = 'upstream-error';
@@ -656,6 +736,27 @@ export async function auditComponent(component) {
         result.status = 'error';
         result.error = local.error;
         return result;
+    }
+
+    // A structural shim must render every semantic element its required
+    // exports are responsible for. An export that still exists but returns
+    // null (e.g. TableCaption with no <caption>) is incomplete and must fail
+    // validation instead of passing the subset rule with an empty element set.
+    if (component.semanticElements && component.semanticElements.length > 0) {
+        const requiredExports = REQUIRED_EXPORTS[component.name] || [];
+        const missingElements = getMissingSemanticElements(
+            local.structure,
+            requiredExports,
+            component.semanticElements,
+        );
+        if (missingElements.length > 0) {
+            result.status = 'structural-difference';
+            result.differences = missingElements.map(
+                (element) =>
+                    `component "${component.name}" does not render <${element}> required by the manifest`,
+            );
+            return result;
+        }
     }
 
     const differences = compareStructures(local.structure, upstreamStructure);
@@ -856,7 +957,7 @@ export async function main(drift = false) {
 
     if (drift) {
         // Drift mode: discover the latest upstream commit.
-        latestCommit = await discoverLatestCommit();
+        latestCommit = await discoverLatestCommit(manifest.upstream);
         if (!latestCommit) {
             console.error(
                 'error: drift mode failed to discover latest upstream commit',
@@ -958,9 +1059,17 @@ export async function main(drift = false) {
             results.push(result);
         }
     } else {
-        // Validation mode: compare local shims against baseline upstream.
+        // Validation mode: compare local shims against the pinned baseline
+        // upstream. The validation URL is derived from the manifest's
+        // rawUrlTemplate and baselineCommit (one source of truth) rather than
+        // read from each component's duplicated upstreamSource.
         for (const component of components) {
-            const result = await auditComponent(component);
+            const upstreamSource = buildUpstreamUrl(
+                manifest.upstream,
+                component.upstreamComponent,
+                manifest.upstream.baselineCommit,
+            );
+            const result = await auditComponent(component, upstreamSource);
             results.push(result);
         }
     }
@@ -985,7 +1094,7 @@ export async function main(drift = false) {
     process.exit(0);
 }
 
-if (import.meta.main) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const drift = process.argv.includes('--drift');
     main(drift).catch((error) => {
         console.error(`error: audit failed: ${error.message}`);

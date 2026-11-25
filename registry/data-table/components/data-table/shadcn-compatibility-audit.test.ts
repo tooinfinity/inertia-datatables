@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
+    buildUpstreamUrl,
     extractComponentStructure,
     compareStructures,
     auditComponent,
@@ -359,6 +360,12 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
 });
 
 describe('shadcn-compatibility-audit: auditComponent', () => {
+    const tableUpstreamUrl = buildUpstreamUrl(
+        baseManifest.upstream,
+        'table',
+        baseManifest.upstream.baselineCommit,
+    );
+
     beforeEach(() => {
         vi.restoreAllMocks();
     });
@@ -372,7 +379,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         const component = baseManifest.components[1]; // button — manual
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, component.upstreamSource);
 
         expect(result.status).toBe('manual-review');
         expect(result.upstreamFetched).toBe(false);
@@ -387,18 +394,19 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         // Uses the real local table.tsx at registry/data-table/components/ui/table.tsx.
-        const component = {
-            ...baseManifest.components[0], // table — structural
-            upstreamSource:
-                'https://raw.githubusercontent.com/shadcn-ui/ui/0000000000000000000000000000000000000000/apps/v4/registry/new-york-v4/ui/table.tsx',
-        };
-        const result = await auditComponent(component);
+        const component = baseManifest.components[0]; // table — structural
+        const upstreamUrl = buildUpstreamUrl(
+            baseManifest.upstream,
+            component.upstreamComponent,
+            baseManifest.upstream.baselineCommit,
+        );
+        const result = await auditComponent(component, upstreamUrl);
 
         expect(result.status).toBe('ok');
         expect(result.upstreamFetched).toBe(true);
         expect(result.differences).toEqual([]);
         expect(fetchMock).toHaveBeenCalledWith(
-            component.upstreamSource,
+            upstreamUrl,
             expect.objectContaining({ signal: expect.anything() }),
         );
     });
@@ -412,7 +420,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         const component = {
             ...baseManifest.components[0], // table — structural
         };
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('structural-difference');
         expect(result.upstreamFetched).toBe(true);
@@ -424,7 +432,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         const component = baseManifest.components[0]; // table — structural
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('upstream-error');
         expect(result.upstreamFetched).toBe(false);
@@ -438,7 +446,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         const component = baseManifest.components[0]; // table — structural
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('upstream-error');
         expect(result.error).toContain('HTTP 404');
@@ -451,7 +459,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         const component = baseManifest.components[0]; // table — structural
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('upstream-error');
         expect(result.error).toContain('no parseable component exports');
@@ -467,7 +475,7 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
             ...baseManifest.components[0],
             localPath: 'registry/data-table/components/ui/nonexistent.tsx',
         };
-        const result = await auditComponent(component);
+        const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('error');
         expect(result.upstreamFetched).toBe(true);
@@ -713,6 +721,8 @@ describe('shadcn-compatibility-audit: fetchWithTimeout', () => {
 });
 
 describe('shadcn-compatibility-audit: discoverLatestCommit', () => {
+    const upstream = { repository: 'shadcn-ui/ui', branch: 'main' };
+
     beforeEach(() => {
         vi.restoreAllMocks();
     });
@@ -727,8 +737,30 @@ describe('shadcn-compatibility-audit: discoverLatestCommit', () => {
         );
         vi.stubGlobal('fetch', fetchMock);
 
-        const sha = await discoverLatestCommit();
+        const sha = await discoverLatestCommit(upstream);
         expect(sha).toBe('abc123def456');
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://api.github.com/repos/shadcn-ui/ui/commits/main',
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    Accept: 'application/vnd.github+json',
+                }),
+                signal: expect.anything(),
+            }),
+        );
+    });
+
+    it('constructs the API URL from the manifest repository and branch', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(JSON.stringify({ sha: 'sha' })),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        await discoverLatestCommit({ repository: 'owner/repo', branch: 'dev' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://api.github.com/repos/owner/repo/commits/dev',
+            expect.anything(),
+        );
     });
 
     it('returns null when the API response has no SHA', async () => {
@@ -737,7 +769,7 @@ describe('shadcn-compatibility-audit: discoverLatestCommit', () => {
         );
         vi.stubGlobal('fetch', fetchMock);
 
-        const sha = await discoverLatestCommit();
+        const sha = await discoverLatestCommit(upstream);
         expect(sha).toBe(null);
     });
 
@@ -745,8 +777,33 @@ describe('shadcn-compatibility-audit: discoverLatestCommit', () => {
         const fetchMock = vi.fn().mockRejectedValue(new TypeError('network down'));
         vi.stubGlobal('fetch', fetchMock);
 
-        const sha = await discoverLatestCommit();
+        const sha = await discoverLatestCommit(upstream);
         expect(sha).toBe(null);
+    });
+});
+
+describe('shadcn-compatibility-audit: buildUpstreamUrl', () => {
+    const upstream = {
+        repository: 'shadcn-ui/ui',
+        branch: 'main',
+        baselineCommit: '055aa6b7837b1808456a24beb4c97a677864aa82',
+        rawUrlTemplate:
+            'https://raw.githubusercontent.com/shadcn-ui/ui/{commit}/apps/v4/registry/new-york-v4/ui/{component}.tsx',
+    };
+
+    it('substitutes the commit and component into the template', () => {
+        const url = buildUpstreamUrl(upstream, 'table', 'abc123');
+        expect(url).toBe(
+            'https://raw.githubusercontent.com/shadcn-ui/ui/abc123/apps/v4/registry/new-york-v4/ui/table.tsx',
+        );
+    });
+
+    it('produces distinct source URLs for distinct commits', () => {
+        const baseline = buildUpstreamUrl(upstream, 'table', 'aaa');
+        const latest = buildUpstreamUrl(upstream, 'table', 'bbb');
+        expect(baseline).not.toBe(latest);
+        expect(baseline).toContain('aaa');
+        expect(latest).toContain('bbb');
     });
 });
 
@@ -764,17 +821,21 @@ function makeValidManifest(overrides = {}) {
             rawUrlTemplate:
                 'https://raw.githubusercontent.com/shadcn-ui/ui/{commit}/apps/v4/registry/new-york-v4/ui/{component}.tsx',
         },
-        components: EXPECTED_NAMES.map((name) => ({
-            name,
-            localPath: `registry/data-table/components/ui/${name}.tsx`,
-            upstreamComponent: name,
-            comparisonStrategy: name === 'table' ? 'structural' : 'manual',
-            classification: name === 'table' ? 'structurally-mirrors-upstream' : 'role-equivalent-shim',
-            upstreamSource: `https://example.com/${name}.tsx`,
-            notes: 'test',
-        })),
     };
-    return { ...base, ...overrides };
+    const components = EXPECTED_NAMES.map((name) => ({
+        name,
+        localPath: `registry/data-table/components/ui/${name}.tsx`,
+        upstreamComponent: name,
+        comparisonStrategy: name === 'table' ? 'structural' : 'manual',
+        classification: name === 'table' ? 'structurally-mirrors-upstream' : 'role-equivalent-shim',
+        upstreamSource: buildUpstreamUrl(
+            base.upstream,
+            name,
+            base.upstream.baselineCommit,
+        ),
+        notes: 'test',
+    }));
+    return { ...base, components, ...overrides };
 }
 
 const EXPECTED_NAMES = [
@@ -842,6 +903,53 @@ describe('shadcn-compatibility-audit: manifest validation', () => {
         expect(result.errors.some((e) => e.includes('comparisonStrategy'))).toBe(true);
     });
 
+    it('rejects a manifest where table uses manual strategy', () => {
+        const bad = {
+            ...baseManifest,
+            components: baseManifest.components.map((c) =>
+                c.name === 'table' ? { ...c, comparisonStrategy: 'manual' } : c,
+            ),
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) =>
+                e.includes("comparisonStrategy") && e.includes('structural'),
+            ),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose rawUrlTemplate identifies a different repository', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: {
+                ...baseManifest.upstream,
+                repository: 'owner/fork',
+            },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('rawUrlTemplate') && e.includes('repository')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose rawUrlTemplate does not substitute the commit', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: {
+                ...baseManifest.upstream,
+                rawUrlTemplate:
+                    'https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/{component}.tsx',
+            },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('rawUrlTemplate') && e.includes('{commit}')),
+        ).toBe(true);
+    });
+
     it('rejects a manifest with missing upstream repository', () => {
         const bad = {
             ...baseManifest,
@@ -862,6 +970,51 @@ describe('shadcn-compatibility-audit: manifest validation', () => {
         const result = validateManifest(bad);
         expect(result.valid).toBe(false);
         expect(result.errors.some((e) => e.includes('HTTPS'))).toBe(true);
+    });
+
+    it('rejects a manifest whose upstreamSource points to a different commit than the manifest baseline', () => {
+        const bad = {
+            ...baseManifest,
+            components: baseManifest.components.map((c) =>
+                c.name === 'table'
+                    ? {
+                          ...c,
+                          upstreamSource: c.upstreamSource.replace(
+                              baseManifest.upstream.baselineCommit,
+                              '0000000000000000000000000000000000000000',
+                          ),
+                      }
+                    : c,
+            ),
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('upstreamSource') && e.includes('baseline commit')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose upstreamSource points to a different component than declared', () => {
+        const bad = {
+            ...baseManifest,
+            components: baseManifest.components.map((c) =>
+                c.name === 'table'
+                    ? {
+                          ...c,
+                          upstreamSource: buildUpstreamUrl(
+                              baseManifest.upstream,
+                              'button',
+                              baseManifest.upstream.baselineCommit,
+                          ),
+                      }
+                    : c,
+            ),
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('upstreamSource') && e.includes('baseline commit')),
+        ).toBe(true);
     });
 
     it('rejects a null manifest', () => {
@@ -925,6 +1078,21 @@ function PrivateHelper() {
         expect(structure.has('TableCaption')).toBe(true);
         expect(structure.has('PrivateHelper')).toBe(false);
         expect(structure.get('TableCaption')).toEqual(new Set());
+    });
+
+    it('does not count JSX inside an uncalled nested helper function', () => {
+        const source = `
+export function Table() {
+    function renderCaption() {
+        return <caption />;
+    }
+    return <table />;
+}
+`;
+        const { components: structure } = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.get('Table')).toEqual(new Set(['table']));
+        expect(structure.get('Table')).not.toContain('caption');
     });
 
     it('identifies an export alias correctly', () => {

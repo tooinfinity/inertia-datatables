@@ -21,7 +21,10 @@ export interface AuditComponentResult {
 
 export function fetchWithTimeout(url: string, timeoutMs?: number): Promise<string>;
 export function fetchJsonWithTimeout(url: string, timeoutMs?: number): Promise<unknown>;
-export function discoverLatestCommit(): Promise<string | null>;
+export function discoverLatestCommit(upstream: {
+    repository: string;
+    branch: string;
+}): Promise<string | null>;
 export function buildUpstreamUrl(
     upstream: { rawUrlTemplate: string },
     componentName: string,
@@ -42,14 +45,17 @@ export function validateManifest(manifest: unknown): {
     valid: boolean;
     errors: string[];
 };
-export function auditComponent(component: {
-    name: string;
-    localPath: string;
-    upstreamComponent: string;
-    comparisonStrategy: string;
-    classification: string;
-    upstreamSource: string;
-}): Promise<AuditComponentResult>;
+export function auditComponent(
+    component: {
+        name: string;
+        localPath: string;
+        upstreamComponent: string;
+        comparisonStrategy: string;
+        classification: string;
+        upstreamSource: string;
+    },
+    upstreamUrl: string,
+): Promise<AuditComponentResult>;
 export function auditComponentDrift(
     component: {
         name: string;
