@@ -33,7 +33,6 @@ jobs:
       - name: Detect protected compatibility shim changes
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin ${{ github.base_ref }}
           MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
-          CHANGED=$(git diff --name-status -M "$MERGE_BASE" HEAD)
-          echo "$CHANGED" | node scripts/ci/protected-paths.js
+          git diff --name-status -z -M "$MERGE_BASE" HEAD | node scripts/ci/protected-paths.js

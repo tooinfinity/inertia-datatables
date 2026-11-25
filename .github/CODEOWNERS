@@ -38,5 +38,10 @@ public/r/ @tooinfinity
 registry.json @tooinfinity
 
 # ---------------------------------------------------------------------------
+# CODEOWNERS itself — self-owned so changes to ownership rules require
+# maintainer review and cannot silently transfer protected-file review.
+.github/CODEOWNERS @tooinfinity
+
+# ---------------------------------------------------------------------------
 # Ownership policy documentation.
 docs/architecture/shadcn-component-ownership.md @tooinfinity

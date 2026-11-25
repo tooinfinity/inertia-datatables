@@ -19,14 +19,17 @@ import { readFileSync } from 'node:fs';
 const PROTECTED_PREFIX = 'registry/data-table/components/ui/';
 
 /**
- * Parse `git diff --name-status -M` output into the set of affected paths.
+ * Parse `git diff --name-status -z -M` output into the set of affected paths.
  *
- * Status lines look like:
+ * Input is NUL-delimited. Each record looks like:
  *   M\tpath            (modify)
  *   A\tpath            (add)
  *   D\tpath            (delete)
  *   R100\told\tnew     (rename)
  *   C100\told\tnew     (copy)
+ *
+ * With `-z` paths are raw (never quoted), so non-ASCII filenames are parsed
+ * correctly without quote decoding.
  *
  * Renames and copies contribute both the old and the new path so a move into or
  * out of a protected directory is detected either way.
@@ -34,13 +37,15 @@ const PROTECTED_PREFIX = 'registry/data-table/components/ui/';
 export function parseChangedFiles(input) {
     const paths = new Set();
 
-    for (const rawLine of input.split('\n')) {
-        const line = rawLine.trimEnd();
-        if (!line) {
+    // Split on NUL (git diff -z) or newline; a trailing delimiter yields a
+    // final empty record which is skipped. With -z paths are raw (never
+    // quoted), so non-ASCII filenames are parsed correctly.
+    for (const record of input.split(/[\0\n]+/)) {
+        if (!record) {
             continue;
         }
 
-        const parts = line.split('\t');
+        const parts = record.split('\t');
         const status = parts[0];
         if (!status) {
             continue;

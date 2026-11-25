@@ -29,7 +29,11 @@ export const REQUIRED_PATHS = [
 
 /**
  * Parse a single CODEOWNERS line into { pattern, owners }.
- * Returns null for blank lines and comments.
+ * Returns null for blank lines and full-line comments.
+ *
+ * Inline comments (a `#` token and everything after it) are stripped before
+ * the pattern and owners are extracted, so `registry.json @tooinfinity # note`
+ * is treated the same as `registry.json @tooinfinity`.
  */
 export function parseRule(line) {
     const trimmed = line.trim();
@@ -39,9 +43,15 @@ export function parseRule(line) {
     }
 
     const tokens = trimmed.split(/\s+/);
-    const owners = tokens.filter((token) => token.startsWith('@'));
-    const pattern = tokens
-        .slice(0, tokens.length - owners.length)
+
+    // Drop the inline comment: everything from the first '#' token onward.
+    const commentIndex = tokens.findIndex((token) => token.startsWith('#'));
+    const ruleTokens =
+        commentIndex === -1 ? tokens : tokens.slice(0, commentIndex);
+
+    const owners = ruleTokens.filter((token) => token.startsWith('@'));
+    const pattern = ruleTokens
+        .slice(0, ruleTokens.length - owners.length)
         .join(' ')
         .trim();
 
@@ -49,19 +59,40 @@ export function parseRule(line) {
 }
 
 /**
+ * Return true when an owner token names a real user or team.
+ *
+ * Accepts `@username` and `@org/team`. Rejects malformed tokens such as a bare
+ * `@` or `@/` that name neither a user nor a team.
+ */
+export function isValidOwner(token) {
+    return (
+        /^@[^/]+$/.test(token) || // @username
+        /^@[^/]+\/.+$/.test(token) // @org/team
+    );
+}
+
+/**
  * Return true when a CODEOWNERS pattern matches a path.
  *
- * Directory patterns (ending in '/') match the directory itself and anything
- * beneath it. File patterns match by exact path. A leading '/' is ignored.
+ * Directory patterns (with or without a trailing slash) match the directory
+ * itself and anything beneath it. File patterns match by exact path. A leading
+ * '/' is ignored. GitHub permits directory patterns without a trailing slash.
  */
 export function patternMatches(path, pattern) {
     const normalized = pattern.replace(/^\//, '');
 
+    // Directory pattern with trailing slash: matches the directory and contents.
     if (normalized.endsWith('/')) {
         const directory = normalized.slice(0, -1);
         return path === directory || path.startsWith(normalized);
     }
 
+    // Directory pattern without trailing slash: matches contents beneath it.
+    if (path.startsWith(normalized + '/')) {
+        return true;
+    }
+
+    // Exact file match.
     return path === normalized;
 }
 
@@ -83,6 +114,17 @@ export function validateCodeowners(content, requiredPaths = REQUIRED_PATHS) {
 
         if (!rule.pattern || rule.owners.length === 0) {
             errors.push(`Line ${lineNumber}: missing pattern or owner: "${rawLine}"`);
+            continue;
+        }
+
+        // Validate owner tokens before accepting the rule toward coverage.
+        const invalidOwners = rule.owners.filter((owner) => !isValidOwner(owner));
+        if (invalidOwners.length > 0) {
+            errors.push(
+                `Line ${lineNumber}: malformed owner token(s) ${invalidOwners
+                    .map((owner) => `"${owner}"`)
+                    .join(', ')}: "${rawLine}"`,
+            );
             continue;
         }
 

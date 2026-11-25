@@ -41,6 +41,27 @@ describe('protected-paths: parseChangedFiles', () => {
         ]);
     });
 
+    it('parses NUL-delimited output with a non-ASCII path', () => {
+        const input = [
+            'A\tregistry/data-table/components/ui/café.tsx',
+            'M\tregistry/data-table/components/data-table/data-table.tsx',
+        ].join('\0') + '\0';
+        expect(parseChangedFiles(input)).toEqual([
+            'registry/data-table/components/ui/café.tsx',
+            'registry/data-table/components/data-table/data-table.tsx',
+        ]);
+    });
+
+    it('parses a NUL-delimited rename with non-ASCII paths', () => {
+        const input = [
+            'R100\tregistry/data-table/components/ui/é.tsx\tregistry/data-table/components/ui/è.tsx',
+        ].join('\0') + '\0';
+        expect(parseChangedFiles(input)).toEqual([
+            'registry/data-table/components/ui/é.tsx',
+            'registry/data-table/components/ui/è.tsx',
+        ]);
+    });
+
     it('returns an empty set for empty input', () => {
         expect(parseChangedFiles('')).toEqual([]);
         expect(parseChangedFiles('\n\n')).toEqual([]);

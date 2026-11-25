@@ -14,6 +14,7 @@ export interface CodeownersValidationResult {
 }
 
 export function parseRule(line: string): CodeownersRule | null;
+export function isValidOwner(token: string): boolean;
 export function patternMatches(path: string, pattern: string): boolean;
 export function validateCodeowners(
     content: string,
