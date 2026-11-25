@@ -36,6 +36,27 @@ const EXPECTED_COMPONENT_NAMES = [
     'skeleton',
     'table',
 ];
+
+/**
+ * Required named component exports for each structurally-compared component.
+ * Only `table` uses structural comparison; the six manual shims are not
+ * automatically compared. These are the exports the official shadcn/ui
+ * component is expected to provide, matching the local compatibility shim.
+ * A baseline missing any required export is incomplete and must not be used
+ * for drift comparison.
+ */
+const REQUIRED_EXPORTS = {
+    table: [
+        'Table',
+        'TableHeader',
+        'TableBody',
+        'TableFooter',
+        'TableHead',
+        'TableRow',
+        'TableCell',
+        'TableCaption',
+    ],
+};
 const GITHUB_API_URL =
     'https://api.github.com/repos/shadcn-ui/ui/commits/main';
 
@@ -363,6 +384,15 @@ export function readLocalComponent(localPath) {
 }
 
 /**
+ * Return the names of required exports missing from a component structure.
+ * Empty array when all required exports are present. Used to validate that a
+ * baseline (or any structure) is complete before it is compared.
+ */
+function getMissingExports(structure, requiredExports) {
+    return requiredExports.filter((name) => !structure.has(name));
+}
+
+/**
  * Compare local and upstream component structures.
  *
  * For each exported component:
@@ -676,6 +706,17 @@ export async function auditComponentDrift(component, baselineStructure, latestUr
         return result;
     }
 
+    // Only compare complete baselines. A baseline missing a required export
+    // (e.g. TableCaption) cannot be meaningfully compared against latest, so
+    // reject it before any network fetch.
+    const requiredExports = REQUIRED_EXPORTS[component.name] || [];
+    const missingExports = getMissingExports(baselineStructure, requiredExports);
+    if (missingExports.length > 0) {
+        result.status = 'upstream-error';
+        result.error = `baseline for "${component.name}" (${component.upstreamComponent}) is missing required exports: ${missingExports.join(', ')}; drift cannot be determined`;
+        return result;
+    }
+
     let latestSource;
     try {
         latestSource = await fetchWithTimeout(latestUrl);
@@ -857,6 +898,14 @@ export async function main(drift = false) {
                 if (structure.size === 0) {
                     console.error(
                         `error: drift baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit} contained no parseable component exports; the baseline is unusable`,
+                    );
+                    process.exit(2);
+                }
+                const requiredExports = REQUIRED_EXPORTS[component.name] || [];
+                const missingExports = getMissingExports(structure, requiredExports);
+                if (missingExports.length > 0) {
+                    console.error(
+                        `error: drift baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit} is missing required exports: ${missingExports.join(', ')}; the baseline is unusable`,
                     );
                     process.exit(2);
                 }

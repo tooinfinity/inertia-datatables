@@ -1211,6 +1211,54 @@ describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Findi
         expect(result.error).toContain('baseline');
     });
 
+    it('reports an upstream-error when the baseline is missing required exports', async () => {
+        // Baseline has only Table, TableHeader, TableBody — missing TableCaption
+        // and other required exports. Drift must reject it before fetching latest.
+        const incompleteBaseline = new Map([
+            ['Table', new Set(['table'])],
+            ['TableHeader', new Set(['thead'])],
+            ['TableBody', new Set(['tbody'])],
+        ]);
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(upstreamTableSourceWithWrapper),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const result = await auditComponentDrift(
+            structuralComponent,
+            incompleteBaseline,
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('upstream-error');
+        expect(result.upstreamFetched).toBe(false);
+        expect(result.error).toContain('baseline');
+        expect(result.error).toContain('TableCaption');
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('reports drift when latest is missing a required export such as TableCaption', async () => {
+        // Complete baseline (all 8 exports) vs latest missing TableCaption.
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(upstreamTableSourceMissingCaption),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const result = await auditComponentDrift(
+            structuralComponent,
+            baselineTable,
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('structural-difference');
+        expect(result.upstreamFetched).toBe(true);
+        expect(result.commit).toBe('latest123');
+        expect(result.differences.length).toBeGreaterThan(0);
+        expect(
+            result.differences.some((d) => d.includes('TableCaption')),
+        ).toBe(true);
+    });
+
     it('fails explicitly when one baseline component is unusable during drift comparison', async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             mockResponse(upstreamTableSourceMissingCaption),
