@@ -88,6 +88,41 @@ Intentional updates to protected compatibility shims require:
 
 CI enforcement of these boundaries (read-only checks on protected paths) and automated upstream drift detection are **deferred to PR 2 and PR 3** of this effort. This PR establishes the documentation and agent-instruction foundation only.
 
+## Enforcement: CODEOWNERS and CI
+
+Ownership boundaries are enforced through two complementary mechanisms.
+
+### CODEOWNERS (`.github/CODEOWNERS`)
+
+Review responsibility for protected paths is assigned in `.github/CODEOWNERS`:
+
+- `registry/data-table/components/ui/` — package-maintained compatibility shims (`@tooinfinity`).
+- `public/r/` — generated registry artifacts (`@tooinfinity`).
+- `registry.json` — registry source of truth (`@tooinfinity`).
+- `docs/architecture/shadcn-component-ownership.md` — ownership policy (`@tooinfinity`).
+
+Package-owned DataTable components under `registry/data-table/components/data-table/` are editable during ordinary development, so they carry no protective CODEOWNERS rule.
+
+A CODEOWNERS file alone does not require approval before merging. Mandatory code-owner review only takes effect when a repository administrator enables the corresponding branch-protection or ruleset setting on the default branch:
+
+- Require a pull request before merging.
+- Require approval from code owners.
+- Ensure the required approval cannot be bypassed through the normal merge process.
+
+### CI checks (`.github/workflows/ownership.yml`)
+
+The `shadcn ownership` workflow runs on pull requests targeting `main`:
+
+1. **Protected-path change detection** — compares the PR branch against the base branch and fails with a clear, actionable message when any file under `registry/data-table/components/ui/` is added, modified, renamed, or deleted. Ordinary DataTable component changes under `registry/data-table/components/data-table/` are not affected.
+
+2. **CODEOWNERS validation** — verifies `.github/CODEOWNERS` is syntactically valid and that every required protected path carries an explicit ownership rule.
+
+Generated registry artifacts under `public/r/` are verified for drift by the existing `Registry` workflow (`.github/workflows/registry.yml`), which validates `registry.json`, rebuilds the artifacts, and fails when committed artifacts are out of date or contain untracked files.
+
+### Intentional maintenance changes to protected files
+
+Intentional updates to protected compatibility shims require explicit maintainer authorization and a dedicated maintenance PR (not bundled with unrelated feature work), as described in "How intentional upstream changes will be handled." There is no CI bypass mechanism for protected files; the branch-protection and ruleset configuration described above is the administrator-controlled gate.
+
 ## How generated artifacts should be updated
 
 After changing `registry.json` or any file under `registry/data-table/components/`:

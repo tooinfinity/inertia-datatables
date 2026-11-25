@@ -1,0 +1,39 @@
+name: shadcn ownership
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enforce-ownership:
+    name: Enforce shadcn component ownership
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate CODEOWNERS syntax and coverage
+        run: node scripts/ci/validate-codeowners.js
+
+      - name: Detect protected compatibility shim changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }})
+          CHANGED=$(git diff --name-status -M "$MERGE_BASE" HEAD)
+          echo "$CHANGED" | node scripts/ci/protected-paths.js
