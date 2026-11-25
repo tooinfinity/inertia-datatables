@@ -8,6 +8,9 @@
 
 ### Added
 
+- Frontend installation UX: native shadcn GitHub registry support (`npx shadcn@latest add tooinfinity/inertia-datatables/data-table`) is now the primary recommended installation method in README, with direct URL and local registry file installation preserved as alternatives (fixes #137)
+- Frontend installation verification: added consumer-installation validation script (`npm run registry:verify-consumer`) and tests in Vitest and CI (`.github/workflows/registry.yml`) to ensure registry manifest addresses, files, npm dependencies, and registry dependencies resolve cleanly in consumer project configurations without modifying protected components (fixes #137)
+
 - React layer: custom cell renderers through the `cells` prop, keyed by column name (fixes #33)
 - React layer: row actions through the `actions` prop, rendered as a trailing client side column (fixes #33)
 - React layer: column definition overrides through the `columns` prop, merged with the server provided column meta (fixes #33)
