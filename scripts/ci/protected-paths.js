@@ -2,7 +2,7 @@
 /**
  * Detects modifications to protected shadcn/ui compatibility shims.
  *
- * Reads `git diff --name-status -M` output on stdin and reports every
+ * Reads `git diff --name-status -z -M` output on stdin and reports every
  * protected path that was added, modified, renamed, or deleted in the change
  * set being inspected.
  *
@@ -21,46 +21,49 @@ const PROTECTED_PREFIX = 'registry/data-table/components/ui/';
 /**
  * Parse `git diff --name-status -z -M` output into the set of affected paths.
  *
- * Input is NUL-delimited. Each record looks like:
- *   M\tpath            (modify)
- *   A\tpath            (add)
- *   D\tpath            (delete)
- *   R100\told\tnew     (rename)
- *   C100\told\tnew     (copy)
+ * With `-z`, Git emits NUL-separated fields, not tab-separated records:
+ *   M\0path\0              (modify)
+ *   A\0path\0              (add)
+ *   D\0path\0              (delete)
+ *   R100\0old\0new\0       (rename)
+ *   C100\0old\0new\0       (copy)
  *
- * With `-z` paths are raw (never quoted), so non-ASCII filenames are parsed
- * correctly without quote decoding.
+ * Multiple changes are concatenated: M\0p1\0A\0p2\0. A status field (M/A/D/R/C
+ * optionally followed by a similarity score such as R100) is followed by one
+ * path field (M/A/D) or two path fields (R/C).
+ *
+ * Paths are raw (never quoted), so non-ASCII filenames are parsed correctly
+ * without quote decoding.
  *
  * Renames and copies contribute both the old and the new path so a move into or
  * out of a protected directory is detected either way.
  */
+const STATUS_RE = /^[MACDR]\d*$/;
+
 export function parseChangedFiles(input) {
     const paths = new Set();
 
-    // Split on NUL (git diff -z) or newline; a trailing delimiter yields a
-    // final empty record which is skipped. With -z paths are raw (never
-    // quoted), so non-ASCII filenames are parsed correctly.
-    for (const record of input.split(/[\0\n]+/)) {
-        if (!record) {
-            continue;
-        }
+    // Split on NUL; trailing/duplicate delimiters yield empty fields which are skipped.
+    const fields = input.split('\0').filter(Boolean);
 
-        const parts = record.split('\t');
-        const status = parts[0];
-        if (!status) {
+    for (let i = 0; i < fields.length; i += 1) {
+        const status = fields[i];
+        if (!STATUS_RE.test(status)) {
             continue;
         }
 
         const kind = status[0];
         if (kind === 'R' || kind === 'C') {
-            if (parts[1]) {
-                paths.add(parts[1]);
+            if (fields[i + 1]) {
+                paths.add(fields[i + 1]);
             }
-            if (parts[2]) {
-                paths.add(parts[2]);
+            if (fields[i + 2]) {
+                paths.add(fields[i + 2]);
             }
-        } else if (parts[1]) {
-            paths.add(parts[1]);
+            i += 2; // skip the two path fields
+        } else if (fields[i + 1]) {
+            paths.add(fields[i + 1]);
+            i += 1; // skip the single path field
         }
     }
 

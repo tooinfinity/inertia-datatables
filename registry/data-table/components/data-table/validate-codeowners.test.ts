@@ -5,6 +5,7 @@ const REQUIRED_PATHS = [
     'registry/data-table/components/ui/',
     'public/r/',
     'registry.json',
+    '.github/CODEOWNERS',
     'docs/architecture/shadcn-component-ownership.md',
 ];
 
@@ -14,8 +15,8 @@ const fullCodeowners = [
     'registry/data-table/components/ui/ @tooinfinity',
     'public/r/ @tooinfinity',
     'registry.json @tooinfinity',
-    'docs/architecture/shadcn-component-ownership.md @tooinfinity',
     '.github/CODEOWNERS @tooinfinity',
+    'docs/architecture/shadcn-component-ownership.md @tooinfinity',
 ].join('\n');
 
 describe('validate-codeowners', () => {
@@ -31,6 +32,7 @@ describe('validate-codeowners', () => {
             '/registry/data-table/components/ui/ @tooinfinity',
             '/public/r/ @tooinfinity',
             '/registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
             '/docs/architecture/shadcn-component-ownership.md @tooinfinity',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
@@ -45,6 +47,7 @@ describe('validate-codeowners', () => {
             '',
             'public/r/ @tooinfinity',
             'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
             'docs/architecture/shadcn-component-ownership.md @tooinfinity',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
@@ -67,6 +70,7 @@ describe('validate-codeowners', () => {
         expect(result.valid).toBe(false);
         expect(result.errors.some((error) => error.includes('registry/data-table/components/ui/'))).toBe(true);
         expect(result.errors.some((error) => error.includes('docs/architecture/shadcn-component-ownership.md'))).toBe(true);
+        expect(result.errors.some((error) => error.includes('.github/CODEOWNERS'))).toBe(true);
     });
 
     it('fails on invalid syntax: rule without an owner', () => {
@@ -94,12 +98,13 @@ describe('validate-codeowners', () => {
             'registry/data-table/components/ui/ @tooinfinity # compatibility shims',
             'public/r/ @tooinfinity # generated artifacts',
             'registry.json @tooinfinity # manifest',
+            '.github/CODEOWNERS @tooinfinity # self-ownership',
             'docs/architecture/shadcn-component-ownership.md @tooinfinity # policy',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
         expect(result.valid).toBe(true);
         expect(result.errors).toEqual([]);
-        expect(result.rules).toHaveLength(4);
+        expect(result.rules).toHaveLength(5);
     });
 
     it('passes with directory rules that omit the trailing slash', () => {
@@ -107,6 +112,7 @@ describe('validate-codeowners', () => {
             'registry/data-table/components/ui @tooinfinity',
             'public/r @tooinfinity',
             'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
             'docs/architecture/shadcn-component-ownership.md @tooinfinity',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
@@ -116,10 +122,7 @@ describe('validate-codeowners', () => {
 
     it('passes when CODEOWNERS owns itself (self-ownership)', () => {
         const content = fullCodeowners;
-        const result = validateCodeowners(content, [
-            ...REQUIRED_PATHS,
-            '.github/CODEOWNERS',
-        ]);
+        const result = validateCodeowners(content, REQUIRED_PATHS);
         expect(result.valid).toBe(true);
         expect(result.errors).toEqual([]);
     });
@@ -129,10 +132,7 @@ describe('validate-codeowners', () => {
             /^\.github\/CODEOWNERS @tooinfinity$/m,
             '',
         );
-        const result = validateCodeowners(content, [
-            ...REQUIRED_PATHS,
-            '.github/CODEOWNERS',
-        ]);
+        const result = validateCodeowners(content, REQUIRED_PATHS);
         expect(result.valid).toBe(false);
         expect(
             result.errors.some((error) => error.includes('.github/CODEOWNERS')),
@@ -144,6 +144,7 @@ describe('validate-codeowners', () => {
             'registry/data-table/components/ui/ @',
             'public/r/ @tooinfinity',
             'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
             'docs/architecture/shadcn-component-ownership.md @tooinfinity',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
@@ -158,6 +159,82 @@ describe('validate-codeowners', () => {
             'registry/data-table/components/ui/ @/',
             'public/r/ @tooinfinity',
             'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
+            'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+        ].join('\n');
+        const result = validateCodeowners(content, REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('malformed owner')),
+        ).toBe(true);
+    });
+
+    it('rejects extra separators (@org/team/extra)', () => {
+        const content = [
+            'registry/data-table/components/ui/ @tooinfinity/maintainers/extra',
+            'public/r/ @tooinfinity',
+            'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
+            'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+        ].join('\n');
+        const result = validateCodeowners(content, REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('malformed owner')),
+        ).toBe(true);
+    });
+
+    it('rejects empty segments (@/team, @org/)', () => {
+        const content = [
+            'registry/data-table/components/ui/ @/team',
+            'public/r/ @tooinfinity',
+            'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
+            'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+        ].join('\n');
+        const result = validateCodeowners(content, REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('malformed owner')),
+        ).toBe(true);
+    });
+
+    it('rejects leading hyphens (-org, -team)', () => {
+        const content = [
+            'registry/data-table/components/ui/ @-org',
+            'public/r/ @tooinfinity',
+            'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
+            'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+        ].join('\n');
+        const result = validateCodeowners(content, REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('malformed owner')),
+        ).toBe(true);
+    });
+
+    it('rejects trailing hyphens (org-, team-)', () => {
+        const content = [
+            'registry/data-table/components/ui/ @org-',
+            'public/r/ @tooinfinity',
+            'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
+            'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+        ].join('\n');
+        const result = validateCodeowners(content, REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('malformed owner')),
+        ).toBe(true);
+    });
+
+    it('rejects invalid characters', () => {
+        const content = [
+            'registry/data-table/components/ui/ @org!name',
+            'public/r/ @tooinfinity',
+            'registry.json @tooinfinity',
+            '.github/CODEOWNERS @tooinfinity',
             'docs/architecture/shadcn-component-ownership.md @tooinfinity',
         ].join('\n');
         const result = validateCodeowners(content, REQUIRED_PATHS);
@@ -173,6 +250,10 @@ describe('isValidOwner', () => {
         expect(isValidOwner('@tooinfinity')).toBe(true);
     });
 
+    it('accepts a single-character username', () => {
+        expect(isValidOwner('@t')).toBe(true);
+    });
+
     it('accepts an org/team owner', () => {
         expect(isValidOwner('@tooinfinity/maintainers')).toBe(true);
     });
@@ -183,6 +264,31 @@ describe('isValidOwner', () => {
 
     it('rejects an @/ token', () => {
         expect(isValidOwner('@/')).toBe(false);
+    });
+
+    it('rejects extra separators (@org/team/extra)', () => {
+        expect(isValidOwner('@tooinfinity/maintainers/extra')).toBe(false);
+    });
+
+    it('rejects empty segments (@/team, @org/)', () => {
+        expect(isValidOwner('@/team')).toBe(false);
+        expect(isValidOwner('@org/')).toBe(false);
+    });
+
+    it('rejects leading hyphens (-org, -team)', () => {
+        expect(isValidOwner('@-org')).toBe(false);
+        expect(isValidOwner('@org/-team')).toBe(false);
+    });
+
+    it('rejects trailing hyphens (org-, team-)', () => {
+        expect(isValidOwner('@org-')).toBe(false);
+        expect(isValidOwner('@org/team-')).toBe(false);
+    });
+
+    it('rejects invalid characters', () => {
+        expect(isValidOwner('@org!name')).toBe(false);
+        expect(isValidOwner('@org/team!')).toBe(false);
+        expect(isValidOwner('@org.name')).toBe(false);
     });
 
     it('rejects a non-owner token', () => {

@@ -1,40 +1,75 @@
 import { describe, expect, it } from 'vitest';
 import { findProtectedChanges, isProtectedPath, parseChangedFiles } from '../../../../scripts/ci/protected-paths.js';
 
+// Build Git `--name-status -z` output: NUL-separated fields, e.g.
+//   M\0path\0              (modify/add/delete)
+//   R100\0old\0new\0       (rename/copy)
+// Multiple changes concatenate: M\0p1\0A\0p2\0
+function change(status: string, ...paths: string[]): string {
+    return [status, ...paths].join('\0');
+}
+
+function gitZ(...changes: string[]): string {
+    return changes.join('\0') + '\0';
+}
+
 describe('protected-paths: parseChangedFiles', () => {
     it('parses a modified file', () => {
-        expect(parseChangedFiles('M\tregistry/data-table/components/data-table/data-table.tsx')).toEqual([
-            'registry/data-table/components/data-table/data-table.tsx',
-        ]);
+        expect(
+            parseChangedFiles(
+                gitZ(
+                    change(
+                        'M',
+                        'registry/data-table/components/data-table/data-table.tsx',
+                    ),
+                ),
+            ),
+        ).toEqual(['registry/data-table/components/data-table/data-table.tsx']);
     });
 
     it('parses an added file', () => {
-        expect(parseChangedFiles('A\tregistry/data-table/components/ui/checkbox.tsx')).toEqual([
-            'registry/data-table/components/ui/checkbox.tsx',
-        ]);
+        expect(
+            parseChangedFiles(
+                gitZ(change('A', 'registry/data-table/components/ui/checkbox.tsx')),
+            ),
+        ).toEqual(['registry/data-table/components/ui/checkbox.tsx']);
     });
 
     it('parses a deleted file', () => {
-        expect(parseChangedFiles('D\tregistry/data-table/components/ui/skeleton.tsx')).toEqual([
-            'registry/data-table/components/ui/skeleton.tsx',
-        ]);
+        expect(
+            parseChangedFiles(
+                gitZ(change('D', 'registry/data-table/components/ui/skeleton.tsx')),
+            ),
+        ).toEqual(['registry/data-table/components/ui/skeleton.tsx']);
     });
 
     it('parses a rename as both old and new paths', () => {
-        const input = 'R100\tregistry/data-table/components/ui/old.tsx\tregistry/data-table/components/ui/new.tsx';
-        expect(parseChangedFiles(input)).toEqual([
+        expect(
+            parseChangedFiles(
+                gitZ(
+                    change(
+                        'R100',
+                        'registry/data-table/components/ui/old.tsx',
+                        'registry/data-table/components/ui/new.tsx',
+                    ),
+                ),
+            ),
+        ).toEqual([
             'registry/data-table/components/ui/old.tsx',
             'registry/data-table/components/ui/new.tsx',
         ]);
     });
 
-    it('parses multiple lines', () => {
-        const input = [
-            'M\tREADME.md',
-            'A\tregistry/data-table/components/ui/button.tsx',
-            'D\tregistry/data-table/components/data-table/use-data-table.ts',
-        ].join('\n');
-        expect(parseChangedFiles(input)).toEqual([
+    it('parses multiple changes concatenated', () => {
+        expect(
+            parseChangedFiles(
+                gitZ(
+                    change('M', 'README.md'),
+                    change('A', 'registry/data-table/components/ui/button.tsx'),
+                    change('D', 'registry/data-table/components/data-table/use-data-table.ts'),
+                ),
+            ),
+        ).toEqual([
             'README.md',
             'registry/data-table/components/ui/button.tsx',
             'registry/data-table/components/data-table/use-data-table.ts',
@@ -42,21 +77,31 @@ describe('protected-paths: parseChangedFiles', () => {
     });
 
     it('parses NUL-delimited output with a non-ASCII path', () => {
-        const input = [
-            'A\tregistry/data-table/components/ui/café.tsx',
-            'M\tregistry/data-table/components/data-table/data-table.tsx',
-        ].join('\0') + '\0';
-        expect(parseChangedFiles(input)).toEqual([
+        expect(
+            parseChangedFiles(
+                gitZ(
+                    change('A', 'registry/data-table/components/ui/café.tsx'),
+                    change('M', 'registry/data-table/components/data-table/data-table.tsx'),
+                ),
+            ),
+        ).toEqual([
             'registry/data-table/components/ui/café.tsx',
             'registry/data-table/components/data-table/data-table.tsx',
         ]);
     });
 
     it('parses a NUL-delimited rename with non-ASCII paths', () => {
-        const input = [
-            'R100\tregistry/data-table/components/ui/é.tsx\tregistry/data-table/components/ui/è.tsx',
-        ].join('\0') + '\0';
-        expect(parseChangedFiles(input)).toEqual([
+        expect(
+            parseChangedFiles(
+                gitZ(
+                    change(
+                        'R100',
+                        'registry/data-table/components/ui/é.tsx',
+                        'registry/data-table/components/ui/è.tsx',
+                    ),
+                ),
+            ),
+        ).toEqual([
             'registry/data-table/components/ui/é.tsx',
             'registry/data-table/components/ui/è.tsx',
         ]);
@@ -64,7 +109,11 @@ describe('protected-paths: parseChangedFiles', () => {
 
     it('returns an empty set for empty input', () => {
         expect(parseChangedFiles('')).toEqual([]);
-        expect(parseChangedFiles('\n\n')).toEqual([]);
+        expect(parseChangedFiles('\0\0')).toEqual([]);
+    });
+
+    it('ignores fields that are not status codes', () => {
+        expect(parseChangedFiles(gitZ(change('not-a-status', 'some-random-path')))).toEqual([]);
     });
 });
 
@@ -86,38 +135,44 @@ describe('protected-paths: isProtectedPath', () => {
 
 describe('protected-paths: findProtectedChanges', () => {
     it('allows ordinary DataTable component modification', () => {
-        const input = 'M\tregistry/data-table/components/data-table/data-table.tsx';
+        const input = gitZ(change('M', 'registry/data-table/components/data-table/data-table.tsx'));
         expect(findProtectedChanges(input)).toEqual([]);
     });
 
     it('allows unrelated documentation modification', () => {
-        const input = 'M\tREADME.md';
+        const input = gitZ(change('M', 'README.md'));
         expect(findProtectedChanges(input)).toEqual([]);
     });
 
     it('detects a protected compatibility shim modification', () => {
-        const input = 'M\tregistry/data-table/components/ui/button.tsx';
+        const input = gitZ(change('M', 'registry/data-table/components/ui/button.tsx'));
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/button.tsx',
         ]);
     });
 
     it('detects a protected file addition', () => {
-        const input = 'A\tregistry/data-table/components/ui/checkbox.tsx';
+        const input = gitZ(change('A', 'registry/data-table/components/ui/checkbox.tsx'));
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/checkbox.tsx',
         ]);
     });
 
     it('detects a protected file deletion', () => {
-        const input = 'D\tregistry/data-table/components/ui/skeleton.tsx';
+        const input = gitZ(change('D', 'registry/data-table/components/ui/skeleton.tsx'));
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/skeleton.tsx',
         ]);
     });
 
     it('detects a protected file rename', () => {
-        const input = 'R100\tregistry/data-table/components/ui/dropdown-menu.tsx\tregistry/data-table/components/ui/dropdown-menu.tsx.bak';
+        const input = gitZ(
+            change(
+                'R100',
+                'registry/data-table/components/ui/dropdown-menu.tsx',
+                'registry/data-table/components/ui/dropdown-menu.tsx.bak',
+            ),
+        );
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/dropdown-menu.tsx',
             'registry/data-table/components/ui/dropdown-menu.tsx.bak',
@@ -125,11 +180,11 @@ describe('protected-paths: findProtectedChanges', () => {
     });
 
     it('reports only protected paths among mixed changes', () => {
-        const input = [
-            'M\tregistry/data-table/components/data-table/use-data-table.ts',
-            'M\tregistry/data-table/components/ui/select.tsx',
-            'M\tCHANGELOG.md',
-        ].join('\n');
+        const input = gitZ(
+            change('M', 'registry/data-table/components/data-table/use-data-table.ts'),
+            change('M', 'registry/data-table/components/ui/select.tsx'),
+            change('M', 'CHANGELOG.md'),
+        );
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/select.tsx',
         ]);

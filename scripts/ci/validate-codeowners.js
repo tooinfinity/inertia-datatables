@@ -17,13 +17,14 @@ const CODEOWNERS_PATH = '.github/CODEOWNERS';
 
 /**
  * Paths that must always carry an explicit ownership rule. These are the
- * protected compatibility shims, generated artifacts, registry manifest, and
- * ownership policy documentation established in PR #142.
+ * protected compatibility shims, generated artifacts, registry manifest,
+ * CODEOWNERS itself, and ownership policy documentation established in PR #142.
  */
 export const REQUIRED_PATHS = [
     'registry/data-table/components/ui/',
     'public/r/',
     'registry.json',
+    '.github/CODEOWNERS',
     'docs/architecture/shadcn-component-ownership.md',
 ];
 
@@ -61,13 +62,20 @@ export function parseRule(line) {
 /**
  * Return true when an owner token names a real user or team.
  *
- * Accepts `@username` and `@org/team`. Rejects malformed tokens such as a bare
- * `@` or `@/` that name neither a user nor a team.
+ * Accepts `@username` and `@org/team`. GitHub usernames and team slugs are
+ * alphanumeric with hyphens, never empty, never leading/trailing hyphens, and
+ * never contain extra separators. Rejects malformed tokens such as a bare `@`,
+ * `@/`, `@org/team/extra` (extra separator), `@-org` (leading hyphen), or
+ * `@org-` (trailing hyphen).
+ *
+ * This is a syntactic check only; it cannot establish that a GitHub user or
+ * team actually exists or is accessible to the repository.
  */
 export function isValidOwner(token) {
+    const segment = '[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?';
     return (
-        /^@[^/]+$/.test(token) || // @username
-        /^@[^/]+\/.+$/.test(token) // @org/team
+        new RegExp(`^@${segment}$`).test(token) || // @username
+        new RegExp(`^@${segment}\\/${segment}$`).test(token) // @org/team
     );
 }
 
