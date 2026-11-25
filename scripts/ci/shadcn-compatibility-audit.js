@@ -1,4 +1,4 @@
-/* global console, process, AbortController, setTimeout, clearTimeout, fetch */
+/* global console, process, AbortController, setTimeout, clearTimeout, fetch, URL */
 /**
  * Audits package-maintained shadcn/ui compatibility shims against official
  * shadcn/ui upstream sources.
@@ -24,6 +24,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import * as ts from 'typescript';
 
 const MANIFEST_PATH = 'scripts/ci/shadcn-compatibility-manifest.json';
@@ -36,6 +37,20 @@ const EXPECTED_COMPONENT_NAMES = [
     'skeleton',
     'table',
 ];
+
+const REQUIRED_STRATEGIES = {
+    table: 'structural',
+    button: 'manual',
+    checkbox: 'manual',
+    'dropdown-menu': 'manual',
+    input: 'manual',
+    select: 'manual',
+    skeleton: 'manual',
+};
+
+const REQUIRED_SEMANTIC_ELEMENTS = {
+    table: ['table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption'],
+};
 
 /**
  * Required named component exports for each structurally-compared component.
@@ -507,7 +522,8 @@ export function validateManifest(manifest) {
 
     // Validate upstream section
     const upstream = manifest.upstream;
-    if (!upstream || typeof upstream !== 'object') {
+    const isUpstreamValid = upstream && typeof upstream === 'object';
+    if (!isUpstreamValid) {
         errors.push('manifest.upstream is missing or not an object');
     } else {
         if (!upstream.repository || typeof upstream.repository !== 'string') {
@@ -535,17 +551,43 @@ export function validateManifest(manifest) {
         }
         if (!upstream.rawUrlTemplate || typeof upstream.rawUrlTemplate !== 'string') {
             errors.push('manifest.upstream.rawUrlTemplate is missing or not a string');
-        } else if (
-            typeof upstream.repository === 'string' &&
-            !upstream.rawUrlTemplate.includes(upstream.repository)
-        ) {
-            errors.push(
-                'manifest.upstream.rawUrlTemplate must identify the same repository as manifest.upstream.repository',
-            );
-        } else if (!upstream.rawUrlTemplate.includes('{commit}')) {
-            errors.push(
-                'manifest.upstream.rawUrlTemplate must substitute the commit with {commit}',
-            );
+        } else {
+            let parsedTemplateUrl;
+            try {
+                parsedTemplateUrl = new URL(upstream.rawUrlTemplate);
+            } catch {
+                errors.push('manifest.upstream.rawUrlTemplate must be a valid URL');
+            }
+
+            if (parsedTemplateUrl) {
+                if (parsedTemplateUrl.hostname !== 'raw.githubusercontent.com') {
+                    errors.push(
+                        'manifest.upstream.rawUrlTemplate host must be exactly raw.githubusercontent.com',
+                    );
+                }
+
+                const decodedPathname = decodeURIComponent(parsedTemplateUrl.pathname);
+                const pathSegments = decodedPathname.replace(/^\/+/, '').split('/');
+                if (typeof upstream.repository === 'string' && upstream.repository.includes('/')) {
+                    const expectedRepoSegments = upstream.repository.split('/');
+                    if (pathSegments.length < 2 || pathSegments[0] !== expectedRepoSegments[0] || pathSegments[1] !== expectedRepoSegments[1]) {
+                        errors.push(
+                            'manifest.upstream.rawUrlTemplate owner and repository path segments must match manifest.upstream.repository exactly',
+                        );
+                    }
+                }
+
+                // Check that {commit} appears in pathname/before hash
+                if (parsedTemplateUrl.hash && decodeURIComponent(parsedTemplateUrl.hash).includes('{commit}')) {
+                    errors.push(
+                        'manifest.upstream.rawUrlTemplate must not place {commit} inside the URL fragment',
+                    );
+                } else if (!decodedPathname.includes('{commit}')) {
+                    errors.push(
+                        'manifest.upstream.rawUrlTemplate must substitute the commit with {commit}',
+                    );
+                }
+            }
         }
     }
 
@@ -607,24 +649,19 @@ export function validateManifest(manifest) {
         }
 
         // Validate comparisonStrategy
-        if (
+        const requiredStrategy = REQUIRED_STRATEGIES[component.name];
+        if (requiredStrategy) {
+            if (component.comparisonStrategy !== requiredStrategy) {
+                errors.push(
+                    `${prefix}.comparisonStrategy must be '${requiredStrategy}' for ${component.name}`,
+                );
+            }
+        } else if (
             !component.comparisonStrategy ||
             !['structural', 'manual'].includes(component.comparisonStrategy)
         ) {
             errors.push(
                 `${prefix}.comparisonStrategy must be 'structural' or 'manual'`,
-            );
-        }
-
-        // Only `table` is eligible for automated structural comparison. Require
-        // it to use the structural strategy so a manifest change cannot silently
-        // bypass the table audit. The other six shims stay on manual review.
-        if (
-            component.name === 'table' &&
-            component.comparisonStrategy !== 'structural'
-        ) {
-            errors.push(
-                `${prefix}.comparisonStrategy must be 'structural' for the table component`,
             );
         }
 
@@ -648,6 +685,7 @@ export function validateManifest(manifest) {
         // upstreamSource must point at that exact URL. Otherwise validation
         // could pass against one revision while drift detection uses another.
         if (
+            isUpstreamValid &&
             typeof component.upstreamComponent === 'string' &&
             typeof upstream.rawUrlTemplate === 'string' &&
             typeof upstream.baselineCommit === 'string'
@@ -738,22 +776,22 @@ export async function auditComponent(component, upstreamUrl) {
         return result;
     }
 
-    // A structural shim must render every semantic element its required
-    // exports are responsible for. An export that still exists but returns
-    // null (e.g. TableCaption with no <caption>) is incomplete and must fail
-    // validation instead of passing the subset rule with an empty element set.
-    if (component.semanticElements && component.semanticElements.length > 0) {
+    // A structural shim must render every semantic element required by the contract.
+    // An export that still exists but returns null (e.g. TableCaption with no <caption>)
+    // is incomplete and must fail validation instead of passing the subset rule with an empty element set.
+    const requiredSemantic = REQUIRED_SEMANTIC_ELEMENTS[component.name] || component.semanticElements;
+    if (requiredSemantic && requiredSemantic.length > 0) {
         const requiredExports = REQUIRED_EXPORTS[component.name] || [];
         const missingElements = getMissingSemanticElements(
             local.structure,
             requiredExports,
-            component.semanticElements,
+            requiredSemantic,
         );
         if (missingElements.length > 0) {
             result.status = 'structural-difference';
             result.differences = missingElements.map(
                 (element) =>
-                    `component "${component.name}" does not render <${element}> required by the manifest`,
+                    `component "${component.name}" does not render <${element}> required by the semantic contract`,
             );
             return result;
         }
@@ -1094,7 +1132,7 @@ export async function main(drift = false) {
     process.exit(0);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     const drift = process.argv.includes('--drift');
     main(drift).catch((error) => {
         console.error(`error: audit failed: ${error.message}`);

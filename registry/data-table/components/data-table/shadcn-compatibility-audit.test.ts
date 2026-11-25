@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
     buildUpstreamUrl,
@@ -481,6 +482,27 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         expect(result.upstreamFetched).toBe(true);
         expect(result.error).toContain('cannot read local file');
     });
+
+    it('enforces table semantic elements even when component.semanticElements is missing or empty in the manifest', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(upstreamTableSourceWithWrapper),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        // Component definition with semanticElements removed
+        const componentWithoutSemantic = {
+            name: 'table',
+            localPath: 'registry/data-table/components/ui/table.tsx',
+            upstreamComponent: 'table',
+            comparisonStrategy: 'structural',
+            classification: 'structurally-mirrors-upstream',
+            upstreamSource: tableUpstreamUrl,
+        };
+
+        const result = await auditComponent(componentWithoutSemantic, tableUpstreamUrl);
+        // Local table.tsx satisfies the full semantic contract, so status is ok
+        expect(result.status).toBe('ok');
+    });
 });
 
 describe('shadcn-compatibility-audit: auditComponentDrift', () => {
@@ -931,6 +953,82 @@ describe('shadcn-compatibility-audit: manifest validation', () => {
         expect(result.valid).toBe(false);
         expect(
             result.errors.some((e) => e.includes('rawUrlTemplate') && e.includes('repository')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose rawUrlTemplate has a host other than raw.githubusercontent.com', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: {
+                ...baseManifest.upstream,
+                rawUrlTemplate:
+                    'https://raw.github.com/shadcn-ui/ui/{commit}/apps/v4/registry/new-york-v4/ui/{component}.tsx',
+            },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('raw.githubusercontent.com')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose rawUrlTemplate matches repository name only as substring (e.g. repo-fork)', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: {
+                ...baseManifest.upstream,
+                repository: 'shadcn-ui/ui',
+                rawUrlTemplate:
+                    'https://raw.githubusercontent.com/shadcn-ui/ui-fork/{commit}/apps/v4/registry/new-york-v4/ui/{component}.tsx',
+            },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('path segments must match')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest whose rawUrlTemplate puts {commit} inside a URL fragment', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: {
+                ...baseManifest.upstream,
+                rawUrlTemplate:
+                    'https://raw.githubusercontent.com/shadcn-ui/ui/main/apps/v4/registry/new-york-v4/ui/{component}.tsx#{commit}',
+            },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('URL fragment')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest when a non-table component is set to structural strategy', () => {
+        const bad = {
+            ...makeValidManifest(),
+        };
+        bad.components = bad.components.map((c) =>
+            c.name === 'button' ? { ...c, comparisonStrategy: 'structural' } : c,
+        );
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes("must be 'manual' for button")),
+        ).toBe(true);
+    });
+
+    it('does not throw and records a manifest error when manifest.upstream is missing or not an object', () => {
+        const bad = {
+            version: 1,
+            components: makeValidManifest().components,
+        };
+        expect(() => validateManifest(bad)).not.toThrow();
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('manifest.upstream is missing or not an object')),
         ).toBe(true);
     });
 
@@ -1458,5 +1556,21 @@ describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Findi
         expect(result.status).toBe('structural-difference');
         expect(result.commit).toBe('latest123');
         expect(result.differences.length).toBeGreaterThan(0);
+    });
+});
+
+describe('shadcn-compatibility-audit: CLI entry-point detection with spaces in path (Finding 6)', () => {
+    it('matches import.meta.url with pathToFileURL for paths containing spaces', () => {
+        const pathWithSpaces = '/Users/test user/project name/scripts/ci/shadcn-compatibility-audit.js';
+        const fileUrl = pathToFileURL(pathWithSpaces).href;
+
+        expect(fileUrl).toContain('test%20user');
+        expect(fileUrl).toContain('project%20name');
+        expect(fileUrl.startsWith('file://')).toBe(true);
+
+        // A naive template literal file://${path} would NOT match the encoded file URL
+        expect(`file://${pathWithSpaces}`).not.toBe(fileUrl);
+        // But pathToFileURL(path).href matches an import.meta.url created for that file path
+        expect(pathToFileURL(pathWithSpaces).href).toBe(fileUrl);
     });
 });
