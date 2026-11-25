@@ -137,7 +137,7 @@ Each component in the manifest records an explicit upstream source URL pinned to
 
 ### How the audit compares local shims against the baseline
 
-Validation mode (runs on every push/PR) fetches each pinned baseline source and compares the local shim against it. This is deterministic: it always uses `manifest.upstream.baselineCommit`, never a mutable upstream reference. Of the seven shims, only `table.tsx` uses the `structural` comparison strategy; the other six are `manual` and are not automatically compared. Validation verifies that the exported component names and rendered HTML elements of `table.tsx` remain compatible with the pinned upstream revision. An unchanged result means no structural difference was detected — it does not establish complete compatibility (e.g. prop or keyboard behavior changes are not captured by structural comparison).
+Validation mode (runs on every push/PR) fetches and compares only the pinned baseline source for `table.tsx`, while the six manual entries are reported for manual review (validation does not fetch their sources). This is deterministic: it always uses `manifest.upstream.baselineCommit`, never a mutable upstream reference. Of the seven shims, only `table.tsx` uses the `structural` comparison strategy; the other six are `manual` and are not automatically compared. Validation verifies that the exported component names and rendered HTML elements of `table.tsx` remain compatible with the pinned upstream revision. An unchanged result means no structural difference was detected — it does not establish complete compatibility (e.g. prop or keyboard behavior changes are not captured by structural comparison).
 
 ### How to run the audit locally
 
@@ -169,7 +169,7 @@ The `shadcn compatibility audit` workflow (`.github/workflows/shadcn-compatibili
 Exit status:
 - `0` — no issues found.
 - `1` — one or more structural differences or manifest validation failures (requires review).
-- `2` — network or upstream retrieval failure (distinguishable from compatibility findings).
+- `2` — network or upstream retrieval failure, unreadable or unparsable local shims, or unreadable/malformed JSON manifest (distinguishable from compatibility findings).
 
 Output categories:
 - `[ok]` — no structural differences between the local shim and the pinned upstream source.

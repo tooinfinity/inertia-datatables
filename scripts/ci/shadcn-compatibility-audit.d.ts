@@ -53,6 +53,7 @@ export function auditComponent(
         comparisonStrategy: string;
         classification: string;
         upstreamSource: string;
+        semanticElements?: string[];
     },
     upstreamUrl: string,
 ): Promise<AuditComponentResult>;

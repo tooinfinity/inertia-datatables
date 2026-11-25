@@ -174,7 +174,7 @@ export {
 }
 `;
 
-// Upstream Table that removes <caption> — should be detected as a difference.
+// Upstream Table that renders null for TableCaption (removes <caption>) — should be detected as a difference.
 const upstreamTableSourceMissingCaption = `
 function Table({ className, ...props }) {
   return (
@@ -192,7 +192,27 @@ function TableBody({ children, ...props }) {
   return <tbody {...props}>{children}</tbody>
 }
 
-export { Table, TableHeader, TableBody }
+function TableFooter({ children, ...props }) {
+  return <tfoot {...props}>{children}</tfoot>
+}
+
+function TableRow({ children, ...props }) {
+  return <tr {...props}>{children}</tr>
+}
+
+function TableHead({ children, ...props }) {
+  return <th {...props}>{children}</th>
+}
+
+function TableCell({ children, ...props }) {
+  return <td {...props}>{children}</td>
+}
+
+function TableCaption({ children, ...props }) {
+  return null
+}
+
+export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell, TableCaption }
 `;
 
 function mockResponse(text: string, status = 200, statusText = 'OK') {
@@ -237,6 +257,37 @@ describe('shadcn-compatibility-audit: extractComponentStructure', () => {
         expect(structure.get('Table')).toContain('table');
         expect(structure.get('Table')).toContain('div');
         expect(structure.get('TableHeader')).toContain('thead');
+    });
+
+    it('handles qualified React.forwardRef when React is imported from "react"', () => {
+        const source = `
+import * as React from "react";
+export const Table = React.forwardRef((props, ref) => <table ref={ref} />);
+`;
+        const { components: structure } = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.get('Table')).toContain('table');
+    });
+
+    it('rejects forwardRef on arbitrary objects not imported from "react"', () => {
+        const source = `
+const Custom = { forwardRef: (cb) => cb() };
+export const Table = Custom.forwardRef(() => <table />);
+`;
+        const { components: structure } = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+    });
+
+    it('traverses JSX attributes in self-closing JSX elements', () => {
+        const source = `
+export function CustomTable() {
+    return <CustomWrapper icon={<span />} header={<div />} />;
+}
+`;
+        const { components: structure } = extractComponentStructure(source);
+        expect(structure.has('CustomTable')).toBe(true);
+        expect(structure.get('CustomTable')).toContain('span');
+        expect(structure.get('CustomTable')).toContain('div');
     });
 
     it('extracts all HTML elements including nested ones', () => {
@@ -351,7 +402,7 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
         const { components: upstream } = extractComponentStructure(upstreamTableSourceMissingCaption);
         const differences = compareStructures(local, upstream);
         expect(
-            differences.some((d) => d.includes('TableCaption') || d.includes('caption')),
+            differences.some((d) => d.includes('TableCaption') && d.includes('caption') && d.includes('renders <caption> locally but upstream does not render those elements')),
         ).toBe(true);
     });
 
@@ -1387,7 +1438,7 @@ export * as ns from './other';
         const source = `
 const Items = ([1, 2]).map(() => <li />);
 function Table() { return <table />; }
-export { Table };
+export { Table, Items };
 `;
         const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(true);

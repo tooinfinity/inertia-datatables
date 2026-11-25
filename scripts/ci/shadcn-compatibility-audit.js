@@ -199,6 +199,22 @@ export function extractComponentStructure(source) {
 
     // Collect top-level declarations (functions and variables) so exports can
     // reference them, including declarations that appear after their export.
+    // Also track React imports to validate qualified calls like React.forwardRef.
+    const reactNamespaces = new Set();
+    for (const statement of sourceFile.statements) {
+        if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) && statement.moduleSpecifier.text === 'react') {
+            const importClause = statement.importClause;
+            if (importClause) {
+                if (importClause.name) {
+                    reactNamespaces.add(importClause.name.text);
+                }
+                if (importClause.namedBindings && ts.isNamespaceImport(importClause.namedBindings)) {
+                    reactNamespaces.add(importClause.namedBindings.name.text);
+                }
+            }
+        }
+    }
+
     for (const statement of sourceFile.statements) {
         if (ts.isFunctionDeclaration(statement)) {
             const name = statement.name?.text;
@@ -209,7 +225,7 @@ export function extractComponentStructure(source) {
             for (const decl of statement.declarationList.declarations) {
                 const name = getBindingName(decl.name);
                 if (!name) continue;
-                const fnNode = resolveRenderFunction(decl.initializer);
+                const fnNode = resolveRenderFunction(decl.initializer, reactNamespaces);
                 if (fnNode) {
                     declarations.set(name, { node: fnNode });
                 }
@@ -319,6 +335,7 @@ function collectJsxElementNames(sourceFile, node) {
         } else if (kindName === 'JsxSelfClosingElement') {
             const tag = getJsxTagName(n.tagName);
             if (isHtmlElement(tag)) names.add(tag.toLowerCase());
+            if (n.attributes) ts.forEachChild(n.attributes, visit);
         } else {
             ts.forEachChild(n, visit);
         }
@@ -356,14 +373,14 @@ function getBindingName(binding) {
  * and the `forwardRef(...) => <JSX>` wrapper used by the local shims.
  * Returns null when the initializer cannot be analyzed reliably.
  */
-function resolveRenderFunction(initializer) {
+function resolveRenderFunction(initializer, reactNamespaces = new Set()) {
     if (!initializer) return null;
     if (ts.isArrowFunction(initializer)) return initializer;
     if (ts.isFunctionExpression(initializer)) return initializer;
     if (ts.isCallExpression(initializer)) {
-        // Only unwrap callbacks of supported wrappers (forwardRef). Callbacks
+        // Only unwrap callbacks of supported wrappers (forwardRef or React.forwardRef). Callbacks
         // of unrelated calls such as .map() are not component render bodies.
-        if (!isSupportedWrapper(initializer.expression)) return null;
+        if (!isSupportedWrapper(initializer.expression, reactNamespaces)) return null;
         for (const arg of initializer.arguments) {
             if (ts.isArrowFunction(arg)) return arg;
             if (ts.isFunctionExpression(arg)) return arg;
@@ -374,11 +391,23 @@ function resolveRenderFunction(initializer) {
 
 /**
  * Return true only for direct references to a supported component wrapper
- * (currently forwardRef), so unrelated call expressions are not treated as
- * component declarations.
+ * (forwardRef) or qualified React.forwardRef when React resolves to an import from "react",
+ * so unrelated call expressions are not treated as component declarations.
  */
-function isSupportedWrapper(node) {
-    return ts.isIdentifier(node) && node.text === 'forwardRef';
+function isSupportedWrapper(node, reactNamespaces = new Set()) {
+    if (ts.isIdentifier(node) && node.text === 'forwardRef') {
+        return true;
+    }
+    if (
+        ts.isPropertyAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        reactNamespaces.has(node.expression.text) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === 'forwardRef'
+    ) {
+        return true;
+    }
+    return false;
 }
 
 /**
