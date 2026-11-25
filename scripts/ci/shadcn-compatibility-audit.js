@@ -108,11 +108,12 @@ export function buildUpstreamUrl(upstream, componentName, commit) {
 }
 
 /**
- * Find the index of the matching closing brace for an opening brace at
- * `openIdx`, accounting for strings, template literals, and comments.
+ * Find the index of the matching closing parenthesis for an opening
+ * parenthesis at `openIdx`, tracking nested parentheses and accounting for
+ * strings, template literals, and comments.
  * Returns -1 if no match is found.
  */
-function findMatchingBrace(source, openIdx) {
+function findMatchingParen(source, openIdx) {
     let depth = 0;
     let inString = false;
     let stringChar = null;
@@ -157,8 +158,8 @@ function findMatchingBrace(source, openIdx) {
             stringChar = ch;
             continue;
         }
-        if (ch === '{') depth++;
-        if (ch === '}') {
+        if (ch === '(') depth++;
+        if (ch === ')') {
             depth--;
             if (depth === 0) return i;
         }
@@ -183,24 +184,65 @@ export function extractComponentStructure(source) {
     const components = new Map();
     const HTML_ELEMENT_RE = /<([a-z][a-z0-9]*)/g;
 
-    // Pattern A: export const Name =
-    const ARROW_DECL_RE = /export\s+const\s+([A-Za-z][A-Za-z0-9]*)\s*=/g;
+    // All top-level const-arrow and function declarations (exported or not),
+    // so grouped exports can reference declarations declared elsewhere in the
+    // file. Private helpers that are never exported are excluded later.
+    const declMap = new Map(); // name -> { start, kind }
 
-    // Pattern B: (export) function Name(
-    const FN_DECL_RE = /(?:export\s+)?function\s+([A-Za-z][A-Za-z0-9]*)\s*\(/g;
-
-    // Collect all component declarations with their positions.
-    const declarations = [];
+    const CONST_ARROW_RE = /\bconst\s+([A-Za-z][A-Za-z0-9]*)\s*=/g;
+    const FN_RE = /\bfunction\s+([A-Za-z][A-Za-z0-9]*)\s*\(/g;
 
     let match;
-    while ((match = ARROW_DECL_RE.exec(source)) !== null) {
-        declarations.push({ name: match[1], start: match.index });
+    while ((match = CONST_ARROW_RE.exec(source)) !== null) {
+        declMap.set(match[1], { start: match.index, kind: 'arrow' });
     }
-    while ((match = FN_DECL_RE.exec(source)) !== null) {
-        declarations.push({ name: match[1], start: match.index });
+    while ((match = FN_RE.exec(source)) !== null) {
+        declMap.set(match[1], { start: match.index, kind: 'function' });
     }
 
-    // Sort by position.
+    // Determine which names are actually exported, resolving aliases
+    // (export { A as B } -> public name B maps to declaration A).
+    // Supports inline exports and grouped exports.
+    const exported = new Map(); // publicName -> originalName
+
+    // Grouped exports: export { A, B, C } and export { A as Alias, B }.
+    const EXPORT_GROUP_RE = /export\s*\{[^}]*\}/g;
+    while ((match = EXPORT_GROUP_RE.exec(source)) !== null) {
+        const body = match[0]
+            .replace(/^export\s*\{\s*/, '')
+            .replace(/\s*\}\s*$/, '');
+        for (const item of body.split(',')) {
+            const trimmed = item.trim();
+            if (!trimmed) continue;
+            const parts = trimmed.split(/\s+as\s+/);
+            const originalName = parts[0].trim();
+            const publicName = parts.length > 1 ? parts[1].trim() : originalName;
+            if (
+                /^[A-Za-z][A-Za-z0-9]*$/.test(originalName) &&
+                /^[A-Za-z][A-Za-z0-9]*$/.test(publicName)
+            ) {
+                exported.set(publicName, originalName);
+            }
+        }
+    }
+
+    // Inline exports: export const Name = ..., export function Name(.
+    const EXPORT_INLINE_RE = /export\s+(?:const\s+([A-Za-z][A-Za-z0-9]*)\s*=|function\s+([A-Za-z][A-Za-z0-9]*)\s*\()/g;
+    while ((match = EXPORT_INLINE_RE.exec(source)) !== null) {
+        const originalName = match[1] || match[2];
+        exported.set(originalName, originalName);
+    }
+
+    // Build the component map only for exported names that have a declaration.
+    const declarations = [];
+    for (const [publicName, originalName] of exported) {
+        const decl = declMap.get(originalName);
+        if (decl) {
+            declarations.push({ name: publicName, start: decl.start, kind: decl.kind });
+        }
+    }
+
+    // Sort by position so sections can be delimited by the next declaration.
     declarations.sort((a, b) => a.start - b.start);
 
     for (let i = 0; i < declarations.length; i++) {
@@ -210,16 +252,17 @@ export function extractComponentStructure(source) {
 
         let bodyStart;
 
-        // Try arrow function body (after =>).
-        const arrowIdx = source.indexOf('=>', decl.start);
-        if (arrowIdx !== -1 && arrowIdx < sectionEnd) {
+        if (decl.kind === 'arrow') {
+            // Arrow function body (after =>).
+            const arrowIdx = source.indexOf('=>', decl.start);
+            if (arrowIdx === -1 || arrowIdx > sectionEnd) continue;
             bodyStart = arrowIdx + 2;
         } else {
             // Function declaration: find the opening brace of the body
             // after the closing parenthesis of the parameter list.
             const openParen = source.indexOf('(', decl.start);
             if (openParen === -1 || openParen > sectionEnd) continue;
-            const closeParen = findMatchingBrace(source, openParen);
+            const closeParen = findMatchingParen(source, openParen);
             if (closeParen === -1 || closeParen > sectionEnd) continue;
             const bodyBrace = source.indexOf('{', closeParen);
             if (bodyBrace === -1 || bodyBrace > sectionEnd) continue;

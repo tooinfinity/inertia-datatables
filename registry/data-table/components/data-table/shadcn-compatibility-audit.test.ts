@@ -164,6 +164,7 @@ export {
   Table,
   TableHeader,
   TableBody,
+  TableFooter,
   TableRow,
   TableHead,
   TableCell,
@@ -248,6 +249,48 @@ describe('shadcn-compatibility-audit: extractComponentStructure', () => {
         expect(structure.get('TableHead')).toContain('th');
         expect(structure.get('TableCell')).toContain('td');
         expect(structure.get('TableCaption')).toContain('caption');
+    });
+
+    it('resolves aliases in grouped exports (export { A as B })', () => {
+        const source = `
+const Table = ({ children }) => <table>{children}</table>;
+export { Table as MyTable }
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+        expect(structure.get('MyTable')).toContain('table');
+    });
+
+    it('excludes functions that are not exported (private helpers)', () => {
+        const source = `
+function Helper() { return <span />; }
+function Table({ children }) { return <table>{children}</table>; }
+export { Table }
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Helper')).toBe(false);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.get('Table')).toContain('table');
+    });
+
+    it('excludes a name removed from a grouped export', () => {
+        const source = `
+function Table({ children }) { return <table>{children}</table>; }
+function Caption({ children }) { return <caption>{children}</caption>; }
+export { Table }
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.has('Caption')).toBe(false);
+    });
+
+    it('handles nested parentheses in parameter types', () => {
+        const source = `
+function Table(onReady: () => void) { return <table />; }
+export { Table }
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.get('Table')).toContain('table');
     });
 });
 

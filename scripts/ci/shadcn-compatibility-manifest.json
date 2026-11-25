@@ -1,5 +1,4 @@
 {
-  "$schema": "../../schema/shadcn-compatibility-manifest.schema.json",
   "version": 1,
   "generated": "2026-11-25",
   "upstream": {
