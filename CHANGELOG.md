@@ -45,6 +45,7 @@
 ### Fixed
 
 - shadcn/ui compatibility audit: the component map is now built from actual export declarations (inline exports, grouped exports, and aliases) instead of every function declaration, so private helpers are excluded and components exported together at the end of a file are no longer missed; function parameter lists are now located with a delimiter-aware parenthesis scanner. Also removed a dangling manifest `$schema` reference to a schema file that does not exist.
+- shadcn/ui compatibility audit: a TSX source with syntax errors is now rejected upfront and reported as a distinct parse failure (with diagnostics) instead of being conflated with a valid file that has no supported component exports, so CI audit output clearly distinguishes unparseable files from files with no exports.
 - Pagination now appends a unique tiebreaker to Eloquent and Query Builder ordering, preventing tied rows from appearing on multiple pages or disappearing between pages. Distinct, grouped and union queries are ordered by their projected row key, grouping columns or key alias whenever the query shape allows it, and queries without a usable row key keep their original order (fixes #30)
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors
 - Suppress default reporting for handled client input errors and add the `handle_exceptions` opt-out configuration

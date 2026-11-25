@@ -205,7 +205,7 @@ function mockResponse(text: string, status = 200, statusText = 'OK') {
 
 describe('shadcn-compatibility-audit: extractComponentStructure', () => {
     it('extracts component names and rendered HTML elements from a local shim', () => {
-        const structure = extractComponentStructure(localTableSource);
+        const { components: structure } = extractComponentStructure(localTableSource);
         expect(structure.get('Table')).toContain('table');
         expect(structure.get('TableHeader')).toContain('thead');
         expect(structure.get('TableBody')).toContain('tbody');
@@ -218,25 +218,27 @@ describe('shadcn-compatibility-audit: extractComponentStructure', () => {
     });
 
     it('extracts component names from a minimal button shim', () => {
-        const structure = extractComponentStructure(localButtonSource);
+        const { components: structure } = extractComponentStructure(localButtonSource);
         expect(structure.get('Button')).toContain('button');
         expect(structure.size).toBe(1);
     });
 
     it('returns an empty map for source with no exported components', () => {
-        expect(extractComponentStructure('const x = 1;')).toEqual(new Map());
-        expect(extractComponentStructure('')).toEqual(new Map());
+        expect(extractComponentStructure('const x = 1;').components).toEqual(new Map());
+        expect(extractComponentStructure('const x = 1;').error).toBeNull();
+        expect(extractComponentStructure('').components).toEqual(new Map());
+        expect(extractComponentStructure('').error).toBeNull();
     });
 
     it('handles forwardRef-wrapped components', () => {
-        const structure = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: structure } = extractComponentStructure(upstreamTableSourceWithWrapper);
         expect(structure.get('Table')).toContain('table');
         expect(structure.get('Table')).toContain('div');
         expect(structure.get('TableHeader')).toContain('thead');
     });
 
     it('extracts all HTML elements including nested ones', () => {
-        const structure = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: structure } = extractComponentStructure(upstreamTableSourceWithWrapper);
         const table = structure.get('Table');
         // Table renders <div> wrapper and <table> element.
         // <thead>, <tbody>, etc. are rendered by TableHeader, TableBody, etc.
@@ -256,7 +258,7 @@ describe('shadcn-compatibility-audit: extractComponentStructure', () => {
 const Table = ({ children }) => <table>{children}</table>;
 export { Table as MyTable }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(false);
         expect(structure.get('MyTable')).toContain('table');
     });
@@ -267,7 +269,7 @@ function Helper() { return <span />; }
 function Table({ children }) { return <table>{children}</table>; }
 export { Table }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Helper')).toBe(false);
         expect(structure.has('Table')).toBe(true);
         expect(structure.get('Table')).toContain('table');
@@ -279,7 +281,7 @@ function Table({ children }) { return <table>{children}</table>; }
 function Caption({ children }) { return <caption>{children}</caption>; }
 export { Table }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(true);
         expect(structure.has('Caption')).toBe(false);
     });
@@ -289,15 +291,15 @@ export { Table }
 function Table(onReady: () => void) { return <table />; }
 export { Table }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.get('Table')).toContain('table');
     });
 });
 
 describe('shadcn-compatibility-audit: compareStructures', () => {
     it('reports no differences when local elements are subset of upstream (wrapper case)', () => {
-        const local = extractComponentStructure(localTableSource);
-        const upstream = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: local } = extractComponentStructure(localTableSource);
+        const { components: upstream } = extractComponentStructure(upstreamTableSourceWithWrapper);
         const differences = compareStructures(local, upstream);
         // The local Table renders {table, thead, ...} which is a subset of
         // upstream's {div, table, thead, ...} — wrapper is allowed.
@@ -306,8 +308,8 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
     });
 
     it('reports no differences when structures match exactly', () => {
-        const local = extractComponentStructure(localTableSource);
-        const upstream = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: local } = extractComponentStructure(localTableSource);
+        const { components: upstream } = extractComponentStructure(upstreamTableSourceWithWrapper);
         // Compare only semantic elements (exclude div wrapper)
         const localSemantic = new Map(local);
         const upstreamSemantic = new Map(upstream);
@@ -321,8 +323,8 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
     });
 
     it('reports a component missing upstream', () => {
-        const local = extractComponentStructure(localTableSource);
-        const upstream = extractComponentStructure(
+        const { components: local } = extractComponentStructure(localTableSource);
+        const { components: upstream } = extractComponentStructure(
             `export const Table = ({ children }) => <table>{children}</table>;`,
         );
         const differences = compareStructures(local, upstream);
@@ -332,10 +334,10 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
     });
 
     it('reports a component present upstream but missing locally', () => {
-        const local = extractComponentStructure(
+        const { components: local } = extractComponentStructure(
             `export const Table = ({ children }) => <table>{children}</table>;`,
         );
-        const upstream = extractComponentStructure(localTableSource);
+        const { components: upstream } = extractComponentStructure(localTableSource);
         const differences = compareStructures(local, upstream);
         expect(
             differences.some((d) => d.includes('TableHeader') && d.includes('not implemented locally')),
@@ -343,8 +345,8 @@ describe('shadcn-compatibility-audit: compareStructures', () => {
     });
 
     it('detects when upstream removes an element the local renders', () => {
-        const local = extractComponentStructure(localTableSource);
-        const upstream = extractComponentStructure(upstreamTableSourceMissingCaption);
+        const { components: local } = extractComponentStructure(localTableSource);
+        const { components: upstream } = extractComponentStructure(upstreamTableSourceMissingCaption);
         const differences = compareStructures(local, upstream);
         expect(
             differences.some((d) => d.includes('TableCaption') || d.includes('caption')),
@@ -488,7 +490,7 @@ describe('shadcn-compatibility-audit: auditComponentDrift', () => {
         );
         vi.stubGlobal('fetch', fetchMock);
 
-        const baselineStructure = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: baselineStructure } = extractComponentStructure(upstreamTableSourceWithWrapper);
         const component = {
             name: 'table',
             localPath: 'registry/data-table/components/ui/table.tsx',
@@ -514,7 +516,7 @@ describe('shadcn-compatibility-audit: auditComponentDrift', () => {
         );
         vi.stubGlobal('fetch', fetchMock);
 
-        const baselineStructure = extractComponentStructure(upstreamTableSourceWithWrapper);
+        const { components: baselineStructure } = extractComponentStructure(upstreamTableSourceWithWrapper);
         const component = {
             name: 'table',
             localPath: 'registry/data-table/components/ui/table.tsx',
@@ -548,7 +550,7 @@ describe('shadcn-compatibility-audit: auditComponentDrift', () => {
         };
         const result = await auditComponentDrift(
             component,
-            extractComponentStructure(upstreamTableSourceWithWrapper),
+            extractComponentStructure(upstreamTableSourceWithWrapper).components,
             'https://example.com/table.tsx',
             'abc123',
         );
@@ -902,7 +904,7 @@ function Table() {
 
 export { Table, Table as TableAlias };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(true);
         expect(structure.has('TableAlias')).toBe(true);
         expect(structure.get('Table')).toEqual(structure.get('TableAlias'));
@@ -919,7 +921,7 @@ function PrivateHelper() {
     return <caption />;
 }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('TableCaption')).toBe(true);
         expect(structure.has('PrivateHelper')).toBe(false);
         expect(structure.get('TableCaption')).toEqual(new Set());
@@ -933,7 +935,7 @@ function Table() {
 
 export { Table as DataTable };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(false);
         expect(structure.has('DataTable')).toBe(true);
         expect(structure.get('DataTable')).toContain('table');
@@ -945,7 +947,7 @@ function Table() { return <table />; }
 function Caption() { return <caption />; }
 export { Table, Caption };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.size).toBe(2);
         expect(structure.get('Table')).toEqual(new Set(['table']));
         expect(structure.get('Caption')).toEqual(new Set(['caption']));
@@ -957,7 +959,7 @@ function Table() { return <table />; }
 function Caption() { return <caption />; }
 export { Table };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(true);
         expect(structure.has('Caption')).toBe(false);
     });
@@ -967,7 +969,7 @@ export { Table };
 function Button() { return <button />; }
 export { Button };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.get('Button')).toContain('button');
     });
 
@@ -976,7 +978,7 @@ export { Button };
 const Button = () => <button />;
 export { Button };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.get('Button')).toContain('button');
     });
 
@@ -985,7 +987,7 @@ export { Button };
 const Button = function () { return <button />; };
 export { Button };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.get('Button')).toContain('button');
     });
 
@@ -994,7 +996,7 @@ export { Button };
 export function Button() { return <button />; }
 export const Input = () => <input />;
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.size).toBe(2);
         expect(structure.get('Button')).toContain('button');
         expect(structure.get('Input')).toContain('input');
@@ -1010,7 +1012,7 @@ function Multiline(
 ) { return <div />; }
 export { Simple, Destructured, Multiline };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.size).toBe(3);
         expect(structure.get('Simple')).toContain('div');
         expect(structure.get('Destructured')).toContain('div');
@@ -1031,7 +1033,7 @@ function Table({ children }) {
 }
 export { Table };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.get('Table')).toContain('div');
         expect(structure.get('Table')).toContain('table');
         expect(structure.get('Table')).toContain('thead');
@@ -1048,7 +1050,7 @@ function Caption() { return <caption />; }
 function Button() { return <button />; }
 export { Table, Caption, Button };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.size).toBe(3);
         expect(structure.get('Table')).toContain('table');
         expect(structure.get('Caption')).toContain('caption');
@@ -1062,7 +1064,7 @@ export default function Default() { return <div />; }
 function Real() { return <span />; }
 export { Real };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Real')).toBe(true);
         expect(structure.get('Real')).toContain('span');
         expect(structure.has('notAComponent')).toBe(false);
@@ -1077,7 +1079,7 @@ function Caption() { return <caption />; }
 export { Real };
 function Real() { return <div />; }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         // Table is re-exported only as a type, not as a value component.
         expect(structure.has('Table')).toBe(false);
         // Caption is re-exported only as a type via a type-only specifier.
@@ -1091,7 +1093,7 @@ function Real() { return <div />; }
         const source = `
 export default function Table() { return <table />; }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(false);
         expect(structure.size).toBe(0);
     });
@@ -1101,7 +1103,7 @@ export default function Table() { return <table />; }
 function Table() { return <table />; }
 export { Table } from './other';
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(false);
     });
 
@@ -1110,7 +1112,7 @@ export { Table } from './other';
 function Table() { return <table />; }
 export * as ns from './other';
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(false);
         expect(structure.size).toBe(0);
     });
@@ -1121,7 +1123,7 @@ const Items = ([1, 2]).map(() => <li />);
 function Table() { return <table />; }
 export { Table };
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('Table')).toBe(true);
         expect(structure.get('Table')).toContain('table');
         expect(structure.has('Items')).toBe(false);
@@ -1134,14 +1136,18 @@ export function TableCaption() {
     return null;
 }
 `;
-        const structure = extractComponentStructure(source);
+        const { components: structure } = extractComponentStructure(source);
         expect(structure.has('TableCaption')).toBe(true);
         expect(structure.get('TableCaption')).toEqual(new Set());
     });
 
     it('returns an empty map for TSX with syntax errors', () => {
-        expect(extractComponentStructure('function Table() { return <table />;')).toEqual(new Map());
-        expect(extractComponentStructure('export { ')).toEqual(new Map());
+        const broken = extractComponentStructure('function Table() { return <table />;');
+        expect(broken.components).toEqual(new Map());
+        expect(broken.error).toBeTruthy();
+        const incomplete = extractComponentStructure('export { ');
+        expect(incomplete.components).toEqual(new Map());
+        expect(incomplete.error).toBeTruthy();
     });
 });
 
@@ -1162,7 +1168,7 @@ describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Findi
         classification: 'structurally-mirrors-upstream',
     };
 
-    const baselineTable = extractComponentStructure(upstreamTableSourceWithWrapper);
+    const { components: baselineTable } = extractComponentStructure(upstreamTableSourceWithWrapper);
 
     it('extracts a valid baseline structure from a parseable baseline source', () => {
         expect(baselineTable.size).toBeGreaterThan(0);
@@ -1170,12 +1176,16 @@ describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Findi
     });
 
     it('returns an empty map for an empty baseline source', () => {
-        expect(extractComponentStructure('')).toEqual(new Map());
-        expect(extractComponentStructure('   ')).toEqual(new Map());
+        expect(extractComponentStructure('').components).toEqual(new Map());
+        expect(extractComponentStructure('').error).toBeNull();
+        expect(extractComponentStructure('   ').components).toEqual(new Map());
+        expect(extractComponentStructure('   ').error).toBeNull();
     });
 
     it('returns an empty map for invalid TSX baseline source', () => {
-        expect(extractComponentStructure('this is not valid tsx {{{')).toEqual(new Map());
+        const result = extractComponentStructure('this is not valid tsx {{{');
+        expect(result.components).toEqual(new Map());
+        expect(result.error).toBeTruthy();
     });
 
     it('reports an upstream-error when the baseline structure is empty', async () => {

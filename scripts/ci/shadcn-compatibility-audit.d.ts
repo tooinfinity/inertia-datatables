@@ -27,7 +27,10 @@ export function buildUpstreamUrl(
     componentName: string,
     commit: string,
 ): string;
-export function extractComponentStructure(source: string): Map<string, Set<string>>;
+export function extractComponentStructure(source: string): {
+    components: Map<string, Set<string>>;
+    error: string | null;
+};
 export function readLocalComponent(localPath: string):
     | { ok: true; source: string; structure: Map<string, Set<string>> }
     | { ok: false; error: string };

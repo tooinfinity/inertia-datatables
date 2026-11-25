@@ -140,14 +140,21 @@ export function extractComponentStructure(source) {
         true, // setParentNodes
     );
 
-    // Reject source with syntax errors before collecting declarations. An
-    // unparseable file yields no usable component structure rather than being
-    // mistaken for a file with no exports.
+    // Reject source with syntax errors before collecting declarations. A parse
+    // failure is reported separately (via the returned error) from a valid file
+    // that simply has no supported component exports, so callers can distinguish
+    // an unparseable file from one with no exports.
     const syntaxErrors = sourceFile.parseDiagnostics.filter(
         (d) => d.category === ts.DiagnosticCategory.Error,
     );
     if (syntaxErrors.length > 0) {
-        return components;
+        const message = syntaxErrors
+            .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+            .join('; ');
+        return {
+            components,
+            error: `failed to parse source: ${message}`,
+        };
     }
 
     // name -> { node: the function/arrow node whose body holds the JSX }
@@ -231,7 +238,7 @@ export function extractComponentStructure(source) {
         components.set(publicName, elements);
     }
 
-    return components;
+    return { components, error: null };
 }
 
 /**
@@ -340,10 +347,18 @@ export function readLocalComponent(localPath) {
         };
     }
 
+    const { components, error: parseError } = extractComponentStructure(source);
+    if (parseError) {
+        return {
+            ok: false,
+            error: `cannot parse local file ${localPath}: ${parseError}`,
+        };
+    }
+
     return {
         ok: true,
         source,
-        structure: extractComponentStructure(source),
+        structure: components,
     };
 }
 
@@ -591,7 +606,14 @@ export async function auditComponent(component) {
         return result;
     }
 
-    const upstreamStructure = extractComponentStructure(upstreamSource);
+    const { components: upstreamStructure, error: upstreamParseError } =
+        extractComponentStructure(upstreamSource);
+
+    if (upstreamParseError) {
+        result.status = 'upstream-error';
+        result.error = `failed to parse upstream source for ${component.upstreamComponent}: ${upstreamParseError}`;
+        return result;
+    }
 
     if (upstreamStructure.size === 0) {
         result.status = 'upstream-error';
@@ -664,7 +686,14 @@ export async function auditComponentDrift(component, baselineStructure, latestUr
         return result;
     }
 
-    const latestStructure = extractComponentStructure(latestSource);
+    const { components: latestStructure, error: latestParseError } =
+        extractComponentStructure(latestSource);
+
+    if (latestParseError) {
+        result.status = 'upstream-error';
+        result.error = `failed to parse upstream source for ${component.upstreamComponent} at ${latestCommit}: ${latestParseError}`;
+        return result;
+    }
 
     if (latestStructure.size === 0) {
         result.status = 'upstream-error';
@@ -817,7 +846,14 @@ export async function main(drift = false) {
             );
             try {
                 const baselineSource = await fetchWithTimeout(baselineUrl);
-                const structure = extractComponentStructure(baselineSource);
+                const { components: structure, error: baselineParseError } =
+                    extractComponentStructure(baselineSource);
+                if (baselineParseError) {
+                    console.error(
+                        `error: drift baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit} failed to parse: ${baselineParseError}`,
+                    );
+                    process.exit(2);
+                }
                 if (structure.size === 0) {
                     console.error(
                         `error: drift baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit} contained no parseable component exports; the baseline is unusable`,
