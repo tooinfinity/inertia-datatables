@@ -86,7 +86,7 @@ Intentional updates to protected compatibility shims require:
 2. A dedicated maintenance PR (not bundled with unrelated feature work).
 3. Verification that consumer-facing behavior and the registry dependencies remain compatible.
 
-CI enforcement of these boundaries (read-only checks on protected paths) and automated upstream drift detection are **deferred to PR 2 and PR 3** of this effort. This PR establishes the documentation and agent-instruction foundation only.
+CI enforcement of these boundaries (read-only checks on protected paths) is implemented in PR 2. Automated upstream compatibility drift detection is implemented in PR 3 via the `shadcn compatibility audit` workflow (`.github/workflows/shadcn-compatibility-audit.yml`). See "Upstream compatibility audit" below.
 
 ## Enforcement: CODEOWNERS and CI
 
@@ -122,6 +122,101 @@ Generated registry artifacts under `public/r/` are verified for drift by the exi
 ### Intentional maintenance changes to protected files
 
 Intentional updates to protected compatibility shims require explicit maintainer authorization and a dedicated maintenance PR (not bundled with unrelated feature work), as described in "How intentional upstream changes will be handled." There is no CI bypass mechanism for protected files; the branch-protection and ruleset configuration described above is the administrator-controlled gate.
+
+## Upstream compatibility audit
+
+The package maintains an automated compatibility audit that checks the package-maintained shadcn/ui compatibility shims under `registry/data-table/components/ui/` against the official shadcn/ui upstream sources. The audit is implemented in `scripts/ci/shadcn-compatibility-audit.js` and driven by the manifest in `scripts/ci/shadcn-compatibility-manifest.json`. It runs in CI through the `shadcn compatibility audit` workflow (`.github/workflows/shadcn-compatibility-audit.yml`).
+
+### Purpose
+
+The audit detects upstream changes that may require reviewing our compatibility shims. It is **audit-only**: it identifies review requirements but never modifies local component files. Upstream changes are signals for review, not instructions to copy upstream code.
+
+### How upstream references are pinned
+
+Each component in the manifest records an explicit upstream source URL pinned to a specific commit SHA on the official shadcn/ui repository (`shadcn-ui/ui`, branch `main`, style `new-york-v4`). Pinning to a commit SHA makes the audit reproducible and prevents it from silently following arbitrary upstream changes.
+
+### How to run the audit locally
+
+**Validation mode** (compares local shims against the pinned baseline — deterministic, runs on every PR):
+
+```bash
+npm ci
+node scripts/ci/shadcn-compatibility-audit.js
+```
+
+**Drift detection mode** (discovers the latest upstream commit and compares it against the baseline — reports whether upstream has changed since the baseline was reviewed):
+
+```bash
+npm ci
+node scripts/ci/shadcn-compatibility-audit.js --drift
+```
+
+The audit fetches each pinned upstream source and compares it against the local shim (validation mode) or the baseline source (drift mode). It does not modify any files.
+
+### CI jobs
+
+The `shadcn compatibility audit` workflow (`.github/workflows/shadcn-compatibility-audit.yml`) runs two jobs:
+
+1. **Validate** (runs on every push/PR to `main`): deterministic validation mode that compares local shims against the pinned baseline commit. Never follows mutable upstream references.
+2. **Detect upstream drift** (runs on a weekly schedule and via manual dispatch): discovers the latest commit on the upstream branch and compares it against the baseline. Reports whether shadcn/ui has changed since the baseline was reviewed.
+
+### How to interpret results
+
+Exit status:
+- `0` — no issues found.
+- `1` — one or more structural differences or manifest validation failures (requires review).
+- `2` — network or upstream retrieval failure (distinguishable from compatibility findings).
+
+Output categories:
+- `[ok]` — no structural differences between the local shim and the pinned upstream source.
+- `[manual-review]` — role-equivalent shim with no automated source comparison (see below).
+- `[review-required]` — upstream structural difference detected (exported component names or rendered HTML elements differ). This is a signal for review, not an instruction to copy upstream code.
+- `[upstream-error]` — failed to retrieve the pinned upstream source (network or availability problem).
+- `[error]` — local file error (e.g. missing or unreadable local shim).
+
+### Manifest validation
+
+The manifest (`scripts/ci/shadcn-compatibility-manifest.json`) is validated on every audit run. It must:
+- Contain exactly the seven expected component entries (button, checkbox, dropdown-menu, input, select, skeleton, table)
+- Have no duplicate component names
+- Validate local paths (must point to `.tsx` files)
+- Validate comparison strategies (`structural` or `manual`)
+- Validate upstream commit SHA format (40-char hex)
+- Validate upstream source URLs (must be HTTPS)
+
+An invalid manifest fails CI with exit status 1.
+
+
+### How to review an upstream change
+
+When the audit reports `[review-required]` for a component:
+
+1. Read the audit output to see which exported components or HTML elements differ.
+2. Open the pinned upstream source (URL in the manifest) and compare it against the local shim.
+3. Determine whether the upstream change affects the UI role the local shim serves.
+4. If an update is warranted, open a dedicated maintenance PR with explicit maintainer authorization. Do not bundle the update with unrelated feature work.
+5. Never automatically synchronize or overwrite local shim files.
+
+### How to update a local compatibility shim deliberately
+
+Intentional updates to protected compatibility shims require:
+
+1. Explicit maintainer authorization.
+2. A dedicated maintenance PR (not bundled with unrelated feature work).
+3. Verification that consumer-facing behavior and the registry dependencies remain compatible.
+
+### Components requiring manual review
+
+The following components are classified as `role-equivalent-shim` with `manual` comparison strategy. They are **not** verified upstream copies, so source diff is not meaningful. Changes to upstream always require manual compatibility review:
+
+- `button.tsx` — minimal `<button>` shim; omits `cn()`, cva, and Radix UI primitives.
+- `input.tsx` — minimal `<input>` shim; omits `cn()`, cva, and field wrapper pattern.
+- `select.tsx` — minimal select shim; omits `cn()`, cva, Radix UI Primitives, and popover-based content.
+- `dropdown-menu.tsx` — minimal dropdown menu shim; omits `cn()`, cva, and Radix UI Primitives.
+- `checkbox.tsx` — minimal checkbox `<input>` shim; omits `cn()`, cva, and Radix UI Primitives.
+- `skeleton.tsx` — minimal `<div>` shim; omits `cn()`, cva, animation, and pulse styling.
+
+Only `table.tsx` is classified as `structurally-mirrors-upstream` and is eligible for automated structural comparison. Even then, intentional simplifications (no `cn()`, no cva, no `className` prop, renders children directly) are not flagged as incompatibilities.
 
 ## How generated artifacts should be updated
 

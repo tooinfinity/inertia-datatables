@@ -33,6 +33,7 @@
 - `->filterEnum()` for deriving select filter options from a PHP `BackedEnum`, with sensible default labels, custom labels via a map or resolver, and validation of submitted values against the enum's backed values (fixes #78)
 - The test suite now runs against MySQL 8 and PostgreSQL 16 in CI, in addition to SQLite, and the database connection is driven by the standard `DB_*` environment variables (fixes #27)
 - CI: enforce shadcn/ui component ownership boundaries — CODEOWNERS rules for the protected compatibility shims, generated registry artifacts, registry manifest, and ownership documentation, plus a `shadcn ownership` workflow that flags protected compatibility shim changes in pull requests and validates CODEOWNERS coverage (part of #136).
+- CI: add shadcn/ui compatibility audit — automated audit that checks the seven package-maintained compatibility shims (button, checkbox, dropdown-menu, input, select, table, skeleton) against pinned official shadcn/ui upstream sources, reports structural differences requiring review, classifies role-equivalent shims as requiring manual review, distinguishes network failures from compatibility findings, and validates the compatibility manifest. Runs via the `shadcn compatibility audit` workflow with a deterministic validation job on every PR and a drift-detection job on schedule/manual dispatch (part of #136).
 
 ### Changed
 
