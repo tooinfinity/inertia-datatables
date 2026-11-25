@@ -58,6 +58,10 @@
 - React layer: pagination controls are exposed as a navigation landmark (`aria-label="Pagination"`) and the result summary is a polite live region (`role="status"`, `aria-live="polite"`) so screen-reader users can navigate pagination and hear result ranges from accepted responses and immediate row selection changes (fixes #107)
 - React layer: filter chip dropdown options now use accessible Radix menu selection primitives — select and multi-select options render as `menuitemcheckbox` with `aria-checked`, and boolean Yes/No options render as a mutually exclusive `menuitemradio` group — instead of a `DropdownMenuItem` containing a nested `Checkbox` (fixes #108)
 
+### Documentation
+
+- Establish shadcn/ui component ownership boundaries and agent-protection rules for `registry/data-table/components/ui/`, `registry/data-table/components/data-table/`, and generated `public/r/` artifacts; add `docs/architecture/shadcn-component-ownership.md`.
+
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 
 Initial pre-release.
