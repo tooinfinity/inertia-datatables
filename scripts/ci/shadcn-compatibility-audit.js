@@ -557,6 +557,10 @@ export function validateManifest(manifest) {
     } else {
         if (!upstream.repository || typeof upstream.repository !== 'string') {
             errors.push('manifest.upstream.repository is missing or not a string');
+        } else if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(upstream.repository)) {
+            errors.push(
+                'manifest.upstream.repository must contain exactly two non-empty segments (owner/repo)',
+            );
         }
         if (!upstream.branch || typeof upstream.branch !== 'string') {
             errors.push('manifest.upstream.branch is missing or not a string');
@@ -597,9 +601,14 @@ export function validateManifest(manifest) {
 
                 const decodedPathname = decodeURIComponent(parsedTemplateUrl.pathname);
                 const pathSegments = decodedPathname.replace(/^\/+/, '').split('/');
-                if (typeof upstream.repository === 'string' && upstream.repository.includes('/')) {
+                if (typeof upstream.repository === 'string') {
                     const expectedRepoSegments = upstream.repository.split('/');
-                    if (pathSegments.length < 2 || pathSegments[0] !== expectedRepoSegments[0] || pathSegments[1] !== expectedRepoSegments[1]) {
+                    if (
+                        expectedRepoSegments.length !== 2 ||
+                        pathSegments.length < 2 ||
+                        pathSegments[0] !== expectedRepoSegments[0] ||
+                        pathSegments[1] !== expectedRepoSegments[1]
+                    ) {
                         errors.push(
                             'manifest.upstream.rawUrlTemplate owner and repository path segments must match manifest.upstream.repository exactly',
                         );
@@ -763,7 +772,17 @@ export async function auditComponent(component, upstreamUrl) {
         error: null,
     };
 
-    // Manual strategy: no automated comparison possible.
+    // Validate the local component file first for every strategy.
+    // If a component file is missing, unreadable, or cannot be parsed,
+    // the audit must report an error rather than silently skipping validation.
+    const local = readLocalComponent(component.localPath);
+    if (!local.ok) {
+        result.status = 'error';
+        result.error = local.error;
+        return result;
+    }
+
+    // Manual strategy: local file exists and parses; no automated upstream comparison.
     if (component.comparisonStrategy === 'manual') {
         result.status = 'manual-review';
         result.differences = [
@@ -795,13 +814,6 @@ export async function auditComponent(component, upstreamUrl) {
     if (upstreamStructure.size === 0) {
         result.status = 'upstream-error';
         result.error = `upstream source for ${component.upstreamComponent} contained no parseable component exports`;
-        return result;
-    }
-
-    const local = readLocalComponent(component.localPath);
-    if (!local.ok) {
-        result.status = 'error';
-        result.error = local.error;
         return result;
     }
 

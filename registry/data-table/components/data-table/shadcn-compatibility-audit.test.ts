@@ -439,6 +439,37 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         expect(result.differences[0]).toContain('manual compatibility review');
     });
 
+    it('reports an error when a manual-strategy component local file is missing', async () => {
+        const component = {
+            ...baseManifest.components[1], // button — manual
+            localPath: 'registry/data-table/components/ui/nonexistent-button.tsx',
+        };
+        const result = await auditComponent(component, component.upstreamSource);
+
+        expect(result.status).toBe('error');
+        expect(result.upstreamFetched).toBe(false);
+        expect(result.error).toContain('cannot read local file');
+    });
+
+    it('reports an error when a manual-strategy component local file has syntax errors', async () => {
+        const fs = await import('node:fs');
+        const tmpPath = 'registry/data-table/components/ui/tmp-broken-button.tsx';
+        fs.writeFileSync(tmpPath, 'export const Button = {{{ invalid;');
+        try {
+            const component = {
+                ...baseManifest.components[1], // button — manual
+                localPath: tmpPath,
+            };
+            const result = await auditComponent(component, component.upstreamSource);
+
+            expect(result.status).toBe('error');
+            expect(result.upstreamFetched).toBe(false);
+            expect(result.error).toContain('cannot parse local file');
+        } finally {
+            fs.unlinkSync(tmpPath);
+        }
+    });
+
     it('detects no structural difference when upstream matches (wrapper allowed)', async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             mockResponse(upstreamTableSourceWithWrapper),
@@ -530,7 +561,8 @@ describe('shadcn-compatibility-audit: auditComponent', () => {
         const result = await auditComponent(component, tableUpstreamUrl);
 
         expect(result.status).toBe('error');
-        expect(result.upstreamFetched).toBe(true);
+        expect(result.upstreamFetched).toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
         expect(result.error).toContain('cannot read local file');
     });
 
@@ -1107,6 +1139,42 @@ describe('shadcn-compatibility-audit: manifest validation', () => {
         const result = validateManifest(bad);
         expect(result.valid).toBe(false);
         expect(result.errors.some((e) => e.includes('repository'))).toBe(true);
+    });
+
+    it('rejects a manifest with malformed repository format without a slash', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: { ...baseManifest.upstream, repository: 'shadcn-ui' },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('exactly two non-empty segments (owner/repo)')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest with extra repository path segments', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: { ...baseManifest.upstream, repository: 'shadcn-ui/ui/extra' },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('exactly two non-empty segments (owner/repo)')),
+        ).toBe(true);
+    });
+
+    it('rejects a manifest with empty owner or repo segment', () => {
+        const bad = {
+            ...baseManifest,
+            upstream: { ...baseManifest.upstream, repository: '/ui' },
+        };
+        const result = validateManifest(bad);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.includes('exactly two non-empty segments (owner/repo)')),
+        ).toBe(true);
     });
 
     it('rejects a manifest with a non-HTTPS upstream source', () => {

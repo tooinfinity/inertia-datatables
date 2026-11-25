@@ -184,7 +184,8 @@ The manifest (`scripts/ci/shadcn-compatibility-manifest.json`) is validated on e
 - Contain exactly the seven expected component entries (button, checkbox, dropdown-menu, input, select, skeleton, table)
 - Have no duplicate component names
 - Validate local paths (must point to `.tsx` files)
-- Validate comparison strategies (`structural` or `manual`)
+- Validate comparison strategies (`structural` for `table`, `manual` for all other shims)
+- Validate upstream repository format (exactly two non-empty segments `owner/repo`)
 - Validate upstream commit SHA format (40-char hex)
 - Validate upstream source URLs (must be HTTPS)
 
