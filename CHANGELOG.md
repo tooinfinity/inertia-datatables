@@ -35,6 +35,10 @@
 - CI: enforce shadcn/ui component ownership boundaries — CODEOWNERS rules for the protected compatibility shims, generated registry artifacts, registry manifest, and ownership documentation, plus a `shadcn ownership` workflow that flags protected compatibility shim changes in pull requests and validates CODEOWNERS coverage (part of #136).
 - CI: add shadcn/ui compatibility audit — automated audit that checks the seven package-maintained compatibility shims (button, checkbox, dropdown-menu, input, select, table, skeleton) against pinned official shadcn/ui upstream sources, reports structural differences requiring review, classifies role-equivalent shims as requiring manual review, distinguishes network failures from compatibility findings, and validates the compatibility manifest. Runs via the `shadcn compatibility audit` workflow with a deterministic validation job on every PR and a drift-detection job on schedule/manual dispatch (part of #136).
 
+### Docs
+
+- Clarify that the shadcn/ui compatibility audit drift mode reports only rendered HTML elements removed by the latest upstream (elements the baseline no longer renders); elements upstream adds are not reported, consistent with the validation subset rule.
+
 ### Changed
 
 - Polished the DataTable registry UI/UX following shadcn/ui data-table patterns: cohesive toolbar layout with filter reset, in-toolbar column visibility, accessible dropdown-driven column filtering, integrated pagination with zero-result boundary handling and row selection feedback, and contained horizontal scrolling (fixes #79)

@@ -197,7 +197,7 @@ Drift detection mode (runs on a weekly schedule and via manual dispatch) does tw
 1. Discovers the latest commit SHA on the upstream `main` branch (`manifest.upstream.branch`) through the GitHub API.
 2. For the structurally-compared component (`table.tsx`), fetches the upstream source at that latest commit and compares it against the **baseline structure** (the structure extracted from the pinned `baselineCommit` source).
 
-Drift mode detects structural differences in `table.tsx` only — it does not detect every upstream change, and the six `manual` shims are not drift-compared. An unchanged result means no structural drift was detected — it does not establish complete compatibility. It never modifies local files; it only surfaces drift for review.
+Drift mode applies the same subset rule as validation mode: it reports only rendered HTML elements the baseline component renders that the latest upstream no longer renders (i.e., removed elements). Elements the latest upstream adds are **not** reported, since upstream may add wrapper elements without creating an incompatibility. Drift mode detects structural differences in `table.tsx` only — it does not detect every upstream change, and the six `manual` shims are not drift-compared. An unchanged result means no structural drift was detected — it does not establish complete compatibility. It never modifies local files; it only surfaces drift for review.
 
 ### Where the report exposes both commit SHAs
 
