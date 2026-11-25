@@ -133,7 +133,11 @@ The audit detects upstream changes that may require reviewing our compatibility 
 
 ### How upstream references are pinned
 
-Each component in the manifest records an explicit upstream source URL pinned to a specific commit SHA on the official shadcn/ui repository (`shadcn-ui/ui`, branch `main`, style `new-york-v4`). Pinning to a commit SHA makes the audit reproducible and prevents it from silently following arbitrary upstream changes.
+Each component in the manifest records an explicit upstream source URL pinned to a specific commit SHA on the official shadcn/ui repository (`shadcn-ui/ui`, branch `main`, style `new-york-v4`). Pinning to a commit SHA makes the audit reproducible and prevents it from silently following arbitrary upstream changes. The pinned commit is the **baseline**: it is the upstream revision that was last reviewed and accepted as compatible with the local shims.
+
+### How the audit compares local shims against the baseline
+
+Validation mode (runs on every push/PR) fetches each pinned baseline source and compares the local shim against it. This is deterministic: it always uses `manifest.upstream.baselineCommit`, never a mutable upstream reference. It verifies that the exported component names and rendered HTML elements of the local shim remain compatible with the pinned upstream revision.
 
 ### How to run the audit locally
 
@@ -186,16 +190,49 @@ The manifest (`scripts/ci/shadcn-compatibility-manifest.json`) is validated on e
 
 An invalid manifest fails CI with exit status 1.
 
+### How drift mode discovers and compares the latest upstream commit
+
+Drift detection mode (runs on a weekly schedule and via manual dispatch) does two things:
+
+1. Discovers the latest commit SHA on the upstream `main` branch (`manifest.upstream.branch`) through the GitHub API.
+2. For each structurally-compared component, fetches the upstream source at that latest commit and compares it against the **baseline structure** (the structure extracted from the pinned `baselineCommit` source).
+
+It reports whether shadcn/ui has changed since the baseline was reviewed. It never modifies local files; it only surfaces drift for review.
+
+### Where the report exposes both commit SHAs
+
+In drift mode, the audit prints a header line before the report:
+
+```
+drift detection: baseline=<baselineCommit>, latest=<latestCommit>
+```
+
+Each drift result also carries the `latest` commit in its `commit` field. Together these tell a maintainer exactly which two commits are being compared: the pinned baseline (`baselineCommit`) and the latest upstream (`latestCommit`).
 
 ### How to review an upstream change
 
-When the audit reports `[review-required]` for a component:
+When the audit reports `[review-required]` for a component in drift mode:
 
-1. Read the audit output to see which exported components or HTML elements differ.
-2. Open the pinned upstream source (URL in the manifest) and compare it against the local shim.
-3. Determine whether the upstream change affects the UI role the local shim serves.
-4. If an update is warranted, open a dedicated maintenance PR with explicit maintainer authorization. Do not bundle the update with unrelated feature work.
-5. Never automatically synchronize or overwrite local shim files.
+1. Note the two commits from the report header: `baseline=<baselineCommit>` and `latest=<latestCommit>`.
+2. Open the upstream source at both commits and diff them (e.g. compare `{baselineCommit}/.../{component}.tsx` against `{latestCommit}/.../{component}.tsx` on `raw.githubusercontent.com` or GitHub's compare view).
+3. Identify which exported components or rendered HTML elements changed (the report lists them).
+4. Determine whether the upstream change affects the UI role the local shim serves.
+5. If an update is warranted, open a dedicated maintenance PR with explicit maintainer authorization. Do not bundle the update with unrelated feature work.
+6. Never automatically synchronize or overwrite local shim files.
+
+### How to decide whether an upstream change requires a local compatibility update
+
+Not every upstream change requires touching the local shims:
+
+- If upstream only changed styling, class names, or internals that do not alter the exported component set or the rendered HTML elements, no local change is needed — the local shim still serves the same UI role.
+- If upstream removed or renamed an exported component the local shim relies on, or removed an HTML element the local shim renders, the local shim may need review to remain compatible.
+- Remember that six of the seven shims are `role-equivalent` minimal implementations, not verified upstream copies; their source diff is not meaningful and changes always require manual review.
+
+Only `table.tsx` is eligible for automated structural comparison, and even then intentional simplifications (no `cn()`, no cva, no `className` prop, renders children directly) are not flagged as incompatibilities.
+
+### Why the audit intentionally does not automatically synchronize or overwrite local components
+
+The audit is audit-only: it identifies review requirements but never modifies local component files. Local compatibility shims are intentionally simplified and must not be automatically synchronized with upstream. Automatic synchronization would risk overwriting deliberate local simplifications, breaking the package's frontend and tests, and introducing silent upgrade hazards when shadcn/ui releases new versions. Any intentional update to a protected compatibility shim requires explicit maintainer authorization and a dedicated maintenance PR.
 
 ### How to update a local compatibility shim deliberately
 

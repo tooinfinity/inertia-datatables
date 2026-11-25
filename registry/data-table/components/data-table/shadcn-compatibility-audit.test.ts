@@ -548,12 +548,13 @@ describe('shadcn-compatibility-audit: auditComponentDrift', () => {
         };
         const result = await auditComponentDrift(
             component,
-            new Map(),
+            extractComponentStructure(upstreamTableSourceWithWrapper),
             'https://example.com/table.tsx',
             'abc123',
         );
 
         expect(result.status).toBe('upstream-error');
+        expect(result.upstreamFetched).toBe(false);
         expect(result.error).toContain('failed to retrieve upstream source');
     });
 });
@@ -889,5 +890,271 @@ describe('shadcn-compatibility-audit: manifest validation (real manifest)', () =
         const result = validateManifest(manifest);
         expect(result.valid).toBe(true);
         expect(result.errors).toEqual([]);
+    });
+});
+
+describe('shadcn-compatibility-audit: extractComponentStructure (Finding 1 & 2 — TS AST export boundaries)', () => {
+    it('resolves both names in grouped exports to the same component structure', () => {
+        const source = `
+function Table() {
+    return <table />;
+}
+
+export { Table, Table as TableAlias };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.has('TableAlias')).toBe(true);
+        expect(structure.get('Table')).toEqual(structure.get('TableAlias'));
+        expect(structure.get('Table')).toContain('table');
+    });
+
+    it('does not let a private helper contribute JSX to an exported component', () => {
+        const source = `
+export function TableCaption() {
+    return null;
+}
+
+function PrivateHelper() {
+    return <caption />;
+}
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('TableCaption')).toBe(true);
+        expect(structure.has('PrivateHelper')).toBe(false);
+        expect(structure.get('TableCaption')).toEqual(new Set());
+    });
+
+    it('identifies an export alias correctly', () => {
+        const source = `
+function Table() {
+    return <table />;
+}
+
+export { Table as DataTable };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+        expect(structure.has('DataTable')).toBe(true);
+        expect(structure.get('DataTable')).toContain('table');
+    });
+
+    it('gives each exported component in the same file only its own JSX', () => {
+        const source = `
+function Table() { return <table />; }
+function Caption() { return <caption />; }
+export { Table, Caption };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.size).toBe(2);
+        expect(structure.get('Table')).toEqual(new Set(['table']));
+        expect(structure.get('Caption')).toEqual(new Set(['caption']));
+    });
+
+    it('detects a removed or renamed required export', () => {
+        const source = `
+function Table() { return <table />; }
+function Caption() { return <caption />; }
+export { Table };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.has('Caption')).toBe(false);
+    });
+
+    it('handles named function declarations', () => {
+        const source = `
+function Button() { return <button />; }
+export { Button };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.get('Button')).toContain('button');
+    });
+
+    it('handles arrow-function declarations', () => {
+        const source = `
+const Button = () => <button />;
+export { Button };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.get('Button')).toContain('button');
+    });
+
+    it('handles function expressions', () => {
+        const source = `
+const Button = function () { return <button />; };
+export { Button };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.get('Button')).toContain('button');
+    });
+
+    it('handles inline exports (export function / export const)', () => {
+        const source = `
+export function Button() { return <button />; }
+export const Input = () => <input />;
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.size).toBe(2);
+        expect(structure.get('Button')).toContain('button');
+        expect(structure.get('Input')).toContain('input');
+    });
+
+    it('handles simple, destructured and multiline parameters', () => {
+        const source = `
+function Simple() { return <div />; }
+function Destructured({ children }) { return <div>{children}</div>; }
+function Multiline(
+    onReady: () => void,
+    id: string,
+) { return <div />; }
+export { Simple, Destructured, Multiline };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.size).toBe(3);
+        expect(structure.get('Simple')).toContain('div');
+        expect(structure.get('Destructured')).toContain('div');
+        expect(structure.get('Multiline')).toContain('div');
+    });
+
+    it('preserves nested JSX within a component body', () => {
+        const source = `
+function Table({ children }) {
+    return (
+        <div>
+            <table>
+                <thead><tr><th /></tr></thead>
+                <tbody><tr><td /></tr></tbody>
+            </table>
+        </div>
+    );
+}
+export { Table };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.get('Table')).toContain('div');
+        expect(structure.get('Table')).toContain('table');
+        expect(structure.get('Table')).toContain('thead');
+        expect(structure.get('Table')).toContain('tr');
+        expect(structure.get('Table')).toContain('th');
+        expect(structure.get('Table')).toContain('tbody');
+        expect(structure.get('Table')).toContain('td');
+    });
+
+    it('handles multiple exported components in one file', () => {
+        const source = `
+function Table() { return <table />; }
+function Caption() { return <caption />; }
+function Button() { return <button />; }
+export { Table, Caption, Button };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.size).toBe(3);
+        expect(structure.get('Table')).toContain('table');
+        expect(structure.get('Caption')).toContain('caption');
+        expect(structure.get('Button')).toContain('button');
+    });
+
+    it('skips unsupported export patterns instead of producing a bogus structure', () => {
+        const source = `
+export const notAComponent = 42;
+export default function Default() { return <div />; }
+function Real() { return <span />; }
+export { Real };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Real')).toBe(true);
+        expect(structure.get('Real')).toContain('span');
+        expect(structure.has('notAComponent')).toBe(false);
+    });
+});
+
+describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Finding 3)', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const structuralComponent = {
+        name: 'table',
+        localPath: 'registry/data-table/components/ui/table.tsx',
+        upstreamComponent: 'table',
+        comparisonStrategy: 'structural',
+        classification: 'structurally-mirrors-upstream',
+    };
+
+    const baselineTable = extractComponentStructure(upstreamTableSourceWithWrapper);
+
+    it('extracts a valid baseline structure from a parseable baseline source', () => {
+        expect(baselineTable.size).toBeGreaterThan(0);
+        expect(baselineTable.get('Table')).toContain('table');
+    });
+
+    it('returns an empty map for an empty baseline source', () => {
+        expect(extractComponentStructure('')).toEqual(new Map());
+        expect(extractComponentStructure('   ')).toEqual(new Map());
+    });
+
+    it('returns an empty map for invalid TSX baseline source', () => {
+        expect(extractComponentStructure('this is not valid tsx {{{')).toEqual(new Map());
+    });
+
+    it('reports an upstream-error when the baseline structure is empty', async () => {
+        const result = await auditComponentDrift(
+            structuralComponent,
+            new Map(),
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('upstream-error');
+        expect(result.error).toContain('baseline');
+        expect(result.error).toContain('table');
+    });
+
+    it('reports an upstream-error when the baseline structure is null', async () => {
+        const result = await auditComponentDrift(
+            structuralComponent,
+            null,
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('upstream-error');
+        expect(result.error).toContain('baseline');
+    });
+
+    it('fails explicitly when one baseline component is unusable during drift comparison', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(upstreamTableSourceMissingCaption),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const result = await auditComponentDrift(
+            structuralComponent,
+            new Map(), // unusable baseline
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('upstream-error');
+        expect(result.upstreamFetched).toBe(false);
+    });
+
+    it('performs drift comparison when the baseline is usable', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            mockResponse(upstreamTableSourceMissingCaption),
+        );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const result = await auditComponentDrift(
+            structuralComponent,
+            baselineTable,
+            'https://example.com/table.tsx',
+            'latest123',
+        );
+        expect(result.status).toBe('structural-difference');
+        expect(result.commit).toBe('latest123');
+        expect(result.differences.length).toBeGreaterThan(0);
     });
 });

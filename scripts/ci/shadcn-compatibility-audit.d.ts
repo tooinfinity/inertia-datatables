@@ -60,4 +60,4 @@ export function auditComponentDrift(
     latestCommit: string,
 ): Promise<AuditComponentResult>;
 export function buildReport(results: AuditComponentResult[]): string;
-export async function main(drift?: boolean): Promise<void>;
+export function main(drift?: boolean): Promise<void>;

@@ -24,6 +24,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import * as ts from 'typescript';
 
 const MANIFEST_PATH = 'scripts/ci/shadcn-compatibility-manifest.json';
 const EXPECTED_COMPONENT_NAMES = [
@@ -108,184 +109,165 @@ export function buildUpstreamUrl(upstream, componentName, commit) {
 }
 
 /**
- * Find the index of the matching closing parenthesis for an opening
- * parenthesis at `openIdx`, tracking nested parentheses and accounting for
- * strings, template literals, and comments.
- * Returns -1 if no match is found.
- */
-function findMatchingParen(source, openIdx) {
-    let depth = 0;
-    let inString = false;
-    let stringChar = null;
-    let inLineComment = false;
-    let inBlockComment = false;
-
-    for (let i = openIdx; i < source.length; i++) {
-        const ch = source[i];
-        const next = source[i + 1];
-
-        if (inLineComment) {
-            if (ch === '\n') inLineComment = false;
-            continue;
-        }
-        if (inBlockComment) {
-            if (ch === '*' && next === '/') {
-                inBlockComment = false;
-                i++;
-            }
-            continue;
-        }
-        if (inString) {
-            if (ch === '\\') {
-                i++; // skip escaped character
-                continue;
-            }
-            if (ch === stringChar) inString = false;
-            continue;
-        }
-        if (ch === '/' && next === '/') {
-            inLineComment = true;
-            i++;
-            continue;
-        }
-        if (ch === '/' && next === '*') {
-            inBlockComment = true;
-            i++;
-            continue;
-        }
-        if (ch === '"' || ch === "'" || ch === '`') {
-            inString = true;
-            stringChar = ch;
-            continue;
-        }
-        if (ch === '(') depth++;
-        if (ch === ')') {
-            depth--;
-            if (depth === 0) return i;
-        }
-    }
-
-    return -1;
-}
-
-/**
  * Extract exported named component declarations from a .tsx source string.
  * Returns a map of componentName -> Set of lowercase HTML element names
  * rendered by that component (including nested elements).
  *
- * Handles both:
- *   - Pattern A: export const Name = ... => <JSX>
- *   - Pattern B: (export) function Name(...) { ... }
+ * The source is parsed with the TypeScript Compiler API (ts.createSourceFile)
+ * so exported declarations, aliases, and component bodies are resolved from the
+ * AST rather than fragile regular expressions. Only lowercase JSX tags are
+ * treated as HTML elements (e.g. <table>, <div>); PascalCase tags (e.g.
+ * <TableHeader>) are React components, not HTML elements.
  *
- * Only lowercase JSX tags are treated as HTML elements (e.g. <table>, <div>).
- * PascalCase tags (e.g. <TableHeader>) are React components, not HTML elements.
+ * Supported declaration shapes:
+ *   - function Name() { return <JSX>; }
+ *   - export function Name() { return <JSX>; }
+ *   - const Name = () => <JSX>;  /  export const Name = () => <JSX>;
+ *   - const Name = forwardRef(...) => <JSX>;  /  export const Name = ...;
+ *   - export { Name, Name as Alias } (grouped exports, with aliases)
+ *
+ * Private (non-exported) helpers are excluded. If a declaration's render body
+ * cannot be located reliably it is skipped rather than producing a bogus
+ * structure.
  */
 export function extractComponentStructure(source) {
     const components = new Map();
     const HTML_ELEMENT_RE = /<([a-z][a-z0-9]*)/g;
 
-    // All top-level const-arrow and function declarations (exported or not),
-    // so grouped exports can reference declarations declared elsewhere in the
-    // file. Private helpers that are never exported are excluded later.
-    const declMap = new Map(); // name -> { start, kind }
+    const sourceFile = ts.createSourceFile(
+        'component.tsx',
+        source,
+        ts.ScriptTarget.Latest,
+        true, // setParentNodes
+    );
 
-    const CONST_ARROW_RE = /\bconst\s+([A-Za-z][A-Za-z0-9]*)\s*=/g;
-    const FN_RE = /\bfunction\s+([A-Za-z][A-Za-z0-9]*)\s*\(/g;
+    // name -> { node: the function/arrow node whose body holds the JSX }
+    const declarations = new Map();
 
-    let match;
-    while ((match = CONST_ARROW_RE.exec(source)) !== null) {
-        declMap.set(match[1], { start: match.index, kind: 'arrow' });
-    }
-    while ((match = FN_RE.exec(source)) !== null) {
-        declMap.set(match[1], { start: match.index, kind: 'function' });
-    }
-
-    // Determine which names are actually exported, resolving aliases
-    // (export { A as B } -> public name B maps to declaration A).
-    // Supports inline exports and grouped exports.
-    const exported = new Map(); // publicName -> originalName
-
-    // Grouped exports: export { A, B, C } and export { A as Alias, B }.
-    const EXPORT_GROUP_RE = /export\s*\{[^}]*\}/g;
-    while ((match = EXPORT_GROUP_RE.exec(source)) !== null) {
-        const body = match[0]
-            .replace(/^export\s*\{\s*/, '')
-            .replace(/\s*\}\s*$/, '');
-        for (const item of body.split(',')) {
-            const trimmed = item.trim();
-            if (!trimmed) continue;
-            const parts = trimmed.split(/\s+as\s+/);
-            const originalName = parts[0].trim();
-            const publicName = parts.length > 1 ? parts[1].trim() : originalName;
-            if (
-                /^[A-Za-z][A-Za-z0-9]*$/.test(originalName) &&
-                /^[A-Za-z][A-Za-z0-9]*$/.test(publicName)
-            ) {
-                exported.set(publicName, originalName);
+    // Collect top-level declarations (functions and variables) so exports can
+    // reference them, including declarations that appear after their export.
+    for (const statement of sourceFile.statements) {
+        if (ts.isFunctionDeclaration(statement)) {
+            const name = statement.name?.text;
+            if (name) {
+                declarations.set(name, { node: statement });
+            }
+        } else if (ts.isVariableStatement(statement)) {
+            for (const decl of statement.declarationList.declarations) {
+                const name = getBindingName(decl.name);
+                if (!name) continue;
+                const fnNode = resolveRenderFunction(decl.initializer);
+                if (fnNode) {
+                    declarations.set(name, { node: fnNode });
+                }
             }
         }
     }
 
-    // Inline exports: export const Name = ..., export function Name(.
-    const EXPORT_INLINE_RE = /export\s+(?:const\s+([A-Za-z][A-Za-z0-9]*)\s*=|function\s+([A-Za-z][A-Za-z0-9]*)\s*\()/g;
-    while ((match = EXPORT_INLINE_RE.exec(source)) !== null) {
-        const originalName = match[1] || match[2];
-        exported.set(originalName, originalName);
+    // Determine which names are actually exported, resolving aliases
+    // (export { A as B } -> public name B maps to declaration A).
+    const exported = new Map(); // publicName -> originalName
+
+    for (const statement of sourceFile.statements) {
+        // Inline exports: export function Name() { ... } / export const Name = ...;
+        if (
+            ts.isFunctionDeclaration(statement) &&
+            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+        ) {
+            const name = statement.name?.text;
+            if (name) exported.set(name, name);
+        } else if (
+            ts.isVariableStatement(statement) &&
+            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+        ) {
+            for (const decl of statement.declarationList.declarations) {
+                const name = getBindingName(decl.name);
+                if (name) exported.set(name, name);
+            }
+        }
+
+        // Grouped exports: export { A, B, C } and export { A as Alias, B }.
+        if (ts.isExportDeclaration(statement) && statement.exportClause) {
+            for (const elem of statement.exportClause.elements) {
+                const originalName = elem.propertyName?.text ?? elem.name.text;
+                const publicName = elem.name.text;
+                if (
+                    /^[A-Za-z][A-Za-z0-9]*$/.test(originalName) &&
+                    /^[A-Za-z][A-Za-z0-9]*$/.test(publicName)
+                ) {
+                    exported.set(publicName, originalName);
+                }
+            }
+        }
     }
 
     // Build the component map only for exported names that have a declaration.
-    const declarations = [];
     for (const [publicName, originalName] of exported) {
-        const decl = declMap.get(originalName);
-        if (decl) {
-            declarations.push({ name: publicName, start: decl.start, kind: decl.kind });
-        }
-    }
+        const decl = declarations.get(originalName);
+        if (!decl) continue;
 
-    // Sort by position so sections can be delimited by the next declaration.
-    declarations.sort((a, b) => a.start - b.start);
+        const bodyText = getDeclarationBody(source, sourceFile, decl.node);
+        if (bodyText === null) continue; // unsupported render body, skip
 
-    for (let i = 0; i < declarations.length; i++) {
-        const decl = declarations[i];
-        const sectionEnd =
-            i + 1 < declarations.length ? declarations[i + 1].start : source.length;
-
-        let bodyStart;
-
-        if (decl.kind === 'arrow') {
-            // Arrow function body (after =>).
-            const arrowIdx = source.indexOf('=>', decl.start);
-            if (arrowIdx === -1 || arrowIdx > sectionEnd) continue;
-            bodyStart = arrowIdx + 2;
-        } else {
-            // Function declaration: find the opening brace of the body
-            // after the closing parenthesis of the parameter list.
-            const openParen = source.indexOf('(', decl.start);
-            if (openParen === -1 || openParen > sectionEnd) continue;
-            const closeParen = findMatchingParen(source, openParen);
-            if (closeParen === -1 || closeParen > sectionEnd) continue;
-            const bodyBrace = source.indexOf('{', closeParen);
-            if (bodyBrace === -1 || bodyBrace > sectionEnd) continue;
-            bodyStart = bodyBrace + 1;
-        }
-
-        // Trim leading whitespace.
-        while (bodyStart < source.length && /\s/.test(source[bodyStart])) {
-            bodyStart++;
-        }
-
-        const section = source.slice(bodyStart, sectionEnd);
         const elements = new Set();
-
         let elemMatch;
-        while ((elemMatch = HTML_ELEMENT_RE.exec(section)) !== null) {
+        HTML_ELEMENT_RE.lastIndex = 0;
+        while ((elemMatch = HTML_ELEMENT_RE.exec(bodyText)) !== null) {
             elements.add(elemMatch[1].toLowerCase());
         }
 
-        components.set(decl.name, elements);
+        components.set(publicName, elements);
     }
 
     return components;
+}
+
+/**
+ * Get the binding name of a variable declaration. Only simple identifiers are
+ * component names; destructured bindings are not supported here.
+ */
+function getBindingName(binding) {
+    if (ts.isIdentifier(binding)) {
+        return binding.text;
+    }
+    return null;
+}
+
+/**
+ * Resolve the function/arrow node whose body holds a component's JSX from a
+ * variable declaration initializer. Handles direct arrow/function expressions
+ * and the `forwardRef(...) => <JSX>` wrapper used by the local shims.
+ * Returns null when the initializer cannot be analyzed reliably.
+ */
+function resolveRenderFunction(initializer) {
+    if (!initializer) return null;
+    if (ts.isArrowFunction(initializer)) return initializer;
+    if (ts.isFunctionExpression(initializer)) return initializer;
+    if (ts.isCallExpression(initializer)) {
+        for (const arg of initializer.arguments) {
+            if (ts.isArrowFunction(arg)) return arg;
+            if (ts.isFunctionExpression(arg)) return arg;
+        }
+    }
+    return null;
+}
+
+/**
+ * Return the source text of a declaration's render body (the function/arrow
+ * body block, or the JSX expression body for arrow functions). Returns null
+ * when the body cannot be located.
+ */
+function getDeclarationBody(source, sourceFile, fnNode) {
+    let body;
+    if (ts.isFunctionDeclaration(fnNode) || ts.isFunctionExpression(fnNode)) {
+        body = fnNode.body;
+    } else if (ts.isArrowFunction(fnNode)) {
+        body = fnNode.body;
+    } else {
+        return null;
+    }
+    if (!body) return null;
+    return source.slice(body.getStart(sourceFile), body.getEnd());
 }
 
 /**
@@ -606,6 +588,16 @@ export async function auditComponentDrift(component, baselineStructure, latestUr
         return result;
     }
 
+    // A drift comparison is only meaningful when the baseline structure could
+    // actually be analyzed. Validate the baseline before any network fetch so an
+    // unusable baseline is never converted into an empty structure and never
+    // triggers a misleading comparison (or an unnecessary network request).
+    if (!baselineStructure || baselineStructure.size === 0) {
+        result.status = 'upstream-error';
+        result.error = `baseline for "${component.name}" (${component.upstreamComponent}) could not be analyzed; it is empty or missing required component exports, so drift cannot be determined`;
+        return result;
+    }
+
     let latestSource;
     try {
         latestSource = await fetchWithTimeout(latestUrl);
@@ -624,10 +616,7 @@ export async function auditComponentDrift(component, baselineStructure, latestUr
         return result;
     }
 
-    const differences = compareStructures(
-        baselineStructure || new Map(),
-        latestStructure,
-    );
+    const differences = compareStructures(baselineStructure, latestStructure);
 
     if (differences.length > 0) {
         result.status = 'structural-difference';
@@ -773,12 +762,16 @@ export async function main(drift = false) {
             try {
                 const baselineSource = await fetchWithTimeout(baselineUrl);
                 const structure = extractComponentStructure(baselineSource);
-                if (structure.size > 0) {
-                    baselineStructures.set(component.name, structure);
+                if (structure.size === 0) {
+                    console.error(
+                        `error: drift baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit} contained no parseable component exports; the baseline is unusable`,
+                    );
+                    process.exit(2);
                 }
+                baselineStructures.set(component.name, structure);
             } catch (error) {
                 console.error(
-                    `error: failed to fetch baseline for ${component.name}: ${error.message}`,
+                    `error: failed to fetch baseline for ${component.name} (${component.upstreamComponent}) at ${manifest.upstream.baselineCommit}: ${error.message}`,
                 );
                 process.exit(2);
             }
