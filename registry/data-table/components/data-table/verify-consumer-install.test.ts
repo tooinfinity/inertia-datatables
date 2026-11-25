@@ -3,12 +3,24 @@ import {
     EXPECTED_DATA_TABLE_FILES,
     EXPECTED_NPM_DEPENDENCIES,
     EXPECTED_REGISTRY_DEPENDENCIES,
-    verifyConsumerProjectResolution,
+    isDirectExecution,
+    main,
     verifyGitHubRegistryAddress,
     verifyRegistryItemStructure,
+    verifyRootRegistryManifest,
 } from '../../../../scripts/ci/verify-consumer-install.js';
 
-describe('verify-consumer-install', () => {
+describe('verify-consumer-install (deterministic registry validation)', () => {
+    describe('isDirectExecution', () => {
+        it('returns false when evaluating an imported or arbitrary module URL', () => {
+            expect(isDirectExecution(import.meta.url)).toBe(false);
+        });
+
+        it('returns false when process.argv is absent or different', () => {
+            expect(isDirectExecution('file:///some/other/file.js')).toBe(false);
+        });
+    });
+
     describe('verifyGitHubRegistryAddress', () => {
         it('resolves the primary native GitHub command address', () => {
             const resolved = verifyGitHubRegistryAddress('tooinfinity/inertia-datatables/data-table');
@@ -21,14 +33,42 @@ describe('verify-consumer-install', () => {
             });
         });
 
+        it('supports optional branch or ref', () => {
+            const resolved = verifyGitHubRegistryAddress('tooinfinity/inertia-datatables#main/data-table');
+            expect(resolved).toEqual({
+                scheme: 'github',
+                owner: 'tooinfinity',
+                repo: 'inertia-datatables',
+                item: 'data-table',
+                ref: 'main',
+            });
+        });
+
         it('rejects invalid or non-github addresses', () => {
             expect(() => verifyGitHubRegistryAddress('not-a-valid-address')).toThrow();
+            expect(() => verifyGitHubRegistryAddress('too/many/parts/here/item')).toThrow();
+            expect(() => verifyGitHubRegistryAddress('wrong/repo/data-table')).toThrow();
+        });
+    });
+
+    describe('verifyRootRegistryManifest', () => {
+        it('validates that registry.json declares the data-table item', () => {
+            const manifest = verifyRootRegistryManifest('registry.json') as {
+                name: string;
+                items: Array<{ name: string }>;
+            };
+            expect(manifest.name).toBe('inertia-datatables');
+            expect(manifest.items.some((i) => i.name === 'data-table')).toBe(true);
+        });
+
+        it('throws when manifest does not exist', () => {
+            expect(() => verifyRootRegistryManifest('non-existent.json')).toThrow();
         });
     });
 
     describe('verifyRegistryItemStructure', () => {
-        it('contains all 11 expected data-table files with matching targets', async () => {
-            const item = (await verifyRegistryItemStructure()) as {
+        it('contains all 11 expected data-table files with matching targets', () => {
+            const item = verifyRegistryItemStructure('public/r/data-table.json') as {
                 name: string;
                 files: Array<{ path: string; target: string; type: string }>;
                 dependencies: string[];
@@ -48,8 +88,8 @@ describe('verify-consumer-install', () => {
             }
         });
 
-        it('contains required npm dependencies', async () => {
-            const item = (await verifyRegistryItemStructure()) as {
+        it('contains required npm dependencies', () => {
+            const item = verifyRegistryItemStructure('public/r/data-table.json') as {
                 dependencies: string[];
             };
 
@@ -58,8 +98,8 @@ describe('verify-consumer-install', () => {
             }
         });
 
-        it('declares required shadcn primitives as bare registry dependencies', async () => {
-            const item = (await verifyRegistryItemStructure()) as {
+        it('declares required shadcn primitives as bare registry dependencies', () => {
+            const item = verifyRegistryItemStructure('public/r/data-table.json') as {
                 registryDependencies: string[];
             };
 
@@ -67,62 +107,16 @@ describe('verify-consumer-install', () => {
                 expect(item.registryDependencies).toContain(dep);
             }
         });
+
+        it('throws when artifact path is missing', () => {
+            expect(() => verifyRegistryItemStructure('public/r/missing-item.json')).toThrow();
+        });
     });
 
-    describe('verifyConsumerProjectResolution', () => {
-        it('resolves tree with mocked or native fetch without CORS errors', async () => {
-            // happy-dom intercepts window.fetch and enforces CORS for external URLs like ui.shadcn.com.
-            // When executing in a browser-like DOM test runner, stub fetch to avoid unneeded network calls.
-            const originalFetch = globalThis.fetch;
-            const mockIndex = [
-                { name: 'button', type: 'registry:ui' },
-                { name: 'input', type: 'registry:ui' },
-                { name: 'dropdown-menu', type: 'registry:ui' },
-                { name: 'select', type: 'registry:ui' },
-                { name: 'checkbox', type: 'registry:ui' },
-                { name: 'table', type: 'registry:ui' },
-                { name: 'skeleton', type: 'registry:ui' },
-            ];
-
-            try {
-                globalThis.fetch = (async (url: string | URL | Request) => {
-                    const urlStr = String(url);
-                    if (urlStr.includes('ui.shadcn.com/r/index.json')) {
-                        return new Response(JSON.stringify(mockIndex), {
-                            status: 200,
-                            headers: { 'Content-Type': 'application/json' },
-                        });
-                    }
-                    if (urlStr.includes('ui.shadcn.com/r/styles/')) {
-                        const name = urlStr.split('/').pop()?.replace('.json', '') ?? '';
-                        return new Response(
-                            JSON.stringify({
-                                name,
-                                type: 'registry:ui',
-                                files: [{ path: `ui/${name}.tsx`, type: 'registry:ui' }],
-                                dependencies: [],
-                                registryDependencies: [],
-                            }),
-                            {
-                                status: 200,
-                                headers: { 'Content-Type': 'application/json' },
-                            }
-                        );
-                    }
-                    return originalFetch(url);
-                }) as typeof globalThis.fetch;
-
-                const tree = (await verifyConsumerProjectResolution()) as {
-                    dependencies: string[];
-                    files: Array<{ path: string }>;
-                };
-
-                expect(tree).toBeDefined();
-                expect(tree.dependencies.some((d) => d.includes('@tanstack/react-table'))).toBe(true);
-                expect(tree.dependencies.some((d) => d.includes('@inertiajs/react'))).toBe(true);
-            } finally {
-                globalThis.fetch = originalFetch;
-            }
+    describe('main', () => {
+        it('executes full deterministic validation successfully', () => {
+            const result = main();
+            expect(result).toEqual({ ok: true });
         });
     });
 });

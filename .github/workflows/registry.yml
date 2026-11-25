@@ -32,7 +32,7 @@ jobs:
       - name: Validate registry
         run: npm run registry:validate
 
-      - name: Verify consumer installation resolution
+      - name: Verify deterministic registry structure
         run: npm run registry:verify-consumer
 
       - name: Rebuild registry artifacts
@@ -42,3 +42,6 @@ jobs:
         run: |
           git diff --exit-code public/r
           test -z "$(git ls-files --others --exclude-standard -- public/r)"
+
+      - name: Test consumer installation via native shadcn CLI
+        run: npm run registry:test-consumer

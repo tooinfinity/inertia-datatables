@@ -9,7 +9,7 @@
 ### Added
 
 - Frontend installation UX: native shadcn GitHub registry support (`npx shadcn@latest add tooinfinity/inertia-datatables/data-table`) is now the primary recommended installation method in README, with direct URL and local registry file installation preserved as alternatives (fixes #137)
-- Frontend installation verification: added consumer-installation validation script (`npm run registry:verify-consumer`) and tests in Vitest and CI (`.github/workflows/registry.yml`) to ensure registry manifest addresses, files, npm dependencies, and registry dependencies resolve cleanly in consumer project configurations without modifying protected components (fixes #137)
+- Frontend installation verification: implemented a two-layer verification strategy with deterministic registry structure validation (`npm run registry:verify-consumer`) and a real consumer integration test using the native shadcn CLI (`npm run registry:test-consumer`) in CI (`.github/workflows/registry.yml`), ensuring Node.js `>=20.18.1` entrypoint compatibility, decoupled from private shadcn APIs, and verifying consumer alias file placement, npm dependency declaration, and consumer primitive preservation (fixes #137)
 
 - React layer: custom cell renderers through the `cells` prop, keyed by column name (fixes #33)
 - React layer: row actions through the `actions` prop, rendered as a trailing client side column (fixes #33)

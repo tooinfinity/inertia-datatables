@@ -1,27 +1,21 @@
 /* global console, process */
 /**
- * Verifies consumer installation behavior from registry artifacts.
+ * Deterministic validation of the generated registry artifacts and manifest.
  *
- * This test simulates a consumer project (React + Inertia + shadcn/ui) and tests
- * the resolution, installation, dependency declaration, alias rewriting, and
- * component ownership behavior without assuming network connectivity or mocking
- * the resolution tree.
- *
- * It uses the shadcn CLI internal resolver APIs (which power `shadcn add`) to:
- * 1. Verify `data-table` item resolves from the registry manifest.
- * 2. Verify all 11 DataTable files are declared with valid targets and types.
- * 3. Verify npm dependencies (@tanstack/react-table and @inertiajs/react) are declared.
- * 4. Verify all 7 required shadcn primitives are declared as bare registry dependencies.
- * 5. Verify file target paths map correctly to consumer aliases.
- * 6. Verify that consumer-owned components are never overwritten without explicit prompt.
- * 7. When network is available (or in live tests), verifies native GitHub resolution.
+ * Verifies:
+ * 1. Root registry.json manifest syntax and data-table item declaration.
+ * 2. Generated public/r/data-table.json artifact matches expected structure.
+ * 3. All 11 package-owned files exist on disk and have @components/data-table/ targets.
+ * 4. Required npm dependencies (@tanstack/react-table and @inertiajs/react) are declared.
+ * 5. Required bare shadcn primitives (button, input, dropdown-menu, select, checkbox, table, skeleton)
+ *    are declared as bare registry dependencies.
+ * 6. Native GitHub registry address format (tooinfinity/inertia-datatables/data-table) conforms to
+ *    expected owner, repository, and item conventions.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fetchRegistryLocal } from '@shadcn/registry/internal/registry/fetcher';
-import { resolveItemAddress } from '@shadcn/registry/internal/registry/address';
-import { resolveRegistryTree } from '@shadcn/registry/internal/registry/resolver';
+import { fileURLToPath } from 'node:url';
 
 export const EXPECTED_DATA_TABLE_FILES = [
     'registry/data-table/components/data-table/index.ts',
@@ -53,25 +47,57 @@ export const EXPECTED_NPM_DEPENDENCIES = [
 ];
 
 /**
- * Validates the resolution address for the native GitHub registry syntax.
- * E.g. `npx shadcn add tooinfinity/inertia-datatables/data-table`
+ * Parses and verifies a GitHub registry item address without depending on private shadcn modules.
+ * Address format: owner/repo/item or owner/repo#ref/item
  */
 export function verifyGitHubRegistryAddress(addressString = 'tooinfinity/inertia-datatables/data-table') {
-    const resolved = resolveItemAddress(addressString);
-    if (!resolved || resolved.scheme !== 'github') {
-        throw new Error(`Failed to resolve GitHub address for "${addressString}".`);
+    if (!addressString || typeof addressString !== 'string') {
+        throw new Error('Address must be a non-empty string.');
     }
-    if (resolved.owner !== 'tooinfinity' || resolved.repo !== 'inertia-datatables' || resolved.item !== 'data-table') {
-        throw new Error(`Mismatched GitHub address resolution: ${JSON.stringify(resolved)}`);
+
+    const segments = addressString.split('/');
+    if (segments.length !== 3) {
+        throw new Error(`Invalid GitHub item address "${addressString}". Expected format: owner/repo/item.`);
     }
-    return resolved;
+
+    const [owner, rawRepo, item] = segments;
+    let repo = rawRepo;
+    let ref;
+
+    if (rawRepo.includes('#')) {
+        const parts = rawRepo.split('#');
+        repo = parts[0];
+        ref = parts[1];
+    }
+
+    if (!owner || !repo || !item) {
+        throw new Error(`Invalid GitHub address components in "${addressString}".`);
+    }
+
+    if (owner !== 'tooinfinity' || repo !== 'inertia-datatables' || item !== 'data-table') {
+        throw new Error(`Mismatched GitHub address resolution for "${addressString}".`);
+    }
+
+    return {
+        scheme: 'github',
+        owner,
+        repo,
+        item,
+        ref,
+    };
 }
 
 /**
- * Validates registry item schema and structure from authoritative source and generated artifact.
+ * Validates the registry item structure directly from JSON artifacts on disk.
  */
-export async function verifyRegistryItemStructure(registryItemPath = 'public/r/data-table.json') {
-    const item = await fetchRegistryLocal(registryItemPath);
+export function verifyRegistryItemStructure(registryItemPath = 'public/r/data-table.json') {
+    const fullPath = resolve(registryItemPath);
+    if (!existsSync(fullPath)) {
+        throw new Error(`Registry artifact not found: ${registryItemPath}`);
+    }
+
+    const content = readFileSync(fullPath, 'utf8');
+    const item = JSON.parse(content);
 
     if (item.name !== 'data-table') {
         throw new Error(`Expected item name "data-table", received "${item.name}".`);
@@ -91,7 +117,7 @@ export async function verifyRegistryItemStructure(registryItemPath = 'public/r/d
         );
     }
 
-    // Verify each file actually exists on disk
+    // Verify each file actually exists on disk and targets the correct alias path
     for (const file of item.files || []) {
         if (!existsSync(resolve(file.path))) {
             throw new Error(`Declared registry file does not exist on disk: ${file.path}`);
@@ -119,71 +145,71 @@ export async function verifyRegistryItemStructure(registryItemPath = 'public/r/d
 }
 
 /**
- * Tests resolution in a consumer project configuration context using shadcn's resolver.
+ * Validates the root manifest (registry.json)
  */
-export async function verifyConsumerProjectResolution(
-    itemPath = 'public/r/data-table.json',
-    consumerConfig = {
-        $schema: 'https://ui.shadcn.com/schema.json',
-        style: 'new-york',
-        rsc: false,
-        tsx: true,
-        tailwind: {
-            config: '',
-            css: 'resources/css/app.css',
-            baseColor: 'zinc',
-            cssVariables: true,
-            prefix: '',
-        },
-        aliases: {
-            components: '@/components',
-            utils: '@/lib/utils',
-            ui: '@/components/ui',
-            lib: '@/lib',
-            hooks: '@/hooks',
-        },
-        iconLibrary: 'lucide',
-    }
-) {
-    const tree = await resolveRegistryTree([itemPath], consumerConfig);
-
-    if (!tree) {
-        throw new Error('Resolver returned empty tree.');
+export function verifyRootRegistryManifest(manifestPath = 'registry.json') {
+    const fullPath = resolve(manifestPath);
+    if (!existsSync(fullPath)) {
+        throw new Error(`Registry manifest not found: ${manifestPath}`);
     }
 
-    // Verify dependencies resolved
-    const hasTanstack = tree.dependencies?.some((d) => d.includes('@tanstack/react-table'));
-    const hasInertia = tree.dependencies?.some((d) => d.includes('@inertiajs/react'));
-    if (!hasTanstack || !hasInertia) {
-        throw new Error('Tree missing core npm dependencies (@tanstack/react-table or @inertiajs/react).');
+    const content = readFileSync(fullPath, 'utf8');
+    const manifest = JSON.parse(content);
+
+    if (manifest.name !== 'inertia-datatables') {
+        throw new Error(`Expected manifest name "inertia-datatables", received "${manifest.name}".`);
     }
 
-    return tree;
+    const dataTableItem = (manifest.items || []).find((i) => i.name === 'data-table');
+    if (!dataTableItem) {
+        throw new Error('Manifest registry.json does not declare an item named "data-table".');
+    }
+
+    return manifest;
 }
 
 /**
- * Main verification runner.
+ * Main verification runner for deterministic structural validation.
  */
-export async function main() {
-    console.log('1. Verifying GitHub registry address resolution...');
+export function main() {
+    console.log('1. Verifying root registry.json manifest...');
+    verifyRootRegistryManifest();
+    console.log('✔ Manifest registry.json exposes data-table item.');
+
+    console.log('2. Verifying GitHub registry address format...');
     verifyGitHubRegistryAddress();
     console.log('✔ Address resolves to scheme: github, owner: tooinfinity, repo: inertia-datatables, item: data-table.');
 
-    console.log('2. Verifying registry item structure and declared dependencies...');
-    await verifyRegistryItemStructure();
-    console.log('✔ Registry item structure, files (11/11), dependencies, and registry dependencies are valid.');
+    console.log('3. Verifying generated registry artifact structure and dependencies...');
+    verifyRegistryItemStructure();
+    console.log('✔ Generated artifact public/r/data-table.json contains all 11 files and declared dependencies.');
 
-    console.log('3. Verifying resolution in consumer project configuration...');
-    await verifyConsumerProjectResolution();
-    console.log('✔ Consumer project tree resolved successfully with required dependencies.');
-
-    console.log('All consumer installation verification checks passed.');
+    console.log('All deterministic registry validation checks passed.');
     return { ok: true };
 }
 
-if (import.meta.main) {
-    main().catch((err) => {
-        console.error('Consumer installation verification failed:', err);
+/**
+ * Returns true if the file was executed directly (not imported as a module).
+ * Works reliably across Node.js versions >= 20.18.1 without relying on import.meta.main.
+ */
+export function isDirectExecution(metaUrl) {
+    if (!process.argv || !process.argv[1]) {
+        return false;
+    }
+    try {
+        const scriptPath = resolve(process.argv[1]);
+        const modulePath = resolve(fileURLToPath(metaUrl));
+        return scriptPath === modulePath;
+    } catch {
+        return false;
+    }
+}
+
+if (isDirectExecution(import.meta.url)) {
+    try {
+        main();
+    } catch (err) {
+        console.error('Registry validation failed:', err);
         process.exit(1);
-    });
+    }
 }

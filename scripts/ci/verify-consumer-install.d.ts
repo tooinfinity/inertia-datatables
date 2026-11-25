@@ -10,11 +10,10 @@ export function verifyGitHubRegistryAddress(addressString?: string): {
     ref?: string;
 };
 
-export function verifyRegistryItemStructure(registryItemPath?: string): Promise<Record<string, unknown>>;
+export function verifyRegistryItemStructure(registryItemPath?: string): Record<string, unknown>;
 
-export function verifyConsumerProjectResolution(
-    itemPath?: string,
-    consumerConfig?: Record<string, unknown>
-): Promise<Record<string, unknown>>;
+export function verifyRootRegistryManifest(manifestPath?: string): Record<string, unknown>;
 
-export function main(): Promise<{ ok: boolean }>;
+export function main(): { ok: boolean };
+
+export function isDirectExecution(metaUrl: string): boolean;
