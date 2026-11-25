@@ -38,7 +38,7 @@ const PROTECTED_PREFIX = 'registry/data-table/components/ui/';
  * Renames and copies contribute both the old and the new path so a move into or
  * out of a protected directory is detected either way.
  */
-const STATUS_RE = /^[MACDR]\d*$/;
+const STATUS_RE = /^[MACDRT]\d*$/;
 
 export function parseChangedFiles(input) {
     const paths = new Set();

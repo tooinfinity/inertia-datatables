@@ -179,6 +179,13 @@ describe('protected-paths: findProtectedChanges', () => {
         ]);
     });
 
+    it('detects a protected file type change (T status)', () => {
+        const input = gitZ(change('T', 'registry/data-table/components/ui/button.tsx'));
+        expect(findProtectedChanges(input)).toEqual([
+            'registry/data-table/components/ui/button.tsx',
+        ]);
+    });
+
     it('reports only protected paths among mixed changes', () => {
         const input = gitZ(
             change('M', 'registry/data-table/components/data-table/use-data-table.ts'),

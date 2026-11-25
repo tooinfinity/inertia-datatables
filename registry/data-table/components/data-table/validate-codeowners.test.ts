@@ -291,6 +291,14 @@ describe('isValidOwner', () => {
         expect(isValidOwner('@org.name')).toBe(false);
     });
 
+    it('rejects consecutive hyphens in username', () => {
+        expect(isValidOwner('@foo--bar')).toBe(false);
+    });
+
+    it('rejects consecutive hyphens in team slug', () => {
+        expect(isValidOwner('@org/foo--bar')).toBe(false);
+    });
+
     it('rejects a non-owner token', () => {
         expect(isValidOwner('registry.json')).toBe(false);
         expect(isValidOwner('')).toBe(false);
