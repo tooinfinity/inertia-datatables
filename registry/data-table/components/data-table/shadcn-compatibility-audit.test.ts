@@ -1067,6 +1067,82 @@ export { Real };
         expect(structure.get('Real')).toContain('span');
         expect(structure.has('notAComponent')).toBe(false);
     });
+
+    it('ignores type-only exports and type-only specifiers', () => {
+        const source = `
+function Table() { return <table />; }
+export type { Table };
+export { type Caption };
+function Caption() { return <caption />; }
+export { Real };
+function Real() { return <div />; }
+`;
+        const structure = extractComponentStructure(source);
+        // Table is re-exported only as a type, not as a value component.
+        expect(structure.has('Table')).toBe(false);
+        // Caption is re-exported only as a type via a type-only specifier.
+        expect(structure.has('Caption')).toBe(false);
+        // Real is a genuine value export.
+        expect(structure.has('Real')).toBe(true);
+        expect(structure.get('Real')).toContain('div');
+    });
+
+    it('treats a default export as removal of the named export', () => {
+        const source = `
+export default function Table() { return <table />; }
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+        expect(structure.size).toBe(0);
+    });
+
+    it('does not associate an external re-export with a same-named local declaration', () => {
+        const source = `
+function Table() { return <table />; }
+export { Table } from './other';
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+    });
+
+    it('does not crash on a namespace export clause', () => {
+        const source = `
+function Table() { return <table />; }
+export * as ns from './other';
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(false);
+        expect(structure.size).toBe(0);
+    });
+
+    it('does not treat an unrelated call callback as a component render body', () => {
+        const source = `
+const Items = ([1, 2]).map(() => <li />);
+function Table() { return <table />; }
+export { Table };
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('Table')).toBe(true);
+        expect(structure.get('Table')).toContain('table');
+        expect(structure.has('Items')).toBe(false);
+    });
+
+    it('ignores JSX tags that appear only in comments', () => {
+        const source = `
+export function TableCaption() {
+    // <caption />
+    return null;
+}
+`;
+        const structure = extractComponentStructure(source);
+        expect(structure.has('TableCaption')).toBe(true);
+        expect(structure.get('TableCaption')).toEqual(new Set());
+    });
+
+    it('returns an empty map for TSX with syntax errors', () => {
+        expect(extractComponentStructure('function Table() { return <table />;')).toEqual(new Map());
+        expect(extractComponentStructure('export { ')).toEqual(new Map());
+    });
 });
 
 describe('shadcn-compatibility-audit: auditComponentDrift baseline guards (Finding 3)', () => {

@@ -132,7 +132,6 @@ export function buildUpstreamUrl(upstream, componentName, commit) {
  */
 export function extractComponentStructure(source) {
     const components = new Map();
-    const HTML_ELEMENT_RE = /<([a-z][a-z0-9]*)/g;
 
     const sourceFile = ts.createSourceFile(
         'component.tsx',
@@ -140,6 +139,16 @@ export function extractComponentStructure(source) {
         ts.ScriptTarget.Latest,
         true, // setParentNodes
     );
+
+    // Reject source with syntax errors before collecting declarations. An
+    // unparseable file yields no usable component structure rather than being
+    // mistaken for a file with no exports.
+    const syntaxErrors = sourceFile.parseDiagnostics.filter(
+        (d) => d.category === ts.DiagnosticCategory.Error,
+    );
+    if (syntaxErrors.length > 0) {
+        return components;
+    }
 
     // name -> { node: the function/arrow node whose body holds the JSX }
     const declarations = new Map();
@@ -170,15 +179,18 @@ export function extractComponentStructure(source) {
 
     for (const statement of sourceFile.statements) {
         // Inline exports: export function Name() { ... } / export const Name = ...;
+        // Default exports are not named exports of their local name.
         if (
             ts.isFunctionDeclaration(statement) &&
-            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) &&
+            !statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
         ) {
             const name = statement.name?.text;
             if (name) exported.set(name, name);
         } else if (
             ts.isVariableStatement(statement) &&
-            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) &&
+            !statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
         ) {
             for (const decl of statement.declarationList.declarations) {
                 const name = getBindingName(decl.name);
@@ -187,16 +199,21 @@ export function extractComponentStructure(source) {
         }
 
         // Grouped exports: export { A, B, C } and export { A as Alias, B }.
-        if (ts.isExportDeclaration(statement) && statement.exportClause) {
+        // Skip external re-exports (moduleSpecifier), type-only exports, and
+        // namespace export clauses; local grouped aliases are still resolved
+        // through originalName/publicName below.
+        if (
+            ts.isExportDeclaration(statement) &&
+            !statement.moduleSpecifier &&
+            !statement.isTypeOnly &&
+            statement.exportClause &&
+            ts.isNamedExports(statement.exportClause)
+        ) {
             for (const elem of statement.exportClause.elements) {
+                if (elem.isTypeOnly) continue;
                 const originalName = elem.propertyName?.text ?? elem.name.text;
                 const publicName = elem.name.text;
-                if (
-                    /^[A-Za-z][A-Za-z0-9]*$/.test(originalName) &&
-                    /^[A-Za-z][A-Za-z0-9]*$/.test(publicName)
-                ) {
-                    exported.set(publicName, originalName);
-                }
+                exported.set(publicName, originalName);
             }
         }
     }
@@ -206,20 +223,65 @@ export function extractComponentStructure(source) {
         const decl = declarations.get(originalName);
         if (!decl) continue;
 
-        const bodyText = getDeclarationBody(source, sourceFile, decl.node);
-        if (bodyText === null) continue; // unsupported render body, skip
-
-        const elements = new Set();
-        let elemMatch;
-        HTML_ELEMENT_RE.lastIndex = 0;
-        while ((elemMatch = HTML_ELEMENT_RE.exec(bodyText)) !== null) {
-            elements.add(elemMatch[1].toLowerCase());
-        }
+        // Collect lowercase HTML element tag names from the JSX in the
+        // declaration's render body. Tags appearing only in comments are not
+        // part of the AST and are ignored.
+        const elements = collectJsxElementNames(sourceFile, decl.node);
 
         components.set(publicName, elements);
     }
 
     return components;
+}
+
+/**
+ * Collect lowercase HTML element tag names rendered inside a declaration's
+ * render body by walking the JSX AST. Self-closing and opening elements whose
+ * tag is a simple lowercase identifier (e.g. <table>, <div>) are counted;
+ * PascalCase member expressions such as <Table.Header> are React components.
+ */
+function collectJsxElementNames(sourceFile, node) {
+    const names = new Set();
+
+    let body;
+    if (
+        ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node)
+    ) {
+        body = node.body;
+    } else {
+        return names;
+    }
+    if (!body) return names;
+
+    function visit(n) {
+        const kindName = ts.SyntaxKind[n.kind];
+        if (kindName === 'JsxElement') {
+            const tag = getJsxTagName(n.openingElement.tagName);
+            if (isHtmlElement(tag)) names.add(tag.toLowerCase());
+            ts.forEachChild(n, visit);
+        } else if (kindName === 'JsxSelfClosingElement') {
+            const tag = getJsxTagName(n.tagName);
+            if (isHtmlElement(tag)) names.add(tag.toLowerCase());
+        } else {
+            ts.forEachChild(n, visit);
+        }
+    }
+
+    visit(body);
+    return names;
+}
+
+function getJsxTagName(tagName) {
+    if (ts.isIdentifier(tagName)) {
+        return tagName.text;
+    }
+    return null;
+}
+
+function isHtmlElement(tag) {
+    return typeof tag === 'string' && /^[a-z][a-z0-9]*$/.test(tag);
 }
 
 /**
@@ -244,6 +306,9 @@ function resolveRenderFunction(initializer) {
     if (ts.isArrowFunction(initializer)) return initializer;
     if (ts.isFunctionExpression(initializer)) return initializer;
     if (ts.isCallExpression(initializer)) {
+        // Only unwrap callbacks of supported wrappers (forwardRef). Callbacks
+        // of unrelated calls such as .map() are not component render bodies.
+        if (!isSupportedWrapper(initializer.expression)) return null;
         for (const arg of initializer.arguments) {
             if (ts.isArrowFunction(arg)) return arg;
             if (ts.isFunctionExpression(arg)) return arg;
@@ -253,21 +318,12 @@ function resolveRenderFunction(initializer) {
 }
 
 /**
- * Return the source text of a declaration's render body (the function/arrow
- * body block, or the JSX expression body for arrow functions). Returns null
- * when the body cannot be located.
+ * Return true only for direct references to a supported component wrapper
+ * (currently forwardRef), so unrelated call expressions are not treated as
+ * component declarations.
  */
-function getDeclarationBody(source, sourceFile, fnNode) {
-    let body;
-    if (ts.isFunctionDeclaration(fnNode) || ts.isFunctionExpression(fnNode)) {
-        body = fnNode.body;
-    } else if (ts.isArrowFunction(fnNode)) {
-        body = fnNode.body;
-    } else {
-        return null;
-    }
-    if (!body) return null;
-    return source.slice(body.getStart(sourceFile), body.getEnd());
+function isSupportedWrapper(node) {
+    return ts.isIdentifier(node) && node.text === 'forwardRef';
 }
 
 /**

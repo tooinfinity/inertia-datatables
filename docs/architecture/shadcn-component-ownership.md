@@ -137,7 +137,7 @@ Each component in the manifest records an explicit upstream source URL pinned to
 
 ### How the audit compares local shims against the baseline
 
-Validation mode (runs on every push/PR) fetches each pinned baseline source and compares the local shim against it. This is deterministic: it always uses `manifest.upstream.baselineCommit`, never a mutable upstream reference. It verifies that the exported component names and rendered HTML elements of the local shim remain compatible with the pinned upstream revision.
+Validation mode (runs on every push/PR) fetches each pinned baseline source and compares the local shim against it. This is deterministic: it always uses `manifest.upstream.baselineCommit`, never a mutable upstream reference. Of the seven shims, only `table.tsx` uses the `structural` comparison strategy; the other six are `manual` and are not automatically compared. Validation verifies that the exported component names and rendered HTML elements of `table.tsx` remain compatible with the pinned upstream revision. An unchanged result means no structural difference was detected — it does not establish complete compatibility (e.g. prop or keyboard behavior changes are not captured by structural comparison).
 
 ### How to run the audit locally
 
@@ -195,9 +195,9 @@ An invalid manifest fails CI with exit status 1.
 Drift detection mode (runs on a weekly schedule and via manual dispatch) does two things:
 
 1. Discovers the latest commit SHA on the upstream `main` branch (`manifest.upstream.branch`) through the GitHub API.
-2. For each structurally-compared component, fetches the upstream source at that latest commit and compares it against the **baseline structure** (the structure extracted from the pinned `baselineCommit` source).
+2. For the structurally-compared component (`table.tsx`), fetches the upstream source at that latest commit and compares it against the **baseline structure** (the structure extracted from the pinned `baselineCommit` source).
 
-It reports whether shadcn/ui has changed since the baseline was reviewed. It never modifies local files; it only surfaces drift for review.
+Drift mode detects structural differences in `table.tsx` only — it does not detect every upstream change, and the six `manual` shims are not drift-compared. An unchanged result means no structural drift was detected — it does not establish complete compatibility. It never modifies local files; it only surfaces drift for review.
 
 ### Where the report exposes both commit SHAs
 
@@ -224,7 +224,7 @@ When the audit reports `[review-required]` for a component in drift mode:
 
 Not every upstream change requires touching the local shims:
 
-- If upstream only changed styling, class names, or internals that do not alter the exported component set or the rendered HTML elements, no local change is needed — the local shim still serves the same UI role.
+- If upstream only changed styling, class names, or internals that do not alter the exported component set or the rendered HTML elements, no local change is needed — the local shim still serves the same UI role. Changes to props or keyboard behavior can still require compatibility review even when exports and rendered elements are unchanged, though not every such change requires a local update.
 - If upstream removed or renamed an exported component the local shim relies on, or removed an HTML element the local shim renders, the local shim may need review to remain compatible.
 - Remember that six of the seven shims are `role-equivalent` minimal implementations, not verified upstream copies; their source diff is not meaningful and changes always require manual review.
 
