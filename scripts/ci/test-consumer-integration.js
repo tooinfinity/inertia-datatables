@@ -149,29 +149,46 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
         const child = spawn('npx', ['--yes', 'shadcn@latest', 'add', itemAddress], {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe'],
+            detached: true,
             env: { ...process.env, CI: 'true' },
         });
 
-        // Automatically send "n\n" to avoid overwriting existing consumer files
-        child.stdin.write('n\n');
-        child.stdin.end();
-
         let stdout = '';
         let stderr = '';
+        let closed = false;
 
         child.stdout.on('data', (d) => {
-            stdout += d.toString();
+            const chunk = d.toString();
+            stdout += chunk;
+            if (chunk.includes('already exists. Would you like to overwrite?') && !child.stdin.destroyed) {
+                child.stdin.write('n\n');
+            }
         });
         child.stderr.on('data', (d) => {
             stderr += d.toString();
         });
 
+        // Also write initial 'n\n' in case the prompt was emitted before the listener attached
+        child.stdin.write('n\n');
+        child.stdin.end();
+
         const timer = setTimeout(() => {
-            child.kill();
-            rejectPromise(new Error(`shadcn add timed out after ${timeoutMs}ms.\nStdout: ${stdout}\nStderr: ${stderr}`));
+            if (!closed) {
+                try {
+                    if (child.pid) {
+                        process.kill(-child.pid, 'SIGKILL');
+                    } else {
+                        child.kill('SIGKILL');
+                    }
+                } catch {
+                    child.kill('SIGKILL');
+                }
+                rejectPromise(new Error(`shadcn add timed out after ${timeoutMs}ms.\nStdout: ${stdout}\nStderr: ${stderr}`));
+            }
         }, timeoutMs);
 
         child.on('close', (code) => {
+            closed = true;
             clearTimeout(timer);
             resolvePromise({
                 code,
@@ -181,6 +198,7 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
         });
 
         child.on('error', (err) => {
+            closed = true;
             clearTimeout(timer);
             rejectPromise(err);
         });
@@ -191,13 +209,13 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
  * Validates the installed files, dependencies, and preservation in the consumer fixture.
  */
 export async function assertInstalledConsumer(baseDir) {
-    // 1. Verify consumer-owned button.tsx was preserved
+    // 1. Verify consumer-owned button.tsx was preserved completely unchanged
     const buttonPath = join(baseDir, 'resources/js/components/ui/button.tsx');
     if (!existsSync(buttonPath)) {
         throw new Error('Consumer button.tsx does not exist.');
     }
     const buttonContent = await readFile(buttonPath, 'utf8');
-    if (!buttonContent.includes('CONSUMER_CUSTOM_BUTTON_PRESERVED')) {
+    if (buttonContent !== CONSUMER_CUSTOM_BUTTON_CONTENT) {
         throw new Error('Consumer-owned button.tsx was unexpectedly overwritten or modified!');
     }
 

@@ -117,14 +117,21 @@ export function verifyRegistryItemStructure(registryItemPath = 'public/r/data-ta
         );
     }
 
-    // Verify each file actually exists on disk and targets the correct alias path
+    // Verify each file actually exists on disk and maps to its exact expected target
+    const seenTargets = new Set();
     for (const file of item.files || []) {
         if (!existsSync(resolve(file.path))) {
             throw new Error(`Declared registry file does not exist on disk: ${file.path}`);
         }
-        if (!file.target?.startsWith('@components/data-table/')) {
-            throw new Error(`Unexpected target prefix for file ${file.path}: ${file.target}`);
+        const fileName = file.path.split('/').pop();
+        const expectedTarget = `@components/data-table/${fileName}`;
+        if (file.target !== expectedTarget) {
+            throw new Error(`Target mismatch for file "${file.path}": expected "${expectedTarget}", received "${file.target}".`);
         }
+        if (seenTargets.has(file.target)) {
+            throw new Error(`Duplicate target detected in registry item: "${file.target}".`);
+        }
+        seenTargets.add(file.target);
     }
 
     // Check registryDependencies (bare names)
