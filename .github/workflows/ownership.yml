@@ -15,11 +15,87 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# ---------------------------------------------------------------------------
+# Authorization mechanism for protected-component maintenance PRs
+# ---------------------------------------------------------------------------
+# Ordinary PRs:
+#   The `authorize-maintenance` job is skipped (label absent or not a PR).
+#   The `enforce-ownership` job runs with no MAINTENANCE_AUTHORIZED env var.
+#   protected-paths.js detects protected-path changes → fails (exit 1).
+#
+# Maintenance PRs (label "maintenance: protected-component"):
+#   The `authorize-maintenance` job runs in the `protected-maintenance`
+#   GitHub Environment. That environment MUST be configured by an administrator
+#   with required reviewers. GitHub blocks the job until an eligible reviewer
+#   approves the deployment. Only after explicit approval does the job run and
+#   set MAINTENANCE_AUTHORIZED=true along with the approving actor and timestamp.
+#   The `enforce-ownership` job reads those outputs via the needs context and
+#   passes them to protected-paths.js as environment variables.
+#   protected-paths.js calls check-maintenance-authorization.js to verify the
+#   metadata and logs an audit entry. Only if all three fields are present and
+#   correct does the protected-path check pass for the authorized change.
+#
+# Security properties:
+#   - A label alone is never sufficient; it only routes to the environment gate.
+#   - The environment's required-reviewer gate is enforced by GitHub; a job that
+#     has not passed through the environment cannot set MAINTENANCE_AUTHORIZED.
+#   - Fail-closed: any missing or malformed authorization metadata exits 1.
+#   - Every authorization decision is recorded in the workflow log.
+#   - Unauthorized actors cannot self-authorize: the environment gates who can
+#     approve the deployment to run.
+#
+# IMPORTANT — administrator prerequisite:
+#   Create a GitHub Actions Environment named exactly `protected-maintenance`
+#   on this repository and add at least one required reviewer who is not the
+#   PR author. Without required reviewers the gate is ineffective.
+#   See docs/architecture/shadcn-component-ownership.md for full setup.
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: runs only when the maintenance routing label is present on a PR.
+  # Deploys to the protected-maintenance environment, which MUST be configured
+  # with required reviewers by a repository administrator.
+  # ---------------------------------------------------------------------------
+  authorize-maintenance:
+    name: Authorize protected-component maintenance
+    if: >-
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'maintenance: protected-component')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: protected-maintenance   # MUST have required reviewers configured
+
+    outputs:
+      authorized: ${{ steps.set-auth.outputs.authorized }}
+      actor: ${{ steps.set-auth.outputs.actor }}
+      timestamp: ${{ steps.set-auth.outputs.timestamp }}
+
+    steps:
+      - name: Record authorization
+        id: set-auth
+        run: |
+          TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "authorized=true" >> "$GITHUB_OUTPUT"
+          echo "actor=${{ github.actor }}" >> "$GITHUB_OUTPUT"
+          echo "timestamp=${TIMESTAMP}" >> "$GITHUB_OUTPUT"
+          echo "Protected-component maintenance authorized by ${{ github.actor }} at ${TIMESTAMP}"
+          echo "Environment: protected-maintenance (required reviewer gate passed)"
+
+  # ---------------------------------------------------------------------------
+  # Main check: validates CODEOWNERS, version consistency, and protected paths.
+  # Reads authorization outputs from authorize-maintenance when it ran.
+  # ---------------------------------------------------------------------------
   enforce-ownership:
     name: Enforce shadcn component ownership
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: [authorize-maintenance]
+    # Always run this job (on push and pull_request), regardless of whether
+    # authorize-maintenance ran (skipped) or succeeded.
+    if: >-
+      always() &&
+      (needs.authorize-maintenance.result == 'success' ||
+       needs.authorize-maintenance.result == 'skipped')
 
     steps:
       - name: Checkout code
@@ -30,11 +106,22 @@ jobs:
       - name: Validate CODEOWNERS syntax and coverage
         run: node scripts/ci/validate-codeowners.js
 
+      - name: Validate shadcn CLI version consistency
+        run: node scripts/ci/check-shadcn-version.js
+
       - name: Detect protected compatibility shim changes
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
+          # Set only when authorize-maintenance ran and produced a confirmed
+          # authorization through the protected-maintenance environment gate.
+          # For ordinary PRs these will be empty strings, which protected-paths.js
+          # treats as unauthorized (fails closed).
+          MAINTENANCE_AUTHORIZED: ${{ needs.authorize-maintenance.outputs.authorized }}
+          MAINTENANCE_AUTHORIZED_BY: ${{ needs.authorize-maintenance.outputs.actor }}
+          MAINTENANCE_AUTHORIZED_AT: ${{ needs.authorize-maintenance.outputs.timestamp }}
         run: |
           git fetch origin "$BASE_REF"
           MERGE_BASE=$(git merge-base HEAD "origin/$BASE_REF")
-          git diff --name-status -z -M "$MERGE_BASE" HEAD | node scripts/ci/protected-paths.js
+          git diff --name-status -z -M "$MERGE_BASE" HEAD | \
+            node scripts/ci/protected-paths.js

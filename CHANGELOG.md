@@ -8,6 +8,10 @@
 
 ### Added
 
+- CI: protected-component maintenance authorization workflow — intentional updates to protected shadcn/ui compatibility shims now have a narrow, auditable authorization path via the `protected-maintenance` GitHub Actions Environment with required reviewers; ordinary PRs still fail closed; a label alone is never sufficient (closes #136)
+- CI: shadcn CLI version consistency check (`scripts/ci/check-shadcn-version.js`, `npm run ci:check-shadcn-version`) — detects drift between the pinned version in `package.json` and references in integration workflow YAML files; runs as part of the ownership workflow on every PR (closes #136)
+- CI: `check-maintenance-authorization.js` — validates authorization environment variables set by the `protected-maintenance` environment gate and records an auditable log entry for every authorization decision (closes #136)
+
 - Frontend installation UX: native shadcn GitHub registry support (`npx shadcn@latest add tooinfinity/inertia-datatables/data-table`) is now the primary recommended installation method in README, with direct URL and local registry file installation preserved as alternatives (fixes #137)
 - Frontend installation verification: implemented a two-layer verification strategy with deterministic registry structure validation (`npm run registry:verify-consumer`) and a real consumer integration test using the native shadcn CLI (`npm run registry:test-consumer`) in CI (`.github/workflows/registry.yml`), ensuring Node.js `>=20.18.1` entrypoint compatibility, decoupled from private shadcn APIs, and verifying consumer alias file placement, npm dependency declaration, and consumer primitive preservation (fixes #137)
 
@@ -51,6 +55,7 @@
 
 ### Fixed
 
+- CI: integration workflow now uses shadcn CLI `4.23.0` (was `4.22.0`), matching the pinned version in `package.json`; version drift is now detected automatically by the new `check-shadcn-version.js` check in the ownership workflow (closes #136)
 - shadcn/ui compatibility audit: strengthened manifest and source validation by strictly validating `rawUrlTemplate` repository host and path segments against `upstream.repository` (requiring exactly two non-empty segments `owner/repo`), validating local component file existence and parsing for all components including manual review entries, rejecting `{commit}` placed in URL fragments, enforcing exact comparison strategy mapping (`table` as `structural` and other 6 shims as `manual`), safely guarding upstream source validation when `manifest.upstream` is missing or invalid, making table semantic element enforcement mandatory at code level, and using `pathToFileURL` to reliably detect the CLI entry-point when repository path contains spaces.
 - shadcn/ui compatibility audit: the component map is now built from actual export declarations (inline exports, grouped exports, and aliases) instead of every function declaration, so private helpers are excluded and components exported together at the end of a file are no longer missed; function parameter lists are now located with a delimiter-aware parenthesis scanner. Also removed a dangling manifest `$schema` reference to a schema file that does not exist.
 - shadcn/ui compatibility audit: a TSX source with syntax errors is now rejected upfront and reported as a distinct parse failure (with diagnostics) instead of being conflated with a valid file that has no supported component exports, so CI audit output clearly distinguishes unparseable files from files with no exports.

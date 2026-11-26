@@ -82,11 +82,11 @@ When in doubt, check `registry.json`'s `registryDependencies` list: any componen
 
 Intentional updates to protected compatibility shims require:
 
-1. Explicit maintainer authorization.
+1. Explicit maintainer authorization via the `protected-maintenance` GitHub Environment (required reviewer gate).
 2. A dedicated maintenance PR (not bundled with unrelated feature work).
 3. Verification that consumer-facing behavior and the registry dependencies remain compatible.
 
-CI enforcement of these boundaries (read-only checks on protected paths) is implemented in PR 2. Automated upstream compatibility drift detection is implemented in PR 3 via the `shadcn compatibility audit` workflow (`.github/workflows/shadcn-compatibility-audit.yml`). See "Upstream compatibility audit" below.
+See "Intentional maintenance changes to protected files — authorization mechanism" and "How to update a local compatibility shim deliberately" below for the step-by-step procedure.
 
 ## Enforcement: CODEOWNERS and CI
 
@@ -113,15 +113,76 @@ A CODEOWNERS file alone does not require approval before merging. Mandatory code
 
 The `shadcn ownership` workflow runs on pull requests targeting `main`:
 
-1. **Protected-path change detection** — compares the PR branch against the base branch and fails with a clear, actionable message when any file under `registry/data-table/components/ui/` is added, modified, renamed, or deleted. Ordinary DataTable component changes under `registry/data-table/components/data-table/` are not affected.
+1. **CODEOWNERS validation** — verifies `.github/CODEOWNERS` is syntactically valid and that every required protected path carries an explicit ownership rule.
 
-2. **CODEOWNERS validation** — verifies `.github/CODEOWNERS` is syntactically valid and that every required protected path carries an explicit ownership rule.
+2. **shadcn CLI version consistency** — verifies that the `shadcn@X.Y.Z` version pinned in `package.json` matches every reference in `.github/workflows/integration.yml`. This prevents silent version drift between the local dev toolchain and CI. See `scripts/ci/check-shadcn-version.js`.
+
+3. **Protected-path change detection** — compares the PR branch against the base branch and fails with a clear, actionable message when any file under `registry/data-table/components/ui/` is added, modified, renamed, or deleted without valid authorization. Ordinary DataTable component changes under `registry/data-table/components/data-table/` are not affected.
 
 Generated registry artifacts under `public/r/` are verified for drift by the existing `Registry` workflow (`.github/workflows/registry.yml`), which validates `registry.json`, rebuilds the artifacts, and fails when committed artifacts are out of date or contain untracked files.
 
-### Intentional maintenance changes to protected files
+### Intentional maintenance changes to protected files — authorization mechanism
 
-Intentional updates to protected compatibility shims require explicit maintainer authorization and a dedicated maintenance PR (not bundled with unrelated feature work), as described in "How intentional upstream changes will be handled." There is no CI bypass mechanism for protected files; the branch-protection and ruleset configuration described above is the administrator-controlled gate.
+Intentional updates to protected compatibility shims require explicit maintainer authorization via a dedicated maintenance PR. The authorization mechanism uses a **GitHub Actions Environment with required reviewers** (`protected-maintenance`), which must be configured by a repository administrator.
+
+**Workflow:**
+
+1. Add the label `maintenance: protected-component` to the PR.
+2. The `authorize-maintenance` job runs in the `protected-maintenance` GitHub Environment. GitHub blocks the job until an eligible required reviewer approves the deployment. This is a human-in-the-loop gate enforced by GitHub, not by CI code.
+3. After approval, the job records the approving actor and timestamp as job outputs.
+4. The `enforce-ownership` job reads those outputs and passes them as `MAINTENANCE_AUTHORIZED`, `MAINTENANCE_AUTHORIZED_BY`, and `MAINTENANCE_AUTHORIZED_AT` environment variables to `protected-paths.js`.
+5. `protected-paths.js` calls `check-maintenance-authorization.js` to validate all three variables. Only when all are present and correct does the protected-path check pass.
+6. The authorization decision (actor, timestamp, reason) is recorded in the workflow log for audit purposes.
+
+**Security properties:**
+
+- A label, branch name, PR title, or commit message alone is never sufficient authorization. The label only routes the PR to the environment gate.
+- The environment's required-reviewer gate is enforced by GitHub; a job that has not passed through the environment cannot set `MAINTENANCE_AUTHORIZED=true`.
+- Fail-closed: any missing or malformed authorization metadata causes the check to exit 1.
+- Unauthorized actors cannot self-authorize: the environment gates who can approve the deployment to run.
+
+**Administrator prerequisite:**
+
+A repository administrator must create a GitHub Actions Environment named exactly `protected-maintenance` and add at least one required reviewer who is not the PR author. Without required reviewers the gate is ineffective. The environment is configured at:
+
+> `https://github.com/<org>/<repo>/settings/environments`
+
+The CODEOWNERS code-owner review requirement is a separate, complementary gate enforced by branch protection. Both gates must be satisfied for a maintenance PR to be mergeable.
+
+**Single-maintainer limitation:**
+
+If the only CODEOWNER is also the PR author, that person cannot provide an independent approval of their own PR. In this case, either a trusted collaborator with repository access must be added as a required reviewer for the `protected-maintenance` environment, or an alternative governance arrangement must be explicitly approved and documented. Do not weaken review requirements to hide this limitation.
+
+## Repository ruleset configuration (administrator action required)
+
+The following settings must be configured by a repository administrator on the `main` branch. CODEOWNERS alone does not enforce review without branch protection.
+
+**Branch ruleset settings for `main`:**
+
+| Setting | Required value |
+|---|---|
+| Require a pull request before merging | ✅ Enabled |
+| Required approvals | At least 1 |
+| Require review from Code Owners | ✅ Enabled |
+| Dismiss stale pull request approvals when new commits are pushed | ✅ Enabled |
+| Require approval of the most recent reviewable push | ✅ Enabled (where supported) |
+| Restrict who can push to matching branches | ✅ Enabled (prevent direct pushes to `main`) |
+| Block force pushes | ✅ Enabled |
+| Restrict deletions | ✅ Enabled |
+
+**GitHub Actions Environment for `protected-maintenance`:**
+
+| Setting | Required value |
+|---|---|
+| Environment name | `protected-maintenance` (exact) |
+| Required reviewers | At least 1 reviewer who is not the PR author |
+| Deployment protection rules | Required reviewers enabled |
+| Wait timer | Optional; consider a short delay (e.g. 5–15 min) to allow cancellation |
+
+These settings cannot be configured through repository code or CI — they require administrator access to `Settings > Branches` (or `Settings > Rulesets`) and `Settings > Environments`.
+
+> [!IMPORTANT]
+> Until the `protected-maintenance` environment is configured with required reviewers, the authorization gate is ineffective. Any actor with write access to the repository can approve the deployment to themselves, bypassing the intended human review requirement.
 
 ## Upstream compatibility audit
 
@@ -239,29 +300,36 @@ The audit is audit-only: it identifies review requirements but never modifies lo
 
 Intentional updates to protected compatibility shims require:
 
-1. Explicit maintainer authorization.
+1. Explicit maintainer authorization via the `protected-maintenance` GitHub Environment.
 2. A dedicated maintenance PR (not bundled with unrelated feature work).
 3. Verification that consumer-facing behavior and the registry dependencies remain compatible.
 
-**Protected-path CI hard-rejects all changes.** The `shadcn ownership` CI
-workflow (`.github/workflows/ownership.yml`) runs `scripts/ci/protected-paths.js`
-on every PR targeting `main`. That script fails with exit status 1 when any file
-under `registry/data-table/components/ui/` is added, modified, renamed, or
-deleted — including `table.tsx`. It has no bypass parameter, no exception
-mechanism, and no approved-exception list. CODEOWNERS code-owner review takes
-effect only when a repository administrator enables branch protection requiring
-code-owner review on the default branch; that is the administrator-controlled
-gate described in "Enforcement: CODEOWNERS and CI."
+**Step-by-step:**
 
-Consequence: as written, the maintenance-PR procedure above **cannot complete**
-for `table.tsx` or any other file under `registry/data-table/components/ui/`,
-because the protected-path CI check rejects the change before a maintainer can
-approve it. To make an authorized maintenance PR mergeable, a repository
-administrator must first add an exception/bypass to the protected-path CI check
-(or otherwise scope the check), and then the maintainer applies code-owner
-approval through the branch-protection gate. Until such an exception exists, no
-maintainer authorization or dedicated maintenance PR can get a protected-file
-change merged to `main`.
+1. Open a dedicated maintenance PR that modifies only the protected shim(s) that require updating. Do not bundle unrelated feature work.
+2. Add the label `maintenance: protected-component` to the PR.
+3. The `shadcn ownership` workflow detects the label and routes the PR to the `authorize-maintenance` job.
+4. GitHub blocks the `authorize-maintenance` job until a required reviewer (configured by an administrator in the `protected-maintenance` environment) approves the deployment. The approving reviewer must not be the PR author.
+5. After approval, the authorization is recorded in the workflow log (actor, timestamp, environment).
+6. The `enforce-ownership` job reads the authorization and allows the protected-path change to proceed.
+7. CODEOWNERS code-owner review (enforced by branch protection) still applies and must be satisfied separately.
+8. All other required CI checks (tests, type check, lint, compatibility audit) must also pass.
+
+**Investigating a failed authorization:**
+
+- If the `Verify maintenance authorization` step fails: the environment outputs were empty or malformed. Check whether the `protected-maintenance` environment is configured with required reviewers and whether the required reviewer approved.
+- If the `Detect protected compatibility shim changes` step fails despite authorization: re-inspect the authorization env vars in the workflow log. The check is fail-closed on incomplete metadata.
+- If the `authorize-maintenance` job is skipped: the `maintenance: protected-component` label was not present, or the event was not a pull request.
+
+**Repository administrator requirements:**
+
+The following settings must be configured by an administrator before any maintenance PR can be merged:
+
+1. Create a GitHub Actions Environment named exactly `protected-maintenance` at `Settings > Environments`.
+2. Add at least one required reviewer who is not the PR author.
+3. Enable branch protection on `main`: require pull requests, require CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion.
+
+Until the `protected-maintenance` environment is configured with required reviewers, the authorization gate is ineffective and maintenance PRs cannot be authorized through this mechanism.
 
 ### Components requiring manual review
 

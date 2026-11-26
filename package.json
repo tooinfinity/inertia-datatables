@@ -13,7 +13,8 @@
     "registry:build": "shadcn build",
     "registry:validate": "shadcn registry validate",
     "registry:verify-consumer": "node scripts/ci/verify-consumer-install.js",
-    "registry:test-consumer": "node scripts/ci/test-consumer-integration.js"
+    "registry:test-consumer": "node scripts/ci/test-consumer-integration.js",
+    "ci:check-shadcn-version": "node scripts/ci/check-shadcn-version.js"
   },
   "dependencies": {
     "@inertiajs/react": "^3.11.0",

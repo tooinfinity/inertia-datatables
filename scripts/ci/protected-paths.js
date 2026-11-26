@@ -9,12 +9,25 @@
  * Protected path:
  *   registry/data-table/components/ui/  (package-maintained compatibility shims)
  *
+ * Authorization
+ * -------------
+ * When MAINTENANCE_AUTHORIZED=true is set in the environment (by the
+ * `authorize-maintenance` GitHub Actions job which requires human review through
+ * the `protected-maintenance` environment), and MAINTENANCE_AUTHORIZED_BY and
+ * MAINTENANCE_AUTHORIZED_AT are also present, the script skips the rejection
+ * and logs an audit entry instead.
+ *
+ * A label, branch name, PR title, or commit message alone is never sufficient.
+ * The authorization variables can only be set by a job that has passed through
+ * the `protected-maintenance` GitHub Environment with its required-reviewer gate.
+ *
  * Exit status:
- *   0 — no protected paths changed (safe).
- *   1 — one or more protected paths changed (reported with a failure message).
+ *   0 — no protected paths changed (safe), or change is explicitly authorized.
+ *   1 — one or more protected paths changed and no valid authorization present.
  */
 
 import { readFileSync } from 'node:fs';
+import { checkAuthorization } from './check-maintenance-authorization.js';
 
 const PROTECTED_PREFIX = 'registry/data-table/components/ui/';
 
@@ -95,18 +108,55 @@ export function buildFailureMessage(protectedChanges) {
         'reformatted during ordinary feature development.',
         '',
         'Intentional changes require explicit maintainer authorization via a',
-        'dedicated maintenance PR. See',
+        'dedicated maintenance PR with the "maintenance: protected-component" label.',
+        'The PR must pass through the protected-maintenance GitHub Environment',
+        '(which requires a human reviewer to approve). See',
         'docs/architecture/shadcn-component-ownership.md.',
     ];
 
     return lines.join('\n');
 }
 
-export function main(input) {
+export function buildAuthorizedMessage(protectedChanges, actor, timestamp) {
+    const lines = [
+        'Protected-component maintenance change authorized and recorded:',
+        ...protectedChanges.map((path) => `  - ${path}`),
+        '',
+        `  Authorized by: ${actor}`,
+        `  Authorized at: ${timestamp}`,
+        '',
+        'This change passed through the protected-maintenance GitHub Environment.',
+        'The authorization is recorded in this workflow log for audit purposes.',
+    ];
+
+    return lines.join('\n');
+}
+
+/**
+ * @param {string} input  Git diff --name-status -z output
+ * @param {Record<string, string | undefined>} [env]  Defaults to process.env
+ */
+export function main(input, env = process.env) {
     const protectedChanges = findProtectedChanges(input);
 
     if (protectedChanges.length === 0) {
         return { ok: true, protectedChanges: [] };
+    }
+
+    // Check whether a human-reviewed authorization was granted via the
+    // protected-maintenance GitHub Environment.
+    const auth = checkAuthorization(env);
+    if (auth.authorized) {
+        return {
+            ok: true,
+            protectedChanges,
+            authorized: true,
+            message: buildAuthorizedMessage(
+                protectedChanges,
+                auth.actor,
+                auth.timestamp,
+            ),
+        };
     }
 
     return { ok: false, protectedChanges, message: buildFailureMessage(protectedChanges) };
@@ -114,10 +164,14 @@ export function main(input) {
 
 if (import.meta.main) {
     const input = readFileSync(0, 'utf-8');
-    const result = main(input);
+    const result = main(input, process.env);
 
     if (!result.ok) {
         console.error(result.message);
         process.exit(1);
+    }
+
+    if (result.authorized) {
+        console.log(result.message);
     }
 }
