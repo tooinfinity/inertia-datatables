@@ -49,7 +49,7 @@ export function findWorkflowVersions(content) {
     const lines = content.split('\n');
     const versionedRe = /(?<![\w@./-])(?:(["'])shadcn@(.*?)\1|shadcn@([^\s"'`;&|<>]*))/g;
     const unversionedRunnerRe = /(?:^|\s)(?:npx|bunx|pnpx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec(?:\s+--)?)(?:\s+-[-\w]+)*\s+(["']?)shadcn\1(?![@\w.-])/g;
-    const unversionedDirectRe = /(?:^|[;&|]\s*)(["']?)shadcn\1(?=\s+(?:add|init|build|registry|diff|view|search|info|migrate|mcp)\b)/g;
+    const unversionedDirectRe = /(?:^\s*|[;&|]\s*)(["']?)shadcn\1(?=\s+(?:add|init|build|registry|diff|view|search|info|migrate|mcp)\b)/g;
 
     lines.forEach((line, index) => {
         if (line.trimStart().startsWith('#')) {

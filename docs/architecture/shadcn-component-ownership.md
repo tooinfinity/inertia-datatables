@@ -165,7 +165,7 @@ The following settings must be configured by a repository administrator on the `
 | Setting | Required value |
 |---|---|
 | Require a pull request before merging | ✅ Enabled |
-| Require status checks to pass before merging | `Enforce shadcn component ownership` |
+| Require status checks to pass before merging | `Enforce shadcn component ownership`, `Frontend Tests` (lint, typecheck, Vitest), `Validate local shims against baseline` (compatibility audit), `Verify registry artifacts`, and applicable PHP `tests` checks |
 | Required approvals | At least 1 |
 | Require review from Code Owners | ✅ Enabled |
 | Dismiss stale pull request approvals when new commits are pushed | ✅ Enabled |
@@ -334,7 +334,7 @@ The following settings must be configured by an administrator before any mainten
 
 1. Create a GitHub Actions Environment named exactly `protected-maintenance` at `Settings > Environments`.
 2. Enable **Prevent self-review** and add at least one eligible required reviewer who is not the PR author.
-3. Enable branch protection on `main`: require pull requests, require the `Enforce shadcn component ownership` status check and CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion. Do not require `Authorize protected-component maintenance`, which is skipped for ordinary pull requests.
+3. Enable branch protection on `main`: require pull requests, require the `Enforce shadcn component ownership`, `Frontend Tests` (lint, typecheck, Vitest), `Validate local shims against baseline` (compatibility audit), `Verify registry artifacts`, and applicable PHP `tests` status checks plus CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion. Do not require `Authorize protected-component maintenance`, which is skipped for ordinary pull requests.
 
 ### Components requiring manual review
 
