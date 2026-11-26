@@ -97,6 +97,9 @@
         "test:unit": [
             "vendor/bin/pest --parallel"
         ],
+        "bench": [
+            "codspeed run -m simulation"
+        ],
         "test": [
             "@analyse",
             "@lint:check",
