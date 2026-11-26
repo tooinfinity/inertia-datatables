@@ -129,7 +129,7 @@ Intentional updates to protected compatibility shims require explicit maintainer
 
 1. Add the label `maintenance: protected-component` to the PR.
 2. The `authorize-maintenance` job runs in the `protected-maintenance` GitHub Environment. GitHub blocks the job until an eligible required reviewer approves the deployment. This is a human-in-the-loop gate enforced by GitHub, not by CI code.
-3. After approval, the job records the approving actor and timestamp as job outputs.
+3. After approval, the job verifies the approving identity in the deployment review history and records that identity and the time it was verified as job outputs.
 4. The `enforce-ownership` job reads those outputs and passes them as `MAINTENANCE_AUTHORIZED`, `MAINTENANCE_AUTHORIZED_BY`, and `MAINTENANCE_AUTHORIZED_AT` environment variables to `protected-paths.js`.
 5. `protected-paths.js` calls `check-maintenance-authorization.js` to validate all three variables. Only when all are present and correct does the protected-path check pass.
 6. The authorization decision (actor, timestamp, reason) is recorded in the workflow log for audit purposes.
@@ -143,7 +143,7 @@ Intentional updates to protected compatibility shims require explicit maintainer
 
 **Administrator prerequisite:**
 
-A repository administrator must create a GitHub Actions Environment named exactly `protected-maintenance` and add at least one required reviewer who is not the PR author. Without required reviewers the gate is ineffective. The environment is configured at:
+A repository administrator must create a GitHub Actions Environment named exactly `protected-maintenance`, enable **Prevent self-review**, and add at least one eligible required reviewer who is not the PR author. CI rejects missing or ambiguous approval records and approvals by the PR author. The environment is configured at:
 
 > `https://github.com/<org>/<repo>/settings/environments`
 
@@ -151,7 +151,7 @@ The CODEOWNERS code-owner review requirement is a separate, complementary gate e
 
 **Single-maintainer limitation:**
 
-If the only CODEOWNER is also the PR author, that person cannot provide an independent approval of their own PR. In this case, either a trusted collaborator with repository access must be added as a required reviewer for the `protected-maintenance` environment, or an alternative governance arrangement must be explicitly approved and documented. Do not weaken review requirements to hide this limitation.
+If the only CODEOWNER is also the PR author, add an eligible independent CODEOWNER who can approve the protected paths. The PR also requires approval from an eligible `protected-maintenance` environment reviewer. The same independent collaborator can provide both approvals if eligible for both roles. Any alternative governance arrangement must be explicitly approved and documented for both gates.
 
 ## Repository ruleset configuration (administrator action required)
 
@@ -175,14 +175,14 @@ The following settings must be configured by a repository administrator on the `
 | Setting | Required value |
 |---|---|
 | Environment name | `protected-maintenance` (exact) |
-| Required reviewers | At least 1 reviewer who is not the PR author |
-| Deployment protection rules | Required reviewers enabled |
+| Required reviewers | At least 1 eligible reviewer who is not the PR author |
+| Deployment protection rules | Required reviewers and **Prevent self-review** enabled |
 | Wait timer | Optional; consider a short delay (e.g. 5–15 min) to allow cancellation |
 
 These settings cannot be configured through repository code or CI — they require administrator access to `Settings > Branches` (or `Settings > Rulesets`) and `Settings > Environments`.
 
 > [!IMPORTANT]
-> Until the `protected-maintenance` environment is configured with required reviewers, the authorization gate is ineffective. Any actor with write access to the repository can approve the deployment to themselves, bypassing the intended human review requirement.
+> Maintenance authorization requires a recorded deployment approval. Configure both required reviewers and **Prevent self-review** before using this workflow.
 
 ## Upstream compatibility audit
 
@@ -317,7 +317,7 @@ Intentional updates to protected compatibility shims require:
 
 **Investigating a failed authorization:**
 
-- If the `Verify maintenance authorization` step fails: the environment outputs were empty or malformed. Check whether the `protected-maintenance` environment is configured with required reviewers and whether the required reviewer approved.
+- If the `Record authorization` step fails: check that GitHub recorded an unambiguous approval for `protected-maintenance` by an eligible reviewer other than the PR author. If reruns have left conflicting approval records, start a new workflow run.
 - If the `Detect protected compatibility shim changes` step fails despite authorization: re-inspect the authorization env vars in the workflow log. The check is fail-closed on incomplete metadata.
 - If the `authorize-maintenance` job is skipped: the `maintenance: protected-component` label was not present, or the event was not a pull request.
 
@@ -326,10 +326,8 @@ Intentional updates to protected compatibility shims require:
 The following settings must be configured by an administrator before any maintenance PR can be merged:
 
 1. Create a GitHub Actions Environment named exactly `protected-maintenance` at `Settings > Environments`.
-2. Add at least one required reviewer who is not the PR author.
+2. Enable **Prevent self-review** and add at least one eligible required reviewer who is not the PR author.
 3. Enable branch protection on `main`: require pull requests, require CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion.
-
-Until the `protected-maintenance` environment is configured with required reviewers, the authorization gate is ineffective and maintenance PRs cannot be authorized through this mechanism.
 
 ### Components requiring manual review
 

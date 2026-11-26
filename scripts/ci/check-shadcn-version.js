@@ -15,6 +15,7 @@
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 const INTEGRATION_WORKFLOW = '.github/workflows/integration.yml';
 
@@ -30,8 +31,7 @@ export function readPinnedVersion() {
     if (!version) {
         throw new Error('shadcn not found in package.json devDependencies');
     }
-    // Strip leading "^" or "~" if present (defensive; we pin exactly).
-    return version.replace(/^[^~]/, (c) => (/[\^~]/.test(c) ? '' : c));
+    return version;
 }
 
 /**
@@ -40,17 +40,18 @@ export function readPinnedVersion() {
  * Returns an array of { version, line } objects.
  *
  * Matches patterns like:
- *   shadcn@4.22.0
  *   shadcn@4.23.0
+ *   shadcn@4.23.0-beta.1
+ *   shadcn@latest
  */
 export function findWorkflowVersions(content) {
     const results = [];
     const lines = content.split('\n');
-    const re = /shadcn@(\d+\.\d+\.\d+)/g;
+    const re = /(?<![\w@./-])(?:(["'])shadcn@(.*?)\1|shadcn@([^\s"'`;&|<>]*))/g;
     lines.forEach((line, index) => {
         let match;
         while ((match = re.exec(line)) !== null) {
-            results.push({ version: match[1], line: index + 1 });
+            results.push({ version: match[2] ?? match[3], line: index + 1 });
         }
         re.lastIndex = 0;
     });
@@ -77,7 +78,7 @@ export function buildDriftMessage(pinnedVersion, mismatches, workflowPath) {
         '  Mismatched workflow references:',
         ...mismatches.map((m) => `    Line ${m.line}: shadcn@${m.version}`),
         '',
-        `Update every shadcn@X.Y.Z reference in ${workflowPath}`,
+        `Update every shadcn CLI specifier in ${workflowPath}`,
         `to match the pinned version: shadcn@${pinnedVersion}`,
         '',
         'Using a consistent, exact version prevents silent drift between local',
@@ -124,6 +125,6 @@ export function main() {
     );
 }
 
-if (import.meta.main) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     main();
 }

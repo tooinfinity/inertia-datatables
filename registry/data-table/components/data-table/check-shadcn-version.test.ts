@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
     findWorkflowVersions,
@@ -5,6 +9,30 @@ import {
     buildDriftMessage,
     readPinnedVersion,
 } from '../../../../scripts/ci/check-shadcn-version.js';
+
+it('exits with a drift error when the workflow uses nonmatching CLI specifiers', () => {
+    const script = resolve('scripts/ci/check-shadcn-version.js');
+    const cwd = mkdtempSync(join(tmpdir(), 'shadcn-version-'));
+    try {
+        const workflows = join(cwd, '.github', 'workflows');
+        mkdirSync(workflows, { recursive: true });
+        writeFileSync(join(workflows, 'integration.yml'), [
+            'bunx --bun shadcn@4.23.0 add',
+            'pnpm dlx shadcn@latest add',
+            'npx "shadcn@4.23.0-beta.1" add',
+            'npx "shadcn@4.23.0 || 4.24.0" add',
+        ].join('\n'));
+
+        const result = spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Line 2: shadcn@latest');
+        expect(result.stderr).toContain('Line 3: shadcn@4.23.0-beta.1');
+        expect(result.stderr).toContain('Line 4: shadcn@4.23.0 || 4.24.0');
+        expect(result.stderr).not.toContain('Line 1:');
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
 
 // ---------------------------------------------------------------------------
 // findWorkflowVersions
