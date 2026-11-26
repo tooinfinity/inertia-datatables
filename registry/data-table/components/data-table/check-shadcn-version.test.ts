@@ -65,15 +65,21 @@ it('exits with a validation failure when the integration workflow mixes pinned a
         mkdirSync(workflows, { recursive: true });
         writeFileSync(join(workflows, 'integration.yml'), [
             'bunx --bun shadcn@4.23.0 add "$REGISTRY_URL" --yes --overwrite',
+            '      - run: shadcn@4.23.0 build',
             'bunx --bun shadcn add "$REGISTRY_URL" --yes --overwrite',
             '          shadcn add "$REGISTRY_URL" --yes --overwrite',
+            '      - run: shadcn add "$REGISTRY_URL"',
+            '      - run: shadcn build',
         ].join('\n'));
 
         const result = spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain('Line 2: shadcn (missing version specifier)');
         expect(result.stderr).toContain('Line 3: shadcn (missing version specifier)');
+        expect(result.stderr).toContain('Line 4: shadcn (missing version specifier)');
+        expect(result.stderr).toContain('Line 5: shadcn (missing version specifier)');
+        expect(result.stderr).toContain('Line 6: shadcn (missing version specifier)');
         expect(result.stderr).not.toContain('Line 1:');
+        expect(result.stderr).not.toContain('Line 2:');
     } finally {
         rmSync(cwd, { recursive: true, force: true });
     }
