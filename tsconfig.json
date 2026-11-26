@@ -27,6 +27,7 @@
   "include": [
     "registry/data-table/components/**/*.ts",
     "registry/data-table/components/**/*.tsx",
+    "benchmarks/frontend/**/*.tsx",
     "vitest.config.ts",
     "vite.config.ts",
     "vitest.setup.tsx",
