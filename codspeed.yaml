@@ -1,0 +1,15 @@
+$schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
+
+# Server-side benchmarks: each one boots a Testbench app on in-memory SQLite,
+# seeds it, and handles the same DataTable request 50 times.
+# Run with: composer bench (or `codspeed run -m simulation`).
+# The frontend benchmarks run separately with `npm run bench`.
+benchmarks:
+  - name: "php: users table, default request"
+    exec: php benchmarks/php/datatable.php users-default
+
+  - name: "php: users table, search + sort + filters"
+    exec: php benchmarks/php/datatable.php users-search-sort-filter
+
+  - name: "php: posts table, relation column search + sort"
+    exec: php benchmarks/php/datatable.php posts-relation

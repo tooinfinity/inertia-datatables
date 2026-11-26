@@ -4,6 +4,7 @@
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/tooinfinity/inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/tooinfinity/inertia-datatables)
 [![Total Downloads](https://img.shields.io/packagist/dt/tooinfinity/inertia-datatables.svg?style=flat-square)](https://packagist.org/packages/tooinfinity/inertia-datatables)
 [![License](https://img.shields.io/packagist/l/tooinfinity/inertia-datatables.svg?style=flat-square)](LICENSE.md)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/tooinfinity/inertia-datatables?utm_source=badge)
 
 Server-side DataTables for Laravel + Inertia 3 with React 19, TanStack Table v9, and shadcn/ui.
 
@@ -1071,6 +1072,15 @@ End-to-end integration coverage for the official Laravel React starter kits (`nu
 - runs each kit's TypeScript, lint/format, production client build, and SSR build checks.
 
 Source-level dependency compatibility alone is not described as end-to-end integration coverage; only the checks above count.
+
+### Benchmarks
+
+Performance is tracked with [CodSpeed](https://app.codspeed.io/tooinfinity/inertia-datatables) on every pull request and on `main` ([workflow](.github/workflows/codspeed.yml)).
+
+- Frontend: `benchmarks/frontend/*.bench.tsx` render the `DataTable` component and format cell values with Vitest. Run them with `npm run bench`.
+- Backend: `benchmarks/php/datatable.php` boots Testbench on an in-memory SQLite database and handles DataTable requests (default request, search + sort + filters, relation column). The scenarios are listed in `codspeed.yaml`. Run them with `composer bench`, which needs the [CodSpeed CLI](https://codspeed.io/docs/cli).
+
+To measure the frontend benchmarks with CodSpeed locally, run `codspeed run -m simulation -- npm run bench`.
 
 ### Registry artifacts
 
