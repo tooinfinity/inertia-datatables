@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "generated": "2026-11-25",
+  "upstream": {
+    "repository": "shadcn-ui/ui",
+    "branch": "main",
+    "baselineCommit": "055aa6b7837b1808456a24beb4c97a677864aa82",
+    "currentCommit": "055aa6b7837b1808456a24beb4c97a677864aa82",
+    "style": "new-york-v4",
+    "sourcePath": "apps/v4/registry/new-york-v4/ui",
+    "rawUrlTemplate": "https://raw.githubusercontent.com/shadcn-ui/ui/{commit}/apps/v4/registry/new-york-v4/ui/{component}.tsx"
+  },
+  "components": [
+    {
+      "name": "table",
+      "localPath": "registry/data-table/components/ui/table.tsx",
+      "upstreamComponent": "table",
+      "comparisonStrategy": "structural",
+      "classification": "structurally-mirrors-upstream",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/table.tsx",
+      "semanticElements": ["table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption"],
+      "notes": "Local table.tsx structurally mirrors the official shadcn/ui Table primitive (semantic elements Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption). It is intentionally simplified: no cn() utility, no class-variance-authority (cva), no className prop, renders children directly. The upstream Table wraps <table> in an outer <div> container; this intentional wrapper is not flagged as an incompatibility. Automated structural comparison verifies exported component names and rendered semantic HTML elements match upstream."
+    },
+    {
+      "name": "button",
+      "localPath": "registry/data-table/components/ui/button.tsx",
+      "upstreamComponent": "button",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/button.tsx",
+      "notes": "Local button.tsx is a minimal role-equivalent shim: a <button> element forwarding ButtonHTMLAttributes with variant/size/asChild props. It is not a verified upstream copy — it omits cn(), cva, slot-based styling, and Radix UI primitives used by the official shadcn/ui Button. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    },
+    {
+      "name": "input",
+      "localPath": "registry/data-table/components/ui/input.tsx",
+      "upstreamComponent": "input",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/input.tsx",
+      "notes": "Local input.tsx is a minimal role-equivalent shim: an <input> element forwarding InputHTMLAttributes. It is not a verified upstream copy — it omits cn(), cva, and the field wrapper pattern used by the official shadcn/ui Input. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    },
+    {
+      "name": "select",
+      "localPath": "registry/data-table/components/ui/select.tsx",
+      "upstreamComponent": "select",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/select.tsx",
+      "notes": "Local select.tsx is a minimal role-equivalent shim with Select, SelectContent, SelectItem, SelectTrigger, SelectValue exports. It is not a verified upstream copy — it omits cn(), cva, Radix UI Primitives, and the complex popover-based SelectContent used by the official shadcn/ui Select. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    },
+    {
+      "name": "dropdown-menu",
+      "localPath": "registry/data-table/components/ui/dropdown-menu.tsx",
+      "upstreamComponent": "dropdown-menu",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/dropdown-menu.tsx",
+      "notes": "Local dropdown-menu.tsx is a minimal role-equivalent shim with DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem exports. It is not a verified upstream copy — it omits cn(), cva, Radix UI Primitives, and uses simplified event handling. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    },
+    {
+      "name": "checkbox",
+      "localPath": "registry/data-table/components/ui/checkbox.tsx",
+      "upstreamComponent": "checkbox",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/checkbox.tsx",
+      "notes": "Local checkbox.tsx is a minimal role-equivalent shim: a checkbox <input> forwarding InputHTMLAttributes with an onCheckedChange callback. It is not a verified upstream copy — it omits cn(), cva, and Radix UI Primitives used by the official shadcn/ui Checkbox. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    },
+    {
+      "name": "skeleton",
+      "localPath": "registry/data-table/components/ui/skeleton.tsx",
+      "upstreamComponent": "skeleton",
+      "comparisonStrategy": "manual",
+      "classification": "role-equivalent-shim",
+      "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/skeleton.tsx",
+      "notes": "Local skeleton.tsx is a minimal role-equivalent shim: a <div> forwarding HTMLAttributes. It is not a verified upstream copy — it omits cn(), cva, animation classes, and the pulse/skeleton styling used by the official shadcn/ui Skeleton. Source diff is not meaningful; changes to upstream require manual compatibility review."
+    }
+  ]
+}
