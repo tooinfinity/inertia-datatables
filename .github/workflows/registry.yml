@@ -44,4 +44,6 @@ jobs:
           test -z "$(git ls-files --others --exclude-standard -- public/r)"
 
       - name: Test consumer installation via native shadcn CLI
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: npm run registry:test-consumer

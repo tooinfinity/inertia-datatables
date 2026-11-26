@@ -48,30 +48,44 @@ export const EXPECTED_NPM_DEPENDENCIES = [
 
 /**
  * Parses and verifies a GitHub registry item address without depending on private shadcn modules.
- * Address format: owner/repo/item or owner/repo#ref/item
+ * Address format: owner/repo/item or owner/repo/item#ref or owner/repo#ref/item
  */
 export function verifyGitHubRegistryAddress(addressString = 'tooinfinity/inertia-datatables/data-table') {
     if (!addressString || typeof addressString !== 'string') {
         throw new Error('Address must be a non-empty string.');
     }
 
-    const segments = addressString.split('/');
-    if (segments.length !== 3) {
-        throw new Error(`Invalid GitHub item address "${addressString}". Expected format: owner/repo/item.`);
-    }
-
-    const [owner, rawRepo, item] = segments;
-    let repo = rawRepo;
+    let owner;
+    let repo;
+    let item;
     let ref;
 
-    if (rawRepo.includes('#')) {
-        const parts = rawRepo.split('#');
-        repo = parts[0];
-        ref = parts[1];
+    if (addressString.includes('#')) {
+        const hashIdx = addressString.indexOf('#');
+        const beforeHash = addressString.slice(0, hashIdx);
+        const afterHash = addressString.slice(hashIdx + 1);
+
+        const beforeSegments = beforeHash.split('/');
+        if (beforeSegments.length === 3) {
+            // Format: owner/repo/item#ref (e.g. tooinfinity/inertia-datatables/data-table#feat/my-branch)
+            [owner, repo, item] = beforeSegments;
+            ref = afterHash;
+        } else if (beforeSegments.length === 2 && afterHash.includes('/')) {
+            // Format: owner/repo#ref/item (e.g. tooinfinity/inertia-datatables#main/data-table)
+            [owner, repo] = beforeSegments;
+            const refItemParts = afterHash.split('/');
+            item = refItemParts[refItemParts.length - 1];
+            ref = refItemParts.slice(0, refItemParts.length - 1).join('/');
+        }
+    } else {
+        const segments = addressString.split('/');
+        if (segments.length === 3) {
+            [owner, repo, item] = segments;
+        }
     }
 
     if (!owner || !repo || !item) {
-        throw new Error(`Invalid GitHub address components in "${addressString}".`);
+        throw new Error(`Invalid GitHub item address "${addressString}". Expected format: owner/repo/item or owner/repo/item#ref or owner/repo#ref/item.`);
     }
 
     if (owner !== 'tooinfinity' || repo !== 'inertia-datatables' || item !== 'data-table') {
@@ -83,7 +97,7 @@ export function verifyGitHubRegistryAddress(addressString = 'tooinfinity/inertia
         owner,
         repo,
         item,
-        ref,
+        ref: ref || undefined,
     };
 }
 

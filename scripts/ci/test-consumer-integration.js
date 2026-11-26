@@ -44,16 +44,39 @@ export const DEFAULT_TS_PATHS = {
 };
 
 /**
+ * Resolves the target GitHub registry item address.
+ * Prioritizes:
+ * 1. CLI option or explicit argument
+ * 2. REGISTRY_ITEM_ADDRESS environment variable
+ * 3. GITHUB_HEAD_REF (GitHub Actions pull_request) or GITHUB_REF_NAME (push)
+ * 4. Default: tooinfinity/inertia-datatables/data-table
+ */
+export function resolveTargetItemAddress(customAddress) {
+    if (customAddress) {
+        return customAddress;
+    }
+    if (process.env.REGISTRY_ITEM_ADDRESS) {
+        return process.env.REGISTRY_ITEM_ADDRESS;
+    }
+    const prHeadRef = process.env.GITHUB_HEAD_REF || process.env.PR_HEAD_REF;
+    if (prHeadRef && prHeadRef.trim()) {
+        return `tooinfinity/inertia-datatables/data-table#${prHeadRef.trim()}`;
+    }
+    return 'tooinfinity/inertia-datatables/data-table';
+}
+
+/**
  * Checks whether network access is available for the native GitHub registry test.
  * Uses node:https directly to bypass browser-like DOM window.fetch CORS interception in tests.
+ * Allows injecting requestHandler for deterministic unit testing.
  */
-export async function checkNetworkAvailability(timeoutMs = 4000) {
+export async function checkNetworkAvailability(timeoutMs = 4000, requestHandler = httpsRequest) {
     return new Promise((resolveResult) => {
-        const req = httpsRequest(
+        const req = requestHandler(
             'https://raw.githubusercontent.com',
             { method: 'HEAD', timeout: timeoutMs },
             (res) => {
-                resolveResult(typeof res.statusCode === 'number' && res.statusCode < 500);
+                resolveResult(typeof res?.statusCode === 'number' && res.statusCode < 500);
             }
         );
 
@@ -150,12 +173,14 @@ export async function createConsumerFixture(baseDir, fixtureOptions = {}) {
 /**
  * Runs the native shadcn add command in the consumer directory.
  * Keeps stdin open until prompt is answered to prevent write-after-end errors.
+ * Inspects accumulated stdout and stderr text to reliably detect split-chunk prompts.
  */
-export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datatables/data-table', options = {}) {
+export async function runShadcnAdd(cwd, itemAddress, options = {}) {
+    const targetAddress = itemAddress || resolveTargetItemAddress();
     const { timeoutMs = 90000 } = options;
 
     return new Promise((resolvePromise, rejectPromise) => {
-        const child = spawn('npx', ['--yes', 'shadcn@latest', 'add', itemAddress], {
+        const child = spawn('npx', ['--yes', 'shadcn@latest', 'add', targetAddress], {
             cwd,
             stdio: ['pipe', 'pipe', 'pipe'],
             detached: true,
@@ -167,30 +192,27 @@ export async function runShadcnAdd(cwd, itemAddress = 'tooinfinity/inertia-datat
         let closed = false;
         let promptHandled = false;
 
-        const handlePromptResponse = () => {
+        const checkPromptAndRespond = () => {
             if (promptHandled || !child.stdin.writable || child.stdin.destroyed) {
                 return;
             }
-            promptHandled = true;
-            child.stdin.write('n\n', () => {
-                child.stdin.end();
-            });
+            const promptText = 'already exists. Would you like to overwrite?';
+            if (stdout.includes(promptText) || stderr.includes(promptText)) {
+                promptHandled = true;
+                child.stdin.write('n\n', () => {
+                    child.stdin.end();
+                });
+            }
         };
 
         child.stdout.on('data', (d) => {
-            const chunk = d.toString();
-            stdout += chunk;
-            if (chunk.includes('already exists. Would you like to overwrite?')) {
-                handlePromptResponse();
-            }
+            stdout += d.toString();
+            checkPromptAndRespond();
         });
 
         child.stderr.on('data', (d) => {
-            const chunk = d.toString();
-            stderr += chunk;
-            if (chunk.includes('already exists. Would you like to overwrite?')) {
-                handlePromptResponse();
-            }
+            stderr += d.toString();
+            checkPromptAndRespond();
         });
 
         const timer = setTimeout(() => {
@@ -291,14 +313,17 @@ export async function testConsumerIntegration(options = {}) {
         return { ok: true, skipped: true, reason: 'network_unavailable' };
     }
 
+    const targetAddress = resolveTargetItemAddress(options.itemAddress);
+    console.log(`Target registry item address: ${targetAddress}`);
+
     // Configuration 1: Standard Laravel Inertia alias configuration (@/components)
     const standardFixtureDir = await mkdtemp(join(tmpdir(), 'shadcn-consumer-standard-'));
     try {
         console.log(`Setting up standard consumer fixture at ${standardFixtureDir}...`);
         await createConsumerFixture(standardFixtureDir);
 
-        console.log('Running npx shadcn@latest add tooinfinity/inertia-datatables/data-table (standard aliases)...');
-        const standardResult = await runShadcnAdd(standardFixtureDir, 'tooinfinity/inertia-datatables/data-table', options);
+        console.log(`Running npx shadcn@latest add ${targetAddress} (standard aliases)...`);
+        const standardResult = await runShadcnAdd(standardFixtureDir, targetAddress, options);
 
         if (standardResult.code !== 0) {
             throw new Error(
@@ -334,8 +359,8 @@ export async function testConsumerIntegration(options = {}) {
         console.log(`Setting up custom alias consumer fixture at ${customFixtureDir}...`);
         await createConsumerFixture(customFixtureDir, customOptions);
 
-        console.log('Running npx shadcn@latest add tooinfinity/inertia-datatables/data-table (custom aliases)...');
-        const customResult = await runShadcnAdd(customFixtureDir, 'tooinfinity/inertia-datatables/data-table', options);
+        console.log(`Running npx shadcn@latest add ${targetAddress} (custom aliases)...`);
+        const customResult = await runShadcnAdd(customFixtureDir, targetAddress, options);
 
         if (customResult.code !== 0) {
             throw new Error(

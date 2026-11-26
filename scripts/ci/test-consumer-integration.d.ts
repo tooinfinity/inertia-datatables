@@ -2,7 +2,12 @@ export const CONSUMER_CUSTOM_BUTTON_CONTENT: string;
 export const DEFAULT_CONSUMER_ALIASES: Record<string, string>;
 export const DEFAULT_TS_PATHS: Record<string, string[]>;
 
-export function checkNetworkAvailability(timeoutMs?: number): Promise<boolean>;
+export function resolveTargetItemAddress(customAddress?: string): string;
+
+export function checkNetworkAvailability(
+    timeoutMs?: number,
+    requestHandler?: typeof import('node:https').request
+): Promise<boolean>;
 
 export function createConsumerFixture(
     baseDir: string,
@@ -31,6 +36,7 @@ export function testConsumerIntegration(options?: {
     requireNetwork?: boolean;
     timeoutMs?: number;
     networkCheck?: () => Promise<boolean>;
+    itemAddress?: string;
 }): Promise<{ ok: boolean; skipped: boolean; reason?: string }>;
 
 export function isDirectExecution(metaUrl: string): boolean;

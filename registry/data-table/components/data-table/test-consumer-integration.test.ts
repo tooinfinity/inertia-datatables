@@ -7,6 +7,7 @@ import {
     checkNetworkAvailability,
     createConsumerFixture,
     isDirectExecution,
+    resolveTargetItemAddress,
     testConsumerIntegration,
 } from '../../../../scripts/ci/test-consumer-integration.js';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -24,11 +25,105 @@ describe('test-consumer-integration', () => {
         });
     });
 
-    describe('checkNetworkAvailability', () => {
-        it('returns a boolean status without throwing', async () => {
-            // Test with a 100ms timeout against a local invalid port to verify deterministic boolean return
-            const result = await checkNetworkAvailability(100);
-            expect(typeof result).toBe('boolean');
+    describe('resolveTargetItemAddress', () => {
+        it('returns explicitly provided custom address', () => {
+            expect(resolveTargetItemAddress('custom/repo/data-table')).toBe('custom/repo/data-table');
+        });
+
+        it('returns ref address when GITHUB_HEAD_REF is set', () => {
+            const originalHead = process.env.GITHUB_HEAD_REF;
+            try {
+                process.env.GITHUB_HEAD_REF = 'feat/my-pr-branch';
+                expect(resolveTargetItemAddress()).toBe(
+                    'tooinfinity/inertia-datatables/data-table#feat/my-pr-branch'
+                );
+            } finally {
+                if (originalHead !== undefined) {
+                    process.env.GITHUB_HEAD_REF = originalHead;
+                } else {
+                    delete process.env.GITHUB_HEAD_REF;
+                }
+            }
+        });
+
+        it('returns default item address when no ref environment variables are present', () => {
+            const originalHead = process.env.GITHUB_HEAD_REF;
+            const originalPr = process.env.PR_HEAD_REF;
+            const originalAddr = process.env.REGISTRY_ITEM_ADDRESS;
+            try {
+                delete process.env.GITHUB_HEAD_REF;
+                delete process.env.PR_HEAD_REF;
+                delete process.env.REGISTRY_ITEM_ADDRESS;
+                expect(resolveTargetItemAddress()).toBe('tooinfinity/inertia-datatables/data-table');
+            } finally {
+                if (originalHead !== undefined) process.env.GITHUB_HEAD_REF = originalHead;
+                if (originalPr !== undefined) process.env.PR_HEAD_REF = originalPr;
+                if (originalAddr !== undefined) process.env.REGISTRY_ITEM_ADDRESS = originalAddr;
+            }
+        });
+    });
+
+    describe('checkNetworkAvailability (unit with mock requestHandler)', () => {
+        it('resolves true when request completes with 200 status', async () => {
+            const mockHandler = ((_url: unknown, _options: unknown, cb?: (res: { statusCode: number }) => void) => {
+                const req = {
+                    on: () => req,
+                    end: () => {
+                        cb?.({ statusCode: 200 });
+                    },
+                    destroy: () => {},
+                };
+                return req;
+            }) as unknown as typeof import('node:https').request;
+
+            const isOnline = await checkNetworkAvailability(100, mockHandler);
+            expect(isOnline).toBe(true);
+        });
+
+        it('resolves false when request encounters an error', async () => {
+            const mockHandler = () => {
+                const listeners: Record<string, Function> = {};
+                const req = {
+                    on: (event: string, fn: Function) => {
+                        listeners[event] = fn;
+                        return req;
+                    },
+                    end: () => {
+                        listeners.error?.(new Error('Network error'));
+                    },
+                    destroy: () => {},
+                };
+                return req;
+            };
+
+            const isOnline = await checkNetworkAvailability(
+                100,
+                mockHandler as unknown as typeof import('node:https').request
+            );
+            expect(isOnline).toBe(false);
+        });
+
+        it('resolves false on timeout', async () => {
+            const mockHandler = () => {
+                const listeners: Record<string, Function> = {};
+                const req = {
+                    on: (event: string, fn: Function) => {
+                        listeners[event] = fn;
+                        return req;
+                    },
+                    end: () => {
+                        listeners.timeout?.();
+                    },
+                    destroy: () => {},
+                };
+                return req;
+            };
+
+            const isOnline = await checkNetworkAvailability(
+                100,
+                mockHandler as unknown as typeof import('node:https').request
+            );
+            expect(isOnline).toBe(false);
         });
     });
 

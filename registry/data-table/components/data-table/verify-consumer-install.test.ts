@@ -34,8 +34,17 @@ describe('verify-consumer-install (deterministic registry validation)', () => {
         });
 
         it('supports optional branch or ref', () => {
-            const resolved = verifyGitHubRegistryAddress('tooinfinity/inertia-datatables#main/data-table');
-            expect(resolved).toEqual({
+            const resolvedSuffix = verifyGitHubRegistryAddress('tooinfinity/inertia-datatables/data-table#feat/my-branch');
+            expect(resolvedSuffix).toEqual({
+                scheme: 'github',
+                owner: 'tooinfinity',
+                repo: 'inertia-datatables',
+                item: 'data-table',
+                ref: 'feat/my-branch',
+            });
+
+            const resolvedInfix = verifyGitHubRegistryAddress('tooinfinity/inertia-datatables#main/data-table');
+            expect(resolvedInfix).toEqual({
                 scheme: 'github',
                 owner: 'tooinfinity',
                 repo: 'inertia-datatables',
