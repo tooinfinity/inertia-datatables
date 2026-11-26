@@ -80,11 +80,13 @@ const response100 = makeResponse(100);
 
 // CodSpeed runs each benchmark several times back to back, awaiting only
 // microtasks. Under CPU simulation that can block the event loop for longer
-// than Vitest's 60 s worker RPC timeout, so yield to the event loop between
-// runs. Hooks run outside the measured section.
-afterEach(() => new Promise<void>((resolve) => setImmediate(resolve)));
+// than Vitest's 60 s worker RPC timeout, so every suite yields to the event
+// loop between runs. Hooks run outside the measured section.
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('DataTable render', () => {
+    afterEach(yieldToEventLoop);
+
     bench('25 rows', () => {
         render(<DataTable data={response25} />);
         cleanup();
@@ -111,6 +113,8 @@ describe('DataTable render', () => {
 const cellValues: unknown[] = makeRows(100).flatMap((row) => Object.values(row));
 
 describe('formatCellValue', () => {
+    afterEach(yieldToEventLoop);
+
     bench('700 mixed cell values', () => {
         for (const value of cellValues) {
             formatCellValue(value);
