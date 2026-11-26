@@ -44,6 +44,7 @@
 
 ### Docs
 
+- Document the required `Enforce shadcn component ownership` branch status check so administrators can enforce the ownership workflow on pull requests.
 - Clarify that the shadcn/ui compatibility audit drift mode reports only rendered HTML elements removed by the latest upstream (elements the baseline no longer renders); elements upstream adds are not reported, consistent with the validation subset rule.
 
 ### Changed

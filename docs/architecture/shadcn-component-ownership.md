@@ -162,6 +162,7 @@ The following settings must be configured by a repository administrator on the `
 | Setting | Required value |
 |---|---|
 | Require a pull request before merging | ✅ Enabled |
+| Require status checks to pass before merging | `Enforce shadcn component ownership` |
 | Required approvals | At least 1 |
 | Require review from Code Owners | ✅ Enabled |
 | Dismiss stale pull request approvals when new commits are pushed | ✅ Enabled |
@@ -169,6 +170,8 @@ The following settings must be configured by a repository administrator on the `
 | Restrict who can push to matching branches | ✅ Enabled (prevent direct pushes to `main`) |
 | Block force pushes | ✅ Enabled |
 | Restrict deletions | ✅ Enabled |
+
+Do not require `Authorize protected-component maintenance`: that job is intentionally skipped for ordinary pull requests.
 
 **GitHub Actions Environment for `protected-maintenance`:**
 
@@ -327,7 +330,7 @@ The following settings must be configured by an administrator before any mainten
 
 1. Create a GitHub Actions Environment named exactly `protected-maintenance` at `Settings > Environments`.
 2. Enable **Prevent self-review** and add at least one eligible required reviewer who is not the PR author.
-3. Enable branch protection on `main`: require pull requests, require CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion.
+3. Enable branch protection on `main`: require pull requests, require the `Enforce shadcn component ownership` status check and CODEOWNER review, dismiss stale approvals, prevent force pushes, prevent branch deletion. Do not require `Authorize protected-component maintenance`, which is skipped for ordinary pull requests.
 
 ### Components requiring manual review
 
