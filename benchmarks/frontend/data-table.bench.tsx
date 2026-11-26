@@ -1,5 +1,5 @@
 import { cleanup, render } from '@testing-library/react';
-import { bench, describe } from 'vitest';
+import { afterEach, bench, describe } from 'vitest';
 import { DataTable } from '../../registry/data-table/components/data-table/data-table';
 import { formatCellValue } from '../../registry/data-table/components/data-table/cell-formatters';
 import type {
@@ -77,6 +77,12 @@ function makeResponse(perPage: number): DataTableResponse<Row> {
 
 const response25 = makeResponse(25);
 const response100 = makeResponse(100);
+
+// CodSpeed runs each benchmark several times back to back, awaiting only
+// microtasks. Under CPU simulation that can block the event loop for longer
+// than Vitest's 60 s worker RPC timeout, so yield to the event loop between
+// runs. Hooks run outside the measured section.
+afterEach(() => new Promise<void>((resolve) => setImmediate(resolve)));
 
 describe('DataTable render', () => {
     bench('25 rows', () => {
