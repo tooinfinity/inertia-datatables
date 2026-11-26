@@ -47,13 +47,33 @@ export function readPinnedVersion() {
 export function findWorkflowVersions(content) {
     const results = [];
     const lines = content.split('\n');
-    const re = /(?<![\w@./-])(?:(["'])shadcn@(.*?)\1|shadcn@([^\s"'`;&|<>]*))/g;
+    const versionedRe = /(?<![\w@./-])(?:(["'])shadcn@(.*?)\1|shadcn@([^\s"'`;&|<>]*))/g;
+    const unversionedRunnerRe = /(?:^|\s)(?:npx|bunx|pnpx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec(?:\s+--)?)(?:\s+-[-\w]+)*\s+(["']?)shadcn\1(?![@\w.-])/g;
+    const unversionedDirectRe = /(?:^|[;&|]\s*)(["']?)shadcn\1(?=\s+(?:add|init|build|registry|diff|view|search|info|migrate|mcp)\b)/g;
+
     lines.forEach((line, index) => {
-        let match;
-        while ((match = re.exec(line)) !== null) {
-            results.push({ version: match[2] ?? match[3], line: index + 1 });
+        if (line.trimStart().startsWith('#')) {
+            return;
         }
-        re.lastIndex = 0;
+
+        const lineMatches = [];
+        let match;
+        while ((match = versionedRe.exec(line)) !== null) {
+            lineMatches.push({ version: match[2] ?? match[3], line: index + 1 });
+        }
+        versionedRe.lastIndex = 0;
+
+        while ((match = unversionedRunnerRe.exec(line)) !== null) {
+            lineMatches.push({ version: '(unpinned)', line: index + 1 });
+        }
+        unversionedRunnerRe.lastIndex = 0;
+
+        while ((match = unversionedDirectRe.exec(line)) !== null) {
+            lineMatches.push({ version: '(unpinned)', line: index + 1 });
+        }
+        unversionedDirectRe.lastIndex = 0;
+
+        results.push(...lineMatches);
     });
     return results;
 }
@@ -67,7 +87,7 @@ export function findWorkflowVersions(content) {
  */
 export function checkVersionConsistency(pinnedVersion, workflowVersions) {
     const mismatches = workflowVersions.filter((ref) => ref.version !== pinnedVersion);
-    return { ok: mismatches.length === 0, mismatches };
+    return { ok: workflowVersions.length > 0 && mismatches.length === 0, mismatches };
 }
 
 export function buildDriftMessage(pinnedVersion, mismatches, workflowPath) {
@@ -76,7 +96,11 @@ export function buildDriftMessage(pinnedVersion, mismatches, workflowPath) {
         '',
         `  Pinned version (package.json): ${pinnedVersion}`,
         '  Mismatched workflow references:',
-        ...mismatches.map((m) => `    Line ${m.line}: shadcn@${m.version}`),
+        ...mismatches.map((m) =>
+            m.version === '(unpinned)'
+                ? `    Line ${m.line}: shadcn (missing version specifier)`
+                : `    Line ${m.line}: shadcn@${m.version}`,
+        ),
         '',
         `Update every shadcn CLI specifier in ${workflowPath}`,
         `to match the pinned version: shadcn@${pinnedVersion}`,
@@ -107,10 +131,10 @@ export function main() {
     const workflowVersions = findWorkflowVersions(workflowContent);
 
     if (workflowVersions.length === 0) {
-        console.warn(
-            `warning: no shadcn@X.Y.Z references found in ${INTEGRATION_WORKFLOW}; nothing to validate.`,
+        console.error(
+            `error: no expected shadcn CLI references (shadcn@<specifier>) found in ${INTEGRATION_WORKFLOW}; expected pinned version shadcn@${pinnedVersion}.`,
         );
-        process.exit(0);
+        process.exit(1);
     }
 
     const { ok, mismatches } = checkVersionConsistency(pinnedVersion, workflowVersions);

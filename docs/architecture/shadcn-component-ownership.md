@@ -99,6 +99,9 @@ Review responsibility for protected paths is assigned in `.github/CODEOWNERS`:
 - `registry/data-table/components/ui/` — package-maintained compatibility shims (`@tooinfinity`).
 - `public/r/` — generated registry artifacts (`@tooinfinity`).
 - `registry.json` — registry source of truth (`@tooinfinity`).
+- `.github/CODEOWNERS` — ownership rules (`@tooinfinity`).
+- `.github/workflows/` — CI enforcement and integration workflows (`@tooinfinity`).
+- `scripts/ci/` — CI enforcement, authorization, and version-check scripts (`@tooinfinity`).
 - `docs/architecture/shadcn-component-ownership.md` — ownership policy (`@tooinfinity`).
 
 Package-owned DataTable components under `registry/data-table/components/data-table/` are editable during ordinary development, so they carry no protective CODEOWNERS rule.
@@ -311,6 +314,7 @@ Intentional updates to protected compatibility shims require:
 
 1. Open a dedicated maintenance PR that modifies only the protected shim(s) that require updating. Do not bundle unrelated feature work.
 2. Add the label `maintenance: protected-component` to the PR.
+   - **Run-initiator restriction:** When **Prevent self-review** is enabled on the `protected-maintenance` environment, GitHub prevents the user who initiated the workflow run from approving its deployment—even if that user is not the PR author. If an independent eligible reviewer adds the label, they become the run initiator and cannot approve that run; in that case, have the PR author push a commit (or re-trigger the workflow from the author's account) to start a new run that the independent maintainer can approve.
 3. The `shadcn ownership` workflow detects the label and routes the PR to the `authorize-maintenance` job.
 4. GitHub blocks the `authorize-maintenance` job until a required reviewer (configured by an administrator in the `protected-maintenance` environment) approves the deployment. The approving reviewer must not be the PR author.
 5. After approval, the authorization is recorded in the workflow log (actor, timestamp, environment).

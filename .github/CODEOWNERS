@@ -43,5 +43,12 @@ registry.json @tooinfinity
 .github/CODEOWNERS @tooinfinity
 
 # ---------------------------------------------------------------------------
+# CI workflows and enforcement scripts — self-protected so changes to
+# ownership enforcement, authorization gates, and version checks require
+# maintainer review.
+.github/workflows/ @tooinfinity
+scripts/ci/ @tooinfinity
+
+# ---------------------------------------------------------------------------
 # Ownership policy documentation.
 docs/architecture/shadcn-component-ownership.md @tooinfinity

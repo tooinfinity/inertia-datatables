@@ -34,6 +34,49 @@ it('exits with a drift error when the workflow uses nonmatching CLI specifiers',
     }
 });
 
+it('exits with a validation failure when the integration workflow has no shadcn CLI references', () => {
+    const script = resolve('scripts/ci/check-shadcn-version.js');
+    const cwd = mkdtempSync(join(tmpdir(), 'shadcn-version-empty-'));
+    try {
+        const workflows = join(cwd, '.github', 'workflows');
+        mkdirSync(workflows, { recursive: true });
+        writeFileSync(join(workflows, 'integration.yml'), [
+            'name: Integration',
+            'jobs:',
+            '  integration:',
+            '    runs-on: ubuntu-latest',
+            '    steps:',
+            '      - run: echo "no shadcn cli here"',
+        ].join('\n'));
+
+        const result = spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('no expected shadcn CLI references');
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
+
+it('exits with a validation failure when the integration workflow mixes pinned and unversioned CLI invocations', () => {
+    const script = resolve('scripts/ci/check-shadcn-version.js');
+    const cwd = mkdtempSync(join(tmpdir(), 'shadcn-version-mixed-'));
+    try {
+        const workflows = join(cwd, '.github', 'workflows');
+        mkdirSync(workflows, { recursive: true });
+        writeFileSync(join(workflows, 'integration.yml'), [
+            'bunx --bun shadcn@4.23.0 add "$REGISTRY_URL" --yes --overwrite',
+            'bunx --bun shadcn add "$REGISTRY_URL" --yes --overwrite',
+        ].join('\n'));
+
+        const result = spawnSync(process.execPath, [script], { cwd, encoding: 'utf8' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Line 2: shadcn (missing version specifier)');
+        expect(result.stderr).not.toContain('Line 1:');
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
+
 // ---------------------------------------------------------------------------
 // findWorkflowVersions
 // ---------------------------------------------------------------------------
@@ -117,9 +160,9 @@ describe('check-shadcn-version: checkVersionConsistency', () => {
         expect(result.mismatches[0]).toEqual({ version: '4.22.0', line: 2 });
     });
 
-    it('returns ok=true for an empty references list', () => {
+    it('returns ok=false for an empty references list', () => {
         const result = checkVersionConsistency('4.23.0', []);
-        expect(result.ok).toBe(true);
+        expect(result.ok).toBe(false);
         expect(result.mismatches).toEqual([]);
     });
 
