@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { isValidOwner, validateCodeowners } from '../../../../scripts/ci/validate-codeowners.js';
+import {
+    REQUIRED_PATHS as PRODUCTION_REQUIRED_PATHS,
+    isValidOwner,
+    validateCodeowners,
+} from '../../../../scripts/ci/validate-codeowners.js';
 
 const REQUIRED_PATHS = [
     'registry/data-table/components/ui/',
@@ -302,5 +307,59 @@ describe('isValidOwner', () => {
     it('rejects a non-owner token', () => {
         expect(isValidOwner('registry.json')).toBe(false);
         expect(isValidOwner('')).toBe(false);
+    });
+});
+
+describe('validate-codeowners: enforcement self-protection', () => {
+    const enforcementCodeowners = [
+        'registry/data-table/components/ui/ @tooinfinity',
+        'public/r/ @tooinfinity',
+        'registry.json @tooinfinity',
+        '.github/CODEOWNERS @tooinfinity',
+        '.github/workflows/ @tooinfinity',
+        'scripts/ci/ @tooinfinity',
+        'docs/architecture/shadcn-component-ownership.md @tooinfinity',
+    ].join('\n');
+
+    it('requires ownership coverage for ownership workflow and CI scripts in production REQUIRED_PATHS', () => {
+        expect(PRODUCTION_REQUIRED_PATHS).toContain('.github/workflows/ownership.yml');
+        expect(PRODUCTION_REQUIRED_PATHS).toContain('scripts/ci/');
+    });
+
+    it('passes when all production required paths including workflows and scripts/ci are covered', () => {
+        const result = validateCodeowners(enforcementCodeowners, PRODUCTION_REQUIRED_PATHS);
+        expect(result.valid).toBe(true);
+        expect(result.errors).toEqual([]);
+    });
+
+    it('fails when the .github/workflows/ ownership rule is removed', () => {
+        const content = enforcementCodeowners.replace(
+            /^\.github\/workflows\/ @tooinfinity$/m,
+            '',
+        );
+        const result = validateCodeowners(content, PRODUCTION_REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('.github/workflows/ownership.yml')),
+        ).toBe(true);
+    });
+
+    it('fails when the scripts/ci/ ownership rule is removed', () => {
+        const content = enforcementCodeowners.replace(
+            /^scripts\/ci\/ @tooinfinity$/m,
+            '',
+        );
+        const result = validateCodeowners(content, PRODUCTION_REQUIRED_PATHS);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((error) => error.includes('scripts/ci/')),
+        ).toBe(true);
+    });
+
+    it('validates the repository .github/CODEOWNERS file against production REQUIRED_PATHS', () => {
+        const content = readFileSync('.github/CODEOWNERS', 'utf-8');
+        const result = validateCodeowners(content, PRODUCTION_REQUIRED_PATHS);
+        expect(result.valid).toBe(true);
+        expect(result.errors).toEqual([]);
     });
 });

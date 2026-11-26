@@ -8,6 +8,9 @@
 
 ### Added
 
+- CI: protected-component maintenance authorization workflow — intentional updates to protected shadcn/ui compatibility shims require approval from an independent reviewer in the `protected-maintenance` GitHub Actions Environment. CI verifies the deployment review and records who approved it. Ordinary PRs still fail closed, and adding the maintenance label starts authorization without granting it (implements CI enforcement and maintenance authorization portions of #136; repository-level branch protection configuration and end-to-end verification remain outstanding)
+- CI: shadcn CLI version consistency check (`scripts/ci/check-shadcn-version.js`, `npm run ci:check-shadcn-version`) — detects drift between the pinned version in `package.json` and references in integration workflow YAML files; runs as part of the ownership workflow on every PR (part of #136)
+- CI: `check-maintenance-authorization.js` — validates authorization environment variables set by the `protected-maintenance` environment gate and records an auditable log entry for every authorization decision (part of #136)
 - Benchmarks: CodSpeed performance tracking for the `DataTable` React component (Vitest, `npm run bench`) and server-side DataTable request handling (`composer bench`, `codspeed.yaml`), run on every pull request by `.github/workflows/codspeed.yml`
 
 - Frontend installation UX: native shadcn GitHub registry support (`npx shadcn@latest add tooinfinity/inertia-datatables/data-table`) is now the primary recommended installation method in README, with direct URL and local registry file installation preserved as alternatives (fixes #137)
@@ -42,6 +45,7 @@
 
 ### Docs
 
+- Document the required `Enforce shadcn component ownership` branch status check so administrators can enforce the ownership workflow on pull requests.
 - Clarify that the shadcn/ui compatibility audit drift mode reports only rendered HTML elements removed by the latest upstream (elements the baseline no longer renders); elements upstream adds are not reported, consistent with the validation subset rule.
 
 ### Changed
@@ -53,6 +57,7 @@
 
 ### Fixed
 
+- CI: integration workflow now uses shadcn CLI `4.23.0` (was `4.22.0`), matching the pinned version in `package.json`; version drift is now detected automatically by the new `check-shadcn-version.js` check in the ownership workflow (part of #136)
 - shadcn/ui compatibility audit: strengthened manifest and source validation by strictly validating `rawUrlTemplate` repository host and path segments against `upstream.repository` (requiring exactly two non-empty segments `owner/repo`), validating local component file existence and parsing for all components including manual review entries, rejecting `{commit}` placed in URL fragments, enforcing exact comparison strategy mapping (`table` as `structural` and other 6 shims as `manual`), safely guarding upstream source validation when `manifest.upstream` is missing or invalid, making table semantic element enforcement mandatory at code level, and using `pathToFileURL` to reliably detect the CLI entry-point when repository path contains spaces.
 - shadcn/ui compatibility audit: the component map is now built from actual export declarations (inline exports, grouped exports, and aliases) instead of every function declaration, so private helpers are excluded and components exported together at the end of a file are no longer missed; function parameter lists are now located with a delimiter-aware parenthesis scanner. Also removed a dangling manifest `$schema` reference to a schema file that does not exist.
 - shadcn/ui compatibility audit: a TSX source with syntax errors is now rejected upfront and reported as a distinct parse failure (with diagnostics) instead of being conflated with a valid file that has no supported component exports, so CI audit output clearly distinguishes unparseable files from files with no exports.
@@ -60,7 +65,6 @@
 - shadcn/ui compatibility audit: validation mode now fetches each component from the URL derived from the manifest's pinned baseline (`rawUrlTemplate` + `baselineCommit`) instead of the per-component `upstreamSource`, and manifest validation rejects `upstreamSource` URLs that do not match that baseline-derived URL; drift commit discovery builds the GitHub API URL from the manifest's `repository` and `branch` instead of hard-coded values, so validation and drift detection can no longer silently compare against different upstream revisions.
 - shadcn/ui compatibility audit: manifest validation now requires `rawUrlTemplate` to identify the same repository as `upstream.repository` and to substitute the commit with `{commit}`, requires `table` to use the `structural` comparison strategy, and rejects the audit entry point on Node versions below 22.18.0 by replacing `import.meta.main` with a direct-entry check.
 - shadcn/ui compatibility audit: the JSX collector no longer counts elements inside uncalled nested helper functions, so a component that returns `null` but nests a helper rendering a tag is no longer treated as rendering that tag; validation now also fails when a local `table` export does not render its required semantic element (e.g. `TableCaption` with no `<caption>`), which the subset rule previously accepted.
-- shadcn/ui compatibility audit docs: clarify that the protected-path CI check rejects all changes to `registry/data-table/components/ui/` with no bypass or exception mechanism, so the maintenance-PR procedure cannot complete for a protected file until a repository administrator adds an exception or scopes the check.
 - Pagination now appends a unique tiebreaker to Eloquent and Query Builder ordering, preventing tied rows from appearing on multiple pages or disappearing between pages. Distinct, grouped and union queries are ordered by their projected row key, grouping columns or key alias whenever the query shape allows it, and queries without a usable row key keep their original order (fixes #30)
 - Render invalid client sort, filter, and search parameters as `422` validation errors instead of server errors
 - Suppress default reporting for handled client input errors and add the `handle_exceptions` opt-out configuration

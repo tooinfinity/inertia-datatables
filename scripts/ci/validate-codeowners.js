@@ -25,6 +25,8 @@ export const REQUIRED_PATHS = [
     'public/r/',
     'registry.json',
     '.github/CODEOWNERS',
+    '.github/workflows/ownership.yml',
+    'scripts/ci/',
     'docs/architecture/shadcn-component-ownership.md',
 ];
 

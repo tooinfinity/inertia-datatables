@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { findProtectedChanges, isProtectedPath, parseChangedFiles } from '../../../../scripts/ci/protected-paths.js';
+import {
+    findProtectedChanges,
+    isProtectedPath,
+    parseChangedFiles,
+    main as protectedPathsMain,
+} from '../../../../scripts/ci/protected-paths.js';
 
 // Build Git `--name-status -z` output: NUL-separated fields, e.g.
 //   M\0path\0              (modify/add/delete)
@@ -195,5 +200,118 @@ describe('protected-paths: findProtectedChanges', () => {
         expect(findProtectedChanges(input)).toEqual([
             'registry/data-table/components/ui/select.tsx',
         ]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// main (authorization integration)
+// ---------------------------------------------------------------------------
+
+describe('protected-paths: main (authorization)', () => {
+    // No authorization (ordinary PR)
+    it('returns ok=true for unprotected changes with no authorization', () => {
+        const input = gitZ(change('M', 'README.md'));
+        const result = protectedPathsMain(input, {});
+        expect(result.ok).toBe(true);
+        expect(result.protectedChanges).toEqual([]);
+    });
+
+    it('returns ok=false for protected changes with no authorization', () => {
+        const input = gitZ(change('M', 'registry/data-table/components/ui/table.tsx'));
+        const result = protectedPathsMain(input, {});
+        expect(result.ok).toBe(false);
+        expect(result.protectedChanges).toEqual([
+            'registry/data-table/components/ui/table.tsx',
+        ]);
+        expect(result.message).toMatch(/error: protected/);
+        expect(result.message).toMatch(/maintenance: protected-component/);
+    });
+
+    it('returns ok=false when routing label is present but authorization env vars are absent', () => {
+        // Simulates a PR with the label but the environment gate did not run.
+        const input = gitZ(change('M', 'registry/data-table/components/ui/button.tsx'));
+        const result = protectedPathsMain(input, {
+            // No MAINTENANCE_AUTHORIZED — env gate did not run.
+        });
+        expect(result.ok).toBe(false);
+        expect(result.message).toMatch(/error: protected/);
+    });
+
+    it('returns ok=false when MAINTENANCE_AUTHORIZED is set to something other than "true"', () => {
+        const input = gitZ(change('M', 'registry/data-table/components/ui/button.tsx'));
+        const result = protectedPathsMain(input, {
+            MAINTENANCE_AUTHORIZED: 'yes',
+            MAINTENANCE_AUTHORIZED_BY: 'tooinfinity',
+            MAINTENANCE_AUTHORIZED_AT: '2024-01-01T00:00:00Z',
+        });
+        expect(result.ok).toBe(false);
+    });
+
+    it('returns ok=false when MAINTENANCE_AUTHORIZED=true but actor is missing', () => {
+        const input = gitZ(change('M', 'registry/data-table/components/ui/input.tsx'));
+        const result = protectedPathsMain(input, {
+            MAINTENANCE_AUTHORIZED: 'true',
+            MAINTENANCE_AUTHORIZED_AT: '2024-01-01T00:00:00Z',
+        });
+        expect(result.ok).toBe(false);
+    });
+
+    it('returns ok=false when MAINTENANCE_AUTHORIZED=true but timestamp is missing', () => {
+        const input = gitZ(change('M', 'registry/data-table/components/ui/input.tsx'));
+        const result = protectedPathsMain(input, {
+            MAINTENANCE_AUTHORIZED: 'true',
+            MAINTENANCE_AUTHORIZED_BY: 'tooinfinity',
+        });
+        expect(result.ok).toBe(false);
+    });
+
+    it('returns ok=true and authorized=true for valid authorization with protected changes', () => {
+        const input = gitZ(change('M', 'registry/data-table/components/ui/table.tsx'));
+        const result = protectedPathsMain(input, {
+            MAINTENANCE_AUTHORIZED: 'true',
+            MAINTENANCE_AUTHORIZED_BY: 'trusted-reviewer',
+            MAINTENANCE_AUTHORIZED_AT: '2024-06-01T12:00:00Z',
+        });
+        expect(result.ok).toBe(true);
+        expect(result.authorized).toBe(true);
+        expect(result.protectedChanges).toEqual([
+            'registry/data-table/components/ui/table.tsx',
+        ]);
+        expect(result.message).toMatch(/authorized/i);
+        expect(result.message).toMatch(/trusted-reviewer/);
+        expect(result.message).toMatch(/2024-06-01T12:00:00Z/);
+    });
+
+    it('records all protected paths in the authorized audit message for a mixed change', () => {
+        const input = gitZ(
+            change('M', 'registry/data-table/components/ui/button.tsx'),
+            change('M', 'registry/data-table/components/ui/table.tsx'),
+            change('M', 'README.md'),
+        );
+        const result = protectedPathsMain(input, {
+            MAINTENANCE_AUTHORIZED: 'true',
+            MAINTENANCE_AUTHORIZED_BY: 'tooinfinity',
+            MAINTENANCE_AUTHORIZED_AT: '2024-11-26T01:00:00Z',
+        });
+        expect(result.ok).toBe(true);
+        expect(result.authorized).toBe(true);
+        // Both protected files appear, but not the unprotected one
+        expect(result.protectedChanges).toContain(
+            'registry/data-table/components/ui/button.tsx',
+        );
+        expect(result.protectedChanges).toContain(
+            'registry/data-table/components/ui/table.tsx',
+        );
+        expect(result.protectedChanges).not.toContain('README.md');
+    });
+
+    it('returns ok=true for ordinary DataTable component modification with no authorization', () => {
+        // Package-owned files are never blocked, authorization is irrelevant.
+        const input = gitZ(
+            change('M', 'registry/data-table/components/data-table/data-table.tsx'),
+        );
+        const result = protectedPathsMain(input, {});
+        expect(result.ok).toBe(true);
+        expect(result.authorized).toBeUndefined();
     });
 });
