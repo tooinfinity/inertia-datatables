@@ -50,6 +50,7 @@ jobs:
         uses: ./.github/actions/setup-php
         with:
           php-version: 8.4
+          cache: true
 
       - name: Install dependencies
         run: |

@@ -21,6 +21,10 @@ inputs:
     description: Composer tool version to install
     required: false
     default: "composer:v2"
+  cache:
+    description: Cache Composer dependencies between runs (composer:v2 download cache)
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -33,3 +37,4 @@ runs:
         ini-values: ${{ inputs.ini-values }}
         tools: ${{ inputs.tools }}
         coverage: ${{ inputs.coverage }}
+        cache: ${{ inputs.cache }}
