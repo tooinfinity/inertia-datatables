@@ -1,21 +1,43 @@
-# Label pull requests based on the paths of changed files.
-# Labels are only added; manually assigned labels are never removed
-# (sync-labels defaults to false).
-#
-# Path-based area labels only. Semantic labels (feat, fix, breaking, ...)
-# are intentionally not derived from file paths.
+# Label pull requests based on changed paths.
+# Documentation is applied only when every changed file is documentation.
+# Other labels are added when any changed file matches their paths.
+# Labels are only added; manually assigned labels are not removed.
 
 documentation:
-  - "**.md"
-  - "docs/**"
+  - changed-files:
+      - all-globs-to-all-files:
+          - "*.md"
+          - "**/*.md"
+          - "docs/**"
+
+php:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "config/**"
+          - "routes/**"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "resources/**"
+          - "registry/**"
+          - "*.ts"
+          - "*.tsx"
 
 ci:
-  - ".github/workflows/**"
-  - ".github/actions/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/actions/**"
 
 tests:
-  - "tests/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
 
 registry:
-  - "registry/**"
-  - "public/r/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "registry/**"
+          - "public/r/**"
