@@ -67,7 +67,6 @@ jobs:
         uses: ./.github/actions/setup-node
         with:
           node-version: 22
-          cache: none
 
       - name: Setup pnpm
         if: matrix.installer == 'pnpm'

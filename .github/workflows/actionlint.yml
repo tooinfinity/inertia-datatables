@@ -34,8 +34,7 @@ jobs:
       - name: Lint workflows and composite actions
         run: |
           # Validate every workflow YAML file under .github/workflows/ (the
-          # default location actionlint scans when no path is given) plus the
-          # composite action metadata under .github/actions/. Fails on any
-          # invalid config.
+          # default location actionlint scans when no path is given). actionlint
+          # is a workflow linter; composite action metadata (.github/actions/)
+          # is not a workflow and is intentionally not passed to it.
           actionlint -color
-          actionlint -color .github/actions/setup-php/action.yml .github/actions/setup-node/action.yml
