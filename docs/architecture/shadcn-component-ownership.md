@@ -109,13 +109,7 @@ A CODEOWNERS file alone does not require approval before merging. Mandatory code
 - Require approval from code owners.
 - Ensure the required approval cannot be bypassed through the normal merge process.
 
-### CI checks (`.github/workflows/ownership.yml`)
-
-The `shadcn ownership` workflow runs on pull requests targeting `main`:
-
-1. **Protected-path change detection** — compares the PR branch against the base branch and fails with a clear, actionable message when any file under `registry/data-table/components/ui/` is added, modified, renamed, or deleted. Ordinary DataTable component changes under `registry/data-table/components/data-table/` are not affected.
-
-2. **CODEOWNERS validation** — verifies `.github/CODEOWNERS` is syntactically valid and that every required protected path carries an explicit ownership rule.
+### CI checks
 
 Generated registry artifacts under `public/r/` are verified for drift by the existing `Registry` workflow (`.github/workflows/registry.yml`), which validates `registry.json`, rebuilds the artifacts, and fails when committed artifacts are out of date or contain untracked files.
 

@@ -1,7 +1,7 @@
 # shadcn/ui component ownership for tooinfinity/inertia-datatables.
 #
-# Enforced by CI (.github/workflows/ownership.yml) and by GitHub branch
-# protection (code owner review must be required on the default branch).
+# Enforced by GitHub branch protection (code owner review must be required
+# on the default branch).
 # See docs/architecture/shadcn-component-ownership.md for the full policy.
 #
 # CODEOWNERS locations supported by GitHub: repository root, .github/, docs/.
