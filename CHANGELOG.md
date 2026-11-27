@@ -9,10 +9,6 @@
 ### Added
 
 - Benchmarks: CodSpeed performance tracking for the `DataTable` React component (Vitest, `npm run bench`) and server-side DataTable request handling (`composer bench`, `codspeed.yaml`), run on every pull request by `.github/workflows/codspeed.yml`
-
-- Frontend installation UX: native shadcn GitHub registry support (`npx shadcn@latest add tooinfinity/inertia-datatables/data-table`) is now the primary recommended installation method in README, with direct URL and local registry file installation preserved as alternatives (fixes #137)
-- Frontend installation verification: implemented a two-layer verification strategy with deterministic registry structure validation (`npm run registry:verify-consumer`) and a real consumer integration test using the native shadcn CLI (`npm run registry:test-consumer`) in CI (`.github/workflows/registry.yml`), ensuring Node.js `>=20.18.1` entrypoint compatibility, decoupled from private shadcn APIs, and verifying consumer alias file placement, npm dependency declaration, and consumer primitive preservation (fixes #137)
-
 - React layer: custom cell renderers through the `cells` prop, keyed by column name (fixes #33)
 - React layer: row actions through the `actions` prop, rendered as a trailing client side column (fixes #33)
 - React layer: column definition overrides through the `columns` prop, merged with the server provided column meta (fixes #33)
