@@ -66,13 +66,23 @@ export function isStructuralComponent(component) {
     return component.comparisonStrategy === 'structural';
 }
 
+function normalizeSource(source) {
+    return source.replace(/\r\n/g, '\n').trim();
+}
+
 /**
- * Compare two component structures (name -> rendered HTML element set) and
- * report whether a local shim has drifted from its baseline structure.
+ * Compare two component structures (name -> rendered HTML element set) and,
+ * when available, their normalized source strings to report whether a local
+ * shim has drifted from its pinned baseline.
  *
  * Returns { modified: boolean, detail: string | null }.
  */
-export function hasLocalModification(localStructure, baselineStructure) {
+export function hasLocalModification(
+    localStructure,
+    baselineStructure,
+    localSource = null,
+    baselineSource = null,
+) {
     if (!localStructure || !baselineStructure) {
         return { modified: true, detail: 'unable to compare local shim against baseline' };
     }
@@ -93,6 +103,15 @@ export function hasLocalModification(localStructure, baselineStructure) {
             return {
                 modified: true,
                 detail: `component "${name}" renders different HTML elements than the pinned baseline`,
+            };
+        }
+    }
+
+    if (typeof localSource === 'string' && typeof baselineSource === 'string') {
+        if (normalizeSource(localSource) !== normalizeSource(baselineSource)) {
+            return {
+                modified: true,
+                detail: 'local shim source differs from the pinned baseline',
             };
         }
     }
@@ -203,9 +222,10 @@ export function buildPrBody(proposal) {
 
     lines.push('### Validation');
     lines.push(
-        'The generated changes are validated by the compatibility audit (validation mode) and the '
-        + 'shadcn CLI version consistency check before the pull request is proposed. Generated '
-        + 'registry artifacts are not modified by this workflow.',
+        'The generated changes are validated by `npm run registry:validate`, `npm run registry:build`, '
+        + 'the compatibility audit (validation mode), and the shadcn CLI version consistency check '
+        + 'before the pull request is proposed. Generated `public/r` registry artifacts are rebuilt '
+        + 'and included in this pull request.',
     );
     lines.push('');
     lines.push('### What happens next');
@@ -392,9 +412,10 @@ export async function detectComponents(manifest, localBaseDir = process.cwd()) {
             continue;
         }
 
+        let baselineSource;
         let baselineStructure;
         try {
-            const baselineSource = await fetchWithTimeout(result.baselineUrl);
+            baselineSource = await fetchWithTimeout(result.baselineUrl);
             result.upstreamFetched = true;
             const parsed = extractComponentStructure(baselineSource);
             if (parsed.error) {
@@ -447,7 +468,12 @@ export async function detectComponents(manifest, localBaseDir = process.cwd()) {
                 ? null
                 : `cannot read local shim: ${local.error}`;
         } else {
-            const modification = hasLocalModification(local.structure, baselineStructure);
+            const modification = hasLocalModification(
+                local.structure,
+                baselineStructure,
+                local.source,
+                baselineSource,
+            );
             result.localModification = modification.modified;
             result.localModificationDetail = modification.detail;
         }
@@ -571,9 +597,10 @@ export async function applyChanges(manifestPath = MANIFEST_PATH, options = {}) {
     }
 
     // Nothing safe to apply: leave the manifest untouched so the baseline is
-    // not advanced without accepted changes.
+    // not advanced without accepted changes, while preserving the proposal's
+    // upstream-change and conflict details for review.
     if (changedFiles.length === 0) {
-        return { changedFiles: [], shouldApply: false, proposal: emptyProposal(manifest) };
+        return { changedFiles: [], shouldApply: false, proposal };
     }
 
     // Bump the pinned baseline so the next audit compares the now-updated

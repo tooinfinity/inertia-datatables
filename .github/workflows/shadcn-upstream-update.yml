@@ -60,8 +60,8 @@ jobs:
           UPDATE_BRANCH: ci/shadcn-upstream-update
           DEFAULT_BRANCH: main
         run: |
-          node scripts/ci/shadcn-upstream-update.js --apply
-          status=$?
+          status=0
+          node scripts/ci/shadcn-upstream-update.js --apply || status=$?
           echo "status=$status" >> "$GITHUB_OUTPUT"
           # Exit 0 = no safely applicable changes (no pull request).
           # Exit 3 = safely applicable changes applied to the working tree.
@@ -74,6 +74,12 @@ jobs:
             echo "::error::Upstream update detection failed with exit status $status."
             exit 1
           fi
+
+      - name: Rebuild registry artifacts
+        if: steps.detect.outputs.status == '3'
+        run: |
+          npm run registry:validate
+          npm run registry:build
 
       - name: Commit proposed changes
         if: steps.detect.outputs.status == '3'
@@ -121,8 +127,13 @@ jobs:
             --json number \
             --jq '.[].number' | head -n 1 || true)"
 
+          pr_title="$(<"${PR_TITLE_FILE}")"
+
           if [ -n "$existing" ]; then
-            echo "Pull request #${existing} already open; the branch push refreshes it."
+            gh pr edit "$existing" \
+              --title "${pr_title}" \
+              --body-file "${PR_BODY_FILE}"
+            echo "Pull request #${existing} already open; updated title and body."
             echo "pr_number=$existing" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -130,7 +141,7 @@ jobs:
           gh pr create \
             --head "${UPDATE_BRANCH}" \
             --base "${DEFAULT_BRANCH}" \
-            --title-file "${PR_TITLE_FILE}" \
+            --title "${pr_title}" \
             --body-file "${PR_BODY_FILE}"
 
           pr_number="$(gh pr list \
@@ -159,8 +170,11 @@ jobs:
             exit 0
           fi
           # Only attach the label when it already exists in the repository, so
-          # label setup never blocks pull request creation.
-          if gh label view "${UPDATE_PR_LABEL}" >/dev/null 2>&1; then
+          # label setup never blocks pull request creation. Let gh label list
+          # failures (e.g. auth or network errors) fail the step instead of
+          # treating them as a missing label.
+          labels="$(gh label list --search "${UPDATE_PR_LABEL}" --limit 100 --json name --jq '.[].name')"
+          if printf '%s\n' "$labels" | grep -Fxq "${UPDATE_PR_LABEL}"; then
             gh pr edit "${PR_NUMBER}" --add-label "${UPDATE_PR_LABEL}"
             echo "Added ${UPDATE_PR_LABEL} label to pull request #${PR_NUMBER}."
           else

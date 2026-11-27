@@ -51,6 +51,8 @@ export function isStructuralComponent(component: { comparisonStrategy: string })
 export function hasLocalModification(
     localStructure: Map<string, Set<string>> | null,
     baselineStructure: Map<string, Set<string>> | null,
+    localSource?: string | null,
+    baselineSource?: string | null,
 ): { modified: boolean; detail: string | null };
 export function isSafeToApply(
     component: { comparisonStrategy: string },

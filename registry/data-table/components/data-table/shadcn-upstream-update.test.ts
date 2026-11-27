@@ -269,6 +269,27 @@ describe('shadcn-upstream-update: hasLocalModification', () => {
         expect(hasLocalModification(null as any, new Map()).modified).toBe(true);
         expect(hasLocalModification(new Map(), null as any).modified).toBe(true);
     });
+
+    it('returns true when source differs in className, props, or event handlers despite matching structure', () => {
+        const structure = new Map([['Table', new Set(['table'])]]);
+        const baselineSrc = 'export function Table(props) { return <table className="w-full" {...props} />; }';
+        const customizedSrc = 'export function Table(props) { return <table className="w-full custom-border" onClick={props.onClick} {...props} />; }';
+
+        const result = hasLocalModification(structure, structure, customizedSrc, baselineSrc);
+        expect(result.modified).toBe(true);
+        expect(result.detail).toContain('source differs');
+    });
+
+    it('returns false when source matches baseline with only line-ending or trailing-whitespace differences', () => {
+        const structure = new Map([['Table', new Set(['table'])]]);
+        const baselineSrc = 'export function Table(props) {\n  return <table {...props} />;\n}\n';
+        const localSrc = 'export function Table(props) {\r\n  return <table {...props} />;\r\n}';
+
+        expect(hasLocalModification(structure, structure, localSrc, baselineSrc)).toEqual({
+            modified: false,
+            detail: null,
+        });
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -616,9 +637,45 @@ describe('shadcn-upstream-update: applyChanges', () => {
 
             expect(result.shouldApply).toBe(false);
             expect(result.changedFiles).not.toContain('registry/data-table/components/ui/table.tsx');
+            expect(result.proposal.shouldCreatePr).toBe(false);
+            expect(result.proposal.upstream.latestCommit).toBe(LATEST_COMMIT);
+            expect(result.proposal.summary.modified).toBeGreaterThan(0);
+            expect(result.proposal.summary.conflicts).toBeGreaterThan(0);
 
             const local = readFileSync(join(dir, 'registry', 'data-table', 'components', 'ui', 'table.tsx'), 'utf-8');
             expect(local).toBe('export const Table = () => <table />;'); // untouched
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('preserves local shims with className or prop customizations even when structure matches baseline', async () => {
+        const customizedSource = baselineTableSource.replace(
+            '<div data-slot="table-container">',
+            '<div data-slot="table-container" className="custom-table">',
+        );
+        const dir = makeLocalDir(customizedSource);
+        try {
+            mockFetch(makeFetchHandler(
+                { table: baselineTableSource },
+                { table: latestTableSourceAddedCaption },
+            ));
+            const manifestPath = join(dir, 'manifest.json');
+            writeFileSync(
+                manifestPath,
+                JSON.stringify(makeManifest({ baselineCommit: BASELINE_COMMIT }), null, 2),
+            );
+
+            const result = await applyChanges(manifestPath, { localBaseDir: dir });
+
+            expect(result.shouldApply).toBe(false);
+            expect(result.changedFiles).toEqual([]);
+            const table = result.proposal.components.find((c) => c.name === 'table')!;
+            expect(table.localModification).toBe(true);
+            expect(table.safeToApply).toBe(false);
+
+            const local = readFileSync(join(dir, 'registry', 'data-table', 'components', 'ui', 'table.tsx'), 'utf-8');
+            expect(local).toBe(customizedSource);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -699,6 +756,10 @@ describe('shadcn-upstream-update: buildPrTitle / buildPrBody', () => {
         expect(body).toContain('protected-maintenance');
         expect(body).toContain('never approves, merges, or closes');
         expect(body).toContain('table');
+        expect(body).toContain('registry:validate');
+        expect(body).toContain('registry:build');
+        expect(body).toContain('public/r');
+        expect(body).not.toContain('artifacts are not modified');
     });
 });
 
@@ -760,5 +821,16 @@ describe('shadcn-upstream-update: workflow security', () => {
         expect(workflow).toMatch(/protected-maintenance/);
         expect(workflow).toMatch(/maintenance: protected-component/);
         expect(workflow).not.toMatch(/MAINTENANCE_AUTHORIZED=true/);
+    });
+
+    it('rebuilds registry artifacts before committing and uses supported gh CLI flags', () => {
+        expect(workflow).toContain('npm run registry:validate');
+        expect(workflow).toContain('npm run registry:build');
+        expect(workflow).toContain('|| status=$?');
+        expect(workflow).toContain('gh pr edit "$existing"');
+        expect(workflow).toContain('--title "${pr_title}"');
+        expect(workflow).not.toContain('--title-file');
+        expect(workflow).toContain('gh label list');
+        expect(workflow).not.toContain('gh label view');
     });
 });
