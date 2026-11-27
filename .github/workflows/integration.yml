@@ -64,9 +64,10 @@ jobs:
           php-version: 8.5
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: ./.github/actions/setup-node
         with:
           node-version: 22
+          cache: none
 
       - name: Setup pnpm
         if: matrix.installer == 'pnpm'
