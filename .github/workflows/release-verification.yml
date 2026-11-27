@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.event.release.id }}
   cancel-in-progress: false
 
 jobs:
@@ -16,8 +16,6 @@ jobs:
     name: Verify release distribution
     runs-on: ubuntu-latest
 
-    # Only reads release metadata and public distribution endpoints.
-    # No publishing credentials are needed or exposed.
     steps:
       - name: Checkout code at release ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,122 +24,160 @@ jobs:
           persist-credentials: false
 
       - name: Verify GitHub release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          # Confirm the release tag matches the release and is not a draft/prerelease.
-          TAG="${{ github.event.release.tag_name }}"
-          RELEASE_ID="${{ github.event.release.id }}"
-          echo "Verifying release $TAG (id $RELEASE_ID)"
+          set -euo pipefail
 
-          # Fetch the release via the GitHub API (authenticated with GITHUB_TOKEN).
-          RESPONSE=$(curl -sSf \
-            -H "Authorization: Bearer ${{ github.token }}" \
+          response="$(curl --fail --silent --show-error --location \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID")
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
 
-          PUBLISHED=$(printf '%s' "$RESPONSE" | node -e "
-            let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
-              try{console.log(JSON.parse(d).published)}catch{e{process.exit(1)}}
-            })
-          ")
-          DRAFT=$(printf '%s' "$RESPONSE" | node -e "
-            let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
-              try{console.log(JSON.parse(d).draft)}catch{e{process.exit(1)}}
-            })
-          ")
-          PRERELEASE=$(printf '%s' "$RESPONSE" | node -e "
-            let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
-              try{console.log(JSON.parse(d).prerelease)}catch{e{process.exit(1)}}
-            })
-          })
+          printf '%s' "$response" | jq -e --arg expected_tag "$RELEASE_TAG" '
+            .tag_name == $expected_tag
+            and .draft == false
+            and .prerelease == false
+            and .published_at != null
+          ' >/dev/null
 
-          if [ "$PUBLISHED" != "true" ]; then
-            echo "::error::Release is not published" && exit 1
-          fi
-          if [ "$DRAFT" != "false" ]; then
-            echo "::error::Release is a draft" && exit 1
-          fi
-          if [ "$PRERELEASE" != "false" ]; then
-            echo "::error::Release is a prerelease" && exit 1
+          tag_commit="$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")"
+          checkout_commit="$(git rev-parse HEAD)"
+
+          if [ "$tag_commit" != "$checkout_commit" ]; then
+            echo "::error::Checked-out commit does not match release tag $RELEASE_TAG"
+            exit 1
           fi
 
-          # Confirm the tag exists and points at the release target commit.
-          TAG_REF=$(git rev-parse "$TAG^{}" 2>/dev/null || echo "")
-          if [ -z "$TAG_REF" ]; then
-            echo "::error::Tag $TAG does not exist" && exit 1
-          fi
-          echo "Tag $TAG resolved to $TAG_REF"
+          echo "Verified published stable release $RELEASE_TAG at $tag_commit"
 
       - name: Verify Composer package distribution on Packagist
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          # Packagist auto-updates from GitHub tags; confirm the new version is listed.
-          VERSION="${{ github.event.release.tag_name }}"
-          echo "Verifying Packagist distribution for $VERSION"
+          set -euo pipefail
 
-          # Strip leading 'v' for Packagist version comparison.
-          PKG_VERSION="${VERSION#v}"
+          expected_version="${RELEASE_TAG#v}"
+          echo "Verifying Packagist distribution for $expected_version"
 
-          RESPONSE=$(curl -sSf "https://packagist.org/packages/tooinfinity/inertia-datatables.json")
+          found=false
 
-          # List all versions and check ours is present.
-          FOUND=$(printf '%s' "$RESPONSE" | node -e "
-            let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
-              try{
-                const pkg=JSON.parse(d);
-                const versions=Object.keys(pkg.package.versions||{});
-                console.log(versions.includes(process.env.VERSION) ? 'yes' : 'no');
-              }catch{e{console.log('no');process.exit(1)}}
-            })
-          ")
+          # Packagist indexes GitHub tags asynchronously. Retry transient API
+          # failures and indexing delays rather than failing a valid release.
+          for attempt in $(seq 1 10); do
+            if response="$(curl --fail --silent --show-error --location \
+              https://packagist.org/packages/tooinfinity/inertia-datatables.json 2>/dev/null)"; then
+              if printf '%s' "$response" | EXPECTED_VERSION="$expected_version" node -e '
+                let body = "";
+                process.stdin.on("data", chunk => body += chunk);
+                process.stdin.on("end", () => {
+                  try {
+                    const data = JSON.parse(body);
+                    const versions = Object.keys(data.package?.versions ?? {});
+                    const normalize = version => version.replace(/^v/i, "");
+                    const expected = normalize(process.env.EXPECTED_VERSION);
+                    process.exit(versions.some(version => normalize(version) === expected) ? 0 : 1);
+                  } catch {
+                    process.exit(1);
+                  }
+                });
+              '; then
+                found=true
+                break
+              fi
+            fi
 
-          if [ "$FOUND" != "yes" ]; then
-            echo "::error::Version $PKG_VERSION not found on Packagist" && exit 1
+            if [ "$attempt" -lt 10 ]; then
+              echo "Packagist has not indexed $expected_version yet (attempt $attempt/10); retrying in 30 seconds"
+              sleep 30
+            fi
+          done
+
+          if [ "$found" != "true" ]; then
+            echo "::error::Packagist did not expose version $expected_version after 10 attempts"
+            exit 1
           fi
-          echo "Packagist distributes version $PKG_VERSION"
 
-      - name: Verify shadcn registry artifacts are available
+          echo "Packagist distributes version $expected_version"
+
+      - name: Download published shadcn registry artifacts
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          # Registry artifacts are served from raw.githubusercontent.com.
-          REF="${{ github.event.release.tag_name }}"
-          echo "Verifying registry artifacts at ref $REF"
+          set -euo pipefail
 
-          REGISTRY_URL="https://raw.githubusercontent.com/${{ github.repository }}/$REF/public/r/registry.json"
-          ITEM_URL="https://raw.githubusercontent.com/${{ github.repository }}/$REF/public/r/data-table.json"
+          base_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$RELEASE_TAG/public/r"
+          mkdir -p "$RUNNER_TEMP/release-registry"
 
-          HTTP_CODE=$(curl -sSf -o /dev/null -w "%{http_code}" "$REGISTRY_URL")
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Registry artifact not available: $REGISTRY_URL (HTTP $HTTP_CODE)" && exit 1
-          fi
+          curl --fail --silent --show-error --location \
+            "$base_url/registry.json" \
+            --output "$RUNNER_TEMP/release-registry/registry.json"
 
-          HTTP_CODE=$(curl -sSf -o /dev/null -w "%{http_code}" "$ITEM_URL")
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Registry item artifact not available: $ITEM_URL (HTTP $HTTP_CODE)" && exit 1
-          fi
+          curl --fail --silent --show-error --location \
+            "$base_url/data-table.json" \
+            --output "$RUNNER_TEMP/release-registry/data-table.json"
 
-          echo "Registry artifacts available at ref $REF"
+          echo "Downloaded registry artifacts for $RELEASE_TAG"
 
-      - name: Validate registry JSON and referenced assets
+      - name: Validate published registry JSON and referenced assets
         run: |
-          # Validate the checked-out registry.json and confirm referenced
-          # artifact files exist and are parseable.
-          if [ ! -f registry.json ]; then
-            echo "::error::registry.json not found in repository" && exit 1
-          fi
+          set -euo pipefail
 
-          # Validate registry.json is valid JSON.
-          node -e "JSON.parse(require('fs').readFileSync('registry.json','utf8'))" \
-            || { echo "::error::registry.json is not valid JSON" && exit 1; }
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
 
-          # Confirm the data-table item references only existing artifact paths.
-          node -e "
-            const fs=require('fs');
-            const reg=JSON.parse(fs.readFileSync('registry.json','utf8'));
-            const item=reg.items.find(i=>i.name==='data-table');
-            if(!item){console.error('data-table item missing');process.exit(1);}
-            const paths=item.files.map(f=>f.path);
-            for(const p of paths){
-              if(!fs.existsSync(p)){console.error('missing artifact path:',p);process.exit(1);}
+          const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+          const sourceManifest = readJson('registry.json');
+          const publishedManifest = readJson(
+            path.join(process.env.RUNNER_TEMP, 'release-registry/registry.json')
+          );
+          const publishedItem = readJson(
+            path.join(process.env.RUNNER_TEMP, 'release-registry/data-table.json')
+          );
+          const localItem = readJson('public/r/data-table.json');
+
+          const findDataTable = manifest =>
+            manifest.items?.find(item => item.name === 'data-table');
+
+          const sourceItem = findDataTable(sourceManifest);
+          const publishedManifestItem = findDataTable(publishedManifest);
+
+          if (!sourceItem || !publishedManifestItem) {
+            throw new Error('The data-table item is missing from a registry manifest');
+          }
+
+          if (publishedItem.name !== 'data-table' || localItem.name !== 'data-table') {
+            throw new Error('The published or checked-out registry item has an unexpected name');
+          }
+
+          if (!Array.isArray(sourceItem.files) || sourceItem.files.length === 0) {
+            throw new Error('The source data-table item has no files');
+          }
+
+          const repositoryRoot = process.cwd() + path.sep;
+
+          for (const file of sourceItem.files) {
+            if (typeof file.path !== 'string') {
+              throw new Error('A source registry file has no valid path');
             }
-            console.log('All',paths.length,'data-table artifact paths exist');
-          "
 
-          echo "Registry JSON and referenced assets validated"
+            const resolved = path.resolve(file.path);
+
+            if (!resolved.startsWith(repositoryRoot)) {
+              throw new Error(`Registry path escapes the repository: ${file.path}`);
+            }
+
+            if (!fs.existsSync(resolved)) {
+              throw new Error(`Referenced registry source file is missing: ${file.path}`);
+            }
+          }
+
+          console.log(
+            `Validated published registry manifests, data-table item, and ${sourceItem.files.length} referenced source files`
+          );
+          NODE
