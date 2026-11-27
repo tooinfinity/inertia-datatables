@@ -1,0 +1,72 @@
+name: shadcn upstream update
+
+on:
+  schedule:
+    # Weekly on Monday at 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update tracked shadcn/ui components
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Only `table` structurally mirrors upstream shadcn/ui. The other primitives
+      # under registry/data-table/components/ui/ (button, checkbox, dropdown-menu,
+      # input, select, skeleton) are package-maintained compatibility shims and are
+      # intentionally excluded from upstream overwrites.
+      - name: Update tracked shadcn/ui components
+        run: npx --no-install shadcn add table --overwrite --yes --path registry/data-table/components/ui
+
+      - name: Validate registry
+        run: npm run registry:validate
+
+      - name: Rebuild registry artifacts
+        run: npm run registry:build
+
+      # Note: PRs created with the default GITHUB_TOKEN do not trigger ordinary
+      # downstream `pull_request` or `push` workflows. Triggering CI automatically
+      # requires a GitHub App or PAT and is intentionally deferred.
+      - name: Create or update pull request
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
+        with:
+          branch: ci/shadcn-upstream-update
+          delete-branch: true
+          title: 'chore: update shadcn/ui components'
+          commit-message: 'chore: update shadcn/ui components'
+          labels: protected-maintenance
+          body: |
+            This is an automated upstream shadcn/ui synchronization.
+
+            ### Summary
+            - Updated the tracked upstream component (`table`) under `registry/data-table/components/ui/` using the repository's pinned `shadcn` CLI.
+            - Excluded package-maintained compatibility shims (`button`, `checkbox`, `dropdown-menu`, `input`, `select`, `skeleton`).
+            - Validated the registry and regenerated artifacts under `public/r/` via `npm run registry:validate` and `npm run registry:build`.
+
+            ### Review checklist
+            - Inspect the diff carefully for any overwritten local customizations (for example, `table.tsx` shim differences or `@/lib/utils` imports).
+            - Merge only after normal project checks and manual review have passed.
+
+            > **Note:** Pull requests created with the default `GITHUB_TOKEN` do not trigger ordinary downstream `pull_request` or `push` workflows. Run or verify required checks before merging.
