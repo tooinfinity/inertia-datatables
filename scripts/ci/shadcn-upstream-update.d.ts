@@ -3,6 +3,7 @@
 export interface ComponentResult {
     name: string;
     localPath: string;
+    localBaselinePath?: string;
     upstreamComponent: string;
     comparisonStrategy: string;
     classification: string;

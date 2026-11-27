@@ -146,12 +146,18 @@ jobs:
           # Duplicate prevention: if a pull request already exists from this
           # automation-owned branch, pushing the branch refreshes it. Never
           # create a second, competing update pull request.
+          #
+          # Do not suppress gh failures: an auth/API/network error must abort
+          # the run rather than be mistaken for "no pull request exists", which
+          # would lead to a duplicate creation attempt. A successful lookup that
+          # returns nothing (existing empty) means no PR exists and it is safe
+          # to create one.
           existing="$(gh pr list \
             --head "${UPDATE_BRANCH}" \
             --base "${DEFAULT_BRANCH}" \
             --state open \
             --json number \
-            --jq '.[].number' | head -n 1 || true)"
+            --jq '.[].number' | head -n 1)"
 
           pr_title="$(<"${PR_TITLE_FILE}")"
 

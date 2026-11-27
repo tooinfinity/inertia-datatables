@@ -457,11 +457,38 @@ export async function detectComponents(manifest, localBaseDir = process.cwd()) {
                 : STATUS_UNCHANGED;
         }
 
-        // Detect local customizations by comparing the local shim against the
-        // pinned baseline structure. Any difference means the local shim carries
-        // customizations that must not be silently discarded.
+        // Detect local customizations by comparing the local shim against its
+        // pinned local baseline (structure and source), not against the upstream
+        // baseline. The local shim is intentionally not an exact upstream copy
+        // (it omits cn(), cva, the wrapper div, etc.), so comparing against
+        // upstream would flag every untouched local shim as modified. Structural
+        // compatibility against upstream is still verified separately via
+        // `compareStructures(baselineStructure, latestStructure)` above, which
+        // uses the subset rule and allows upstream to render additional wrapper
+        // elements without flagging an incompatibility.
         const localPath = join(localBaseDir, component.localPath);
         const local = readLocalComponent(localPath);
+
+        let comparisonStructure = baselineStructure;
+        let comparisonSource = baselineSource;
+
+        if (component.localBaselinePath) {
+            const localBaselinePath = join(localBaseDir, component.localBaselinePath);
+            const localBaseline = readLocalComponent(localBaselinePath);
+            if (localBaseline.ok) {
+                comparisonStructure = localBaseline.structure;
+                comparisonSource = localBaseline.source;
+            } else {
+                // The pinned local baseline itself is missing or unparseable;
+                // this is a configuration problem, not a local customization.
+                result.localModification = true;
+                result.localModificationDetail = `cannot read pinned local baseline ${component.localBaselinePath}: ${localBaseline.error}`;
+                result.safeToApply = isSafeToApply(component, result);
+                results.push(result);
+                continue;
+            }
+        }
+
         if (!local.ok) {
             // No local shim to protect: this is an addition, not an overwrite.
             result.localModification = result.status === STATUS_ADDED ? false : true;
@@ -471,9 +498,9 @@ export async function detectComponents(manifest, localBaseDir = process.cwd()) {
         } else {
             const modification = hasLocalModification(
                 local.structure,
-                baselineStructure,
+                comparisonStructure,
                 local.source,
-                baselineSource,
+                comparisonSource,
             );
             result.localModification = modification.modified;
             result.localModificationDetail = modification.detail;

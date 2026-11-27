@@ -563,6 +563,102 @@ describe('shadcn-upstream-update: detectAndPropose (safely applicable update)', 
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    it('treats an untouched local table (matching its pinned local baseline) as safe to apply even though it differs from the upstream source', async () => {
+        // The real local table.tsx is intentionally simplified vs upstream (no
+        // cn(), no wrapper div). It is identical to its pinned local baseline,
+        // so it carries no local customizations and must be eligible for
+        // automatic update even though it does not match the upstream source.
+        const dir = mkdtempSync(join(tmpdir(), 'shadcn-update-table-baseline-'));
+        const uiDir = join(dir, 'registry', 'data-table', 'components', 'ui');
+        const baselineDir = join(dir, 'scripts', 'ci', 'shadcn-compatibility-baselines');
+        mkdirSync(uiDir, { recursive: true });
+        mkdirSync(baselineDir, { recursive: true });
+
+        const realTableSource = readFileSync(
+            join(process.cwd(), 'registry', 'data-table', 'components', 'ui', 'table.tsx'),
+            'utf-8',
+        );
+        writeFileSync(join(uiDir, 'table.tsx'), realTableSource, 'utf-8');
+        writeFileSync(join(baselineDir, 'table.tsx'), realTableSource, 'utf-8');
+
+        try {
+            // A manifest where the table component declares its pinned local
+            // baseline. The local shim matches this baseline exactly.
+            const manifest = makeManifest({ baselineCommit: BASELINE_COMMIT });
+            const table = manifest.components.find((c) => c.name === 'table')! as { localBaselinePath?: string };
+            table.localBaselinePath = 'scripts/ci/shadcn-compatibility-baselines/table.tsx';
+
+            mockFetch(makeFetchHandler(
+                { table: baselineTableSource },
+                { table: latestTableSourceAddedCaption },
+            ));
+
+            const proposal = await detectAndPropose(manifest, { localBaseDir: dir });
+
+            expect(proposal.error).toBeNull();
+            const tableResult = proposal.components.find((c) => c.name === 'table')!;
+            expect(tableResult.status).toBe('modified'); // upstream added TableCaption
+            expect(tableResult.differences.length).toBeGreaterThan(0);
+            expect(tableResult.localModification).toBe(false); // matches pinned local baseline
+            expect(tableResult.localModificationDetail).toBeNull();
+            expect(tableResult.safeToApply).toBe(true);
+            expect(proposal.shouldCreatePr).toBe(true);
+            expect(proposal.summary.safeToApply).toBe(1);
+            // The 6 manual role-equivalent shims are skipped/conflict; the table
+            // itself is not a conflict.
+            expect(proposal.summary.conflicts).toBe(6);
+            expect(proposal.summary.skipped).toBe(6);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('treats a customized local table (differing from its pinned local baseline) as a conflict and does not propose it', async () => {
+        // A local table that has been customized relative to its pinned local
+        // baseline must not be silently overwritten by an upstream update.
+        const dir = mkdtempSync(join(tmpdir(), 'shadcn-update-table-custom-'));
+        const uiDir = join(dir, 'registry', 'data-table', 'components', 'ui');
+        const baselineDir = join(dir, 'scripts', 'ci', 'shadcn-compatibility-baselines');
+        mkdirSync(uiDir, { recursive: true });
+        mkdirSync(baselineDir, { recursive: true });
+
+        const realTableSource = readFileSync(
+            join(process.cwd(), 'registry', 'data-table', 'components', 'ui', 'table.tsx'),
+            'utf-8',
+        );
+        // Pinned local baseline: the untouched real table.
+        writeFileSync(join(baselineDir, 'table.tsx'), realTableSource, 'utf-8');
+        // Local shim: customized (extra className).
+        writeFileSync(
+            join(uiDir, 'table.tsx'),
+            realTableSource.replace('<table ', '<table className="custom" '),
+            'utf-8',
+        );
+
+        try {
+            const manifest = makeManifest({ baselineCommit: BASELINE_COMMIT });
+            const table = manifest.components.find((c) => c.name === 'table')! as { localBaselinePath?: string };
+            table.localBaselinePath = 'scripts/ci/shadcn-compatibility-baselines/table.tsx';
+
+            mockFetch(makeFetchHandler(
+                { table: baselineTableSource },
+                { table: latestTableSourceAddedCaption },
+            ));
+
+            const proposal = await detectAndPropose(manifest, { localBaseDir: dir });
+
+            expect(proposal.error).toBeNull();
+            const tableResult = proposal.components.find((c) => c.name === 'table')!;
+            expect(tableResult.localModification).toBe(true);
+            expect(tableResult.localModificationDetail).toContain('source differs');
+            expect(tableResult.safeToApply).toBe(false);
+            expect(proposal.shouldCreatePr).toBe(false);
+            expect(proposal.summary.safeToApply).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

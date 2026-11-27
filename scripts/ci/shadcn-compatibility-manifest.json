@@ -14,12 +14,13 @@
     {
       "name": "table",
       "localPath": "registry/data-table/components/ui/table.tsx",
+      "localBaselinePath": "scripts/ci/shadcn-compatibility-baselines/table.tsx",
       "upstreamComponent": "table",
       "comparisonStrategy": "structural",
       "classification": "structurally-mirrors-upstream",
       "upstreamSource": "https://raw.githubusercontent.com/shadcn-ui/ui/055aa6b7837b1808456a24beb4c97a677864aa82/apps/v4/registry/new-york-v4/ui/table.tsx",
       "semanticElements": ["table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption"],
-      "notes": "Local table.tsx structurally mirrors the official shadcn/ui Table primitive (semantic elements Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption). It is intentionally simplified: no cn() utility, no class-variance-authority (cva), no className prop, renders children directly. The upstream Table wraps <table> in an outer <div> container; this intentional wrapper is not flagged as an incompatibility. Automated structural comparison verifies exported component names and rendered semantic HTML elements match upstream."
+      "notes": "Local table.tsx structurally mirrors the official shadcn/ui Table primitive (semantic elements Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption). It is intentionally simplified: no cn() utility, no class-variance-authority (cva), no className prop, renders children directly. The upstream Table wraps <table> in an outer <div> container; this intentional wrapper is not flagged as an incompatibility. Automated structural comparison verifies exported component names and rendered semantic HTML elements match upstream. Local modifications are detected by comparing the current local shim against its pinned local baseline (scripts/ci/shadcn-compatibility-baselines/table.tsx), not against the upstream source, because the local shim is intentionally not an exact upstream copy."
     },
     {
       "name": "button",

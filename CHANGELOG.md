@@ -81,6 +81,7 @@
 - React layer: prevented duplicate dropdown state updates when interacting with DataTable filter chips, so a single click opens or closes a chip dropdown exactly once (fixes #98)
 - React layer: pagination controls are exposed as a navigation landmark (`aria-label="Pagination"`) and the result summary is a polite live region (`role="status"`, `aria-live="polite"`) so screen-reader users can navigate pagination and hear result ranges from accepted responses and immediate row selection changes (fixes #107)
 - React layer: filter chip dropdown options now use accessible Radix menu selection primitives — select and multi-select options render as `menuitemcheckbox` with `aria-checked`, and boolean Yes/No options render as a mutually exclusive `menuitemradio` group — instead of a `DropdownMenuItem` containing a nested `Checkbox` (fixes #108)
+- CI: shadcn/ui upstream update now applies to the tracked table component — local modifications are detected against a pinned local baseline (`scripts/ci/shadcn-compatibility-baselines/table.tsx`) instead of the upstream source, because the local table shim is intentionally simplified and is not an exact upstream copy. Structural compatibility against upstream is still verified. Also distinguishes a failed `gh pr` lookup from "no pull request exists" so auth/API/network errors abort the run instead of being masked (part of #136).
 
 ### Documentation
 
