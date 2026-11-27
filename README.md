@@ -36,6 +36,7 @@ npx shadcn@latest add ./path/to/inertia-datatables/public/r/data-table.json
 
 This will install the complete DataTable feature into your Laravel application:
 
+- `resources/js/components/data-table/index.ts`
 - `resources/js/components/data-table/data-table.tsx`
 - `resources/js/components/data-table/data-table-toolbar.tsx`
 - `resources/js/components/data-table/data-table-pagination.tsx`
@@ -57,8 +58,9 @@ Required shadcn primitives (auto-installed as registry dependencies):
 - `table`
 - `skeleton`
 
-Required npm dependency (auto-installed):
+Required npm dependencies (auto-installed):
 - `@tanstack/react-table@^9.3.1` (TanStack Table v9)
+- `@inertiajs/react`
 
 ## Configuration
 
