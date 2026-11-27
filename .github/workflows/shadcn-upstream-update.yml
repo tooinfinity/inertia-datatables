@@ -1,0 +1,152 @@
+name: shadcn upstream update
+
+on:
+  schedule:
+    # Weekly on Monday at 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update tracked shadcn/ui components
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Only `table` structurally mirrors upstream shadcn/ui. The other primitives
+      # under registry/data-table/components/ui/ (button, checkbox, dropdown-menu,
+      # input, select, skeleton) are package-maintained compatibility shims and are
+      # intentionally excluded from upstream updates.
+      # To avoid overwriting the protected `table.tsx` shim or introducing an
+      # unresolved `@/lib/utils` (`cn`) import, fetch upstream `table.tsx` into
+      # `$RUNNER_TEMP` and generate a reviewable proposal under `.github/shadcn-upstream/`.
+      - name: Generate upstream shadcn/ui table proposal
+        run: |
+          trap 'rm -f components.json' EXIT
+          cat <<'EOF' > components.json
+          {
+            "$schema": "https://ui.shadcn.com/schema.json",
+            "style": "new-york",
+            "rsc": false,
+            "tsx": true,
+            "tailwind": {
+              "config": "",
+              "css": "resources/css/app.css",
+              "baseColor": "neutral",
+              "cssVariables": true
+            },
+            "aliases": {
+              "components": "@/registry/data-table/components",
+              "ui": "@/registry/data-table/components/ui",
+              "utils": "@/lib/utils",
+              "lib": "@/lib",
+              "hooks": "@/hooks"
+            },
+            "iconLibrary": "lucide"
+          }
+          EOF
+          mkdir -p "$RUNNER_TEMP/shadcn-upstream"
+          npx --no-install shadcn add table --overwrite --yes --path "$RUNNER_TEMP/shadcn-upstream"
+          test -f "$RUNNER_TEMP/shadcn-upstream/table.tsx"
+
+          if cmp -s registry/data-table/components/ui/table.tsx "$RUNNER_TEMP/shadcn-upstream/table.tsx"; then
+            echo "No upstream differences for table.tsx."
+            exit 0
+          fi
+
+          UPSTREAM_SHA256=$(sha256sum "$RUNNER_TEMP/shadcn-upstream/table.tsx" | awk '{print $1}')
+          if [ -f .github/shadcn-upstream/table-proposal.md ] && grep -Fq "\`${UPSTREAM_SHA256}\`" .github/shadcn-upstream/table-proposal.md; then
+            echo "Upstream table.tsx matches recorded snapshot (${UPSTREAM_SHA256})."
+            exit 0
+          fi
+
+          SHADCN_VERSION=$(npx --no-install shadcn --version)
+          mkdir -p .github/shadcn-upstream
+          {
+            echo "# Upstream shadcn/ui \`table\` Proposal"
+            echo ""
+            echo "The protected compatibility shim at \`registry/data-table/components/ui/table.tsx\` was **not** overwritten."
+            echo ""
+            echo "## Provenance"
+            echo ""
+            echo "- **Component:** \`table\`"
+            echo "- **Style:** \`new-york\`"
+            echo "- **shadcn CLI:** \`${SHADCN_VERSION}\`"
+            echo "- **Upstream source:** \`https://ui.shadcn.com/r/styles/new-york-v4/table.json\`"
+            echo "- **Upstream SHA-256:** \`${UPSTREAM_SHA256}\`"
+            echo "- **Local shim:** \`registry/data-table/components/ui/table.tsx\`"
+            echo ""
+            if grep -q '@/lib/utils' "$RUNNER_TEMP/shadcn-upstream/table.tsx"; then
+              echo "> **Warning:** Upstream \`table.tsx\` imports \`@/lib/utils\` (\`cn\`), which does not exist in this repository. Adapt any desired changes to the local shim without introducing an unresolved \`@/lib/utils\` import."
+              echo ""
+            fi
+            echo "## Unified Diff (\`table.tsx\` shim vs upstream)"
+            echo ""
+            echo '```diff'
+            diff -u --label "a/registry/data-table/components/ui/table.tsx" --label "b/upstream/table.tsx" registry/data-table/components/ui/table.tsx "$RUNNER_TEMP/shadcn-upstream/table.tsx" || true
+            echo '```'
+            echo ""
+            echo "## Upstream \`table.tsx\`"
+            echo ""
+            echo '```tsx'
+            cat "$RUNNER_TEMP/shadcn-upstream/table.tsx"
+            echo '```'
+          } > .github/shadcn-upstream/table-proposal.md
+
+      - name: Typecheck frontend
+        run: npm run typecheck
+
+      - name: Validate registry
+        run: npm run registry:validate
+
+      - name: Rebuild registry artifacts
+        run: npm run registry:build
+
+      # Note: PRs created with the default GITHUB_TOKEN do not trigger ordinary
+      # downstream `pull_request` or `push` workflows. Triggering CI automatically
+      # requires a GitHub App or PAT and is intentionally deferred.
+      - name: Create or update pull request
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
+        with:
+          branch: ci/shadcn-upstream-update
+          delete-branch: true
+          title: 'chore: update shadcn/ui components'
+          commit-message: 'chore: update shadcn/ui components'
+          labels: protected-maintenance
+          body: |
+            This is an automated upstream shadcn/ui synchronization proposal.
+
+            ### Summary
+            - Fetched the upstream `table` component using the repository's pinned `shadcn` CLI (`4.23.0`) into a temporary directory and wrote a reviewable proposal to `.github/shadcn-upstream/table-proposal.md`.
+            - Preserved `registry/data-table/components/ui/table.tsx` and the other package-maintained compatibility shims (`button`, `checkbox`, `dropdown-menu`, `input`, `select`, `skeleton`) without overwriting them.
+            - Verified TypeScript compilation (`npm run typecheck`), registry validation (`npm run registry:validate`), and registry build (`npm run registry:build`).
+
+            ### Review checklist
+            - Review `.github/shadcn-upstream/table-proposal.md` for upstream `table.tsx` changes.
+            - Note that upstream `table.tsx` uses `cn` from `@/lib/utils`, which is not present in this repository; adapt any desired changes to `registry/data-table/components/ui/table.tsx` manually if needed.
+            - Keep `.github/shadcn-upstream/table-proposal.md` committed when merging so subsequent runs can skip unchanged upstream snapshots.
+            - Merge only after normal project checks and manual review have passed.
+
+            > **Note:** Pull requests created with the default `GITHUB_TOKEN` do not trigger ordinary downstream `pull_request` or `push` workflows. Run or verify required checks before merging.
