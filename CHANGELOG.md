@@ -33,7 +33,6 @@
 - String values in filter arrays are truncated to `max_filter_value_length`
 - `->filterEnum()` for deriving select filter options from a PHP `BackedEnum`, with sensible default labels, custom labels via a map or resolver, and validation of submitted values against the enum's backed values (fixes #78)
 - The test suite now runs against MySQL 8 and PostgreSQL 16 in CI, in addition to SQLite, and the database connection is driven by the standard `DB_*` environment variables (fixes #27)
-- CI: enforce shadcn/ui component ownership boundaries — CODEOWNERS rules for the protected compatibility shims, generated registry artifacts, registry manifest, and ownership documentation, plus a `shadcn ownership` workflow that flags protected compatibility shim changes in pull requests and validates CODEOWNERS coverage (part of #136).
 
 ### Changed
 
@@ -62,7 +61,7 @@
 
 ### Documentation
 
-- Establish shadcn/ui component ownership boundaries and agent-protection rules for `registry/data-table/components/ui/`, `registry/data-table/components/data-table/`, and generated `public/r/` artifacts; add `docs/architecture/shadcn-component-ownership.md`.
+- Establish shadcn/ui component ownership boundaries and agent-protection rules for `registry/data-table/components/ui/`, `registry/data-table/components/data-table/`, and generated `public/r/` artifacts.
 
 ## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
 

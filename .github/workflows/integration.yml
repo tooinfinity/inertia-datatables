@@ -102,9 +102,9 @@ jobs:
           # for deps; the URL below is only the item being added.
           REGISTRY_URL="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/public/r/data-table.json"
           if [ "${{ matrix.installer }}" = "bun" ]; then
-            bunx --bun shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
+            bunx --bun shadcn@4.23.0 add "$REGISTRY_URL" --yes --overwrite
           else
-            pnpm dlx shadcn@4.22.0 add "$REGISTRY_URL" --yes --overwrite
+            pnpm dlx shadcn@4.23.0 add "$REGISTRY_URL" --yes --overwrite
           fi
 
       - name: Install frontend dependencies
