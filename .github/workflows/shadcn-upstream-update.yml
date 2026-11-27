@@ -76,6 +76,12 @@ jobs:
             exit 0
           fi
 
+          UPSTREAM_SHA256=$(sha256sum "$RUNNER_TEMP/shadcn-upstream/table.tsx" | awk '{print $1}')
+          if [ -f .github/shadcn-upstream/table-proposal.md ] && grep -Fq "\`${UPSTREAM_SHA256}\`" .github/shadcn-upstream/table-proposal.md; then
+            echo "Upstream table.tsx matches recorded snapshot (${UPSTREAM_SHA256})."
+            exit 0
+          fi
+
           SHADCN_VERSION=$(npx --no-install shadcn --version)
           mkdir -p .github/shadcn-upstream
           {
@@ -89,6 +95,7 @@ jobs:
             echo "- **Style:** \`new-york\`"
             echo "- **shadcn CLI:** \`${SHADCN_VERSION}\`"
             echo "- **Upstream source:** \`https://ui.shadcn.com/r/styles/new-york-v4/table.json\`"
+            echo "- **Upstream SHA-256:** \`${UPSTREAM_SHA256}\`"
             echo "- **Local shim:** \`registry/data-table/components/ui/table.tsx\`"
             echo ""
             if grep -q '@/lib/utils' "$RUNNER_TEMP/shadcn-upstream/table.tsx"; then
@@ -138,7 +145,8 @@ jobs:
 
             ### Review checklist
             - Review `.github/shadcn-upstream/table-proposal.md` for upstream `table.tsx` changes.
-            - Note that upstream `table.tsx` uses `cn` from `@/lib/utils`, which is not present in this repository; adapt any desired changes to `registry/data-table/components/ui/table.tsx` manually if needed, then remove the proposal file before merging.
+            - Note that upstream `table.tsx` uses `cn` from `@/lib/utils`, which is not present in this repository; adapt any desired changes to `registry/data-table/components/ui/table.tsx` manually if needed.
+            - Keep `.github/shadcn-upstream/table-proposal.md` committed when merging so subsequent runs can skip unchanged upstream snapshots.
             - Merge only after normal project checks and manual review have passed.
 
             > **Note:** Pull requests created with the default `GITHUB_TOKEN` do not trigger ordinary downstream `pull_request` or `push` workflows. Run or verify required checks before merging.
