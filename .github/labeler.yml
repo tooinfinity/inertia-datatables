@@ -1,0 +1,21 @@
+# Label pull requests based on the paths of changed files.
+# Labels are only added; manually assigned labels are never removed
+# (sync-labels defaults to false).
+#
+# Path-based area labels only. Semantic labels (feat, fix, breaking, ...)
+# are intentionally not derived from file paths.
+
+documentation:
+  - "**.md"
+  - "docs/**"
+
+ci:
+  - ".github/workflows/**"
+  - ".github/actions/**"
+
+tests:
+  - "tests/**"
+
+registry:
+  - "registry/**"
+  - "public/r/**"
