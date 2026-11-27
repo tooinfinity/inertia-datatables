@@ -25,10 +25,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download actionlint
+        shell: bash
         run: |
-          # Pin actionlint to a specific release. The official download script
-          # accepts a version argument and verifies the downloaded binary.
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP"
+          # Pin actionlint to a specific release via the official release asset.
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP" >> $GITHUB_PATH
 
       - name: Lint workflows and composite actions
