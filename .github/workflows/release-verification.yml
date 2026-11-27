@@ -1,0 +1,183 @@
+name: release-verification
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code at release ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Verify GitHub release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          response="$(curl --fail --silent --show-error --location \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")"
+
+          printf '%s' "$response" | jq -e --arg expected_tag "$RELEASE_TAG" '
+            .tag_name == $expected_tag
+            and .draft == false
+            and .prerelease == false
+            and .published_at != null
+          ' >/dev/null
+
+          tag_commit="$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")"
+          checkout_commit="$(git rev-parse HEAD)"
+
+          if [ "$tag_commit" != "$checkout_commit" ]; then
+            echo "::error::Checked-out commit does not match release tag $RELEASE_TAG"
+            exit 1
+          fi
+
+          echo "Verified published stable release $RELEASE_TAG at $tag_commit"
+
+      - name: Verify Composer package distribution on Packagist
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          expected_version="${RELEASE_TAG#v}"
+          echo "Verifying Packagist distribution for $expected_version"
+
+          found=false
+
+          # Packagist indexes GitHub tags asynchronously. Retry transient API
+          # failures and indexing delays rather than failing a valid release.
+          for attempt in $(seq 1 10); do
+            if response="$(curl --fail --silent --show-error --location \
+              https://packagist.org/packages/tooinfinity/inertia-datatables.json 2>/dev/null)"; then
+              if printf '%s' "$response" | EXPECTED_VERSION="$expected_version" node -e '
+                let body = "";
+                process.stdin.on("data", chunk => body += chunk);
+                process.stdin.on("end", () => {
+                  try {
+                    const data = JSON.parse(body);
+                    const versions = Object.keys(data.package?.versions ?? {});
+                    const normalize = version => version.replace(/^v/i, "");
+                    const expected = normalize(process.env.EXPECTED_VERSION);
+                    process.exit(versions.some(version => normalize(version) === expected) ? 0 : 1);
+                  } catch {
+                    process.exit(1);
+                  }
+                });
+              '; then
+                found=true
+                break
+              fi
+            fi
+
+            if [ "$attempt" -lt 10 ]; then
+              echo "Packagist has not indexed $expected_version yet (attempt $attempt/10); retrying in 30 seconds"
+              sleep 30
+            fi
+          done
+
+          if [ "$found" != "true" ]; then
+            echo "::error::Packagist did not expose version $expected_version after 10 attempts"
+            exit 1
+          fi
+
+          echo "Packagist distributes version $expected_version"
+
+      - name: Download published shadcn registry artifacts
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          base_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$RELEASE_TAG/public/r"
+          mkdir -p "$RUNNER_TEMP/release-registry"
+
+          curl --fail --silent --show-error --location \
+            "$base_url/registry.json" \
+            --output "$RUNNER_TEMP/release-registry/registry.json"
+
+          curl --fail --silent --show-error --location \
+            "$base_url/data-table.json" \
+            --output "$RUNNER_TEMP/release-registry/data-table.json"
+
+          echo "Downloaded registry artifacts for $RELEASE_TAG"
+
+      - name: Validate published registry JSON and referenced assets
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+          const sourceManifest = readJson('registry.json');
+          const publishedManifest = readJson(
+            path.join(process.env.RUNNER_TEMP, 'release-registry/registry.json')
+          );
+          const publishedItem = readJson(
+            path.join(process.env.RUNNER_TEMP, 'release-registry/data-table.json')
+          );
+          const localItem = readJson('public/r/data-table.json');
+
+          const findDataTable = manifest =>
+            manifest.items?.find(item => item.name === 'data-table');
+
+          const sourceItem = findDataTable(sourceManifest);
+          const publishedManifestItem = findDataTable(publishedManifest);
+
+          if (!sourceItem || !publishedManifestItem) {
+            throw new Error('The data-table item is missing from a registry manifest');
+          }
+
+          if (publishedItem.name !== 'data-table' || localItem.name !== 'data-table') {
+            throw new Error('The published or checked-out registry item has an unexpected name');
+          }
+
+          if (!Array.isArray(sourceItem.files) || sourceItem.files.length === 0) {
+            throw new Error('The source data-table item has no files');
+          }
+
+          const repositoryRoot = process.cwd() + path.sep;
+
+          for (const file of sourceItem.files) {
+            if (typeof file.path !== 'string') {
+              throw new Error('A source registry file has no valid path');
+            }
+
+            const resolved = path.resolve(file.path);
+
+            if (!resolved.startsWith(repositoryRoot)) {
+              throw new Error(`Registry path escapes the repository: ${file.path}`);
+            }
+
+            if (!fs.existsSync(resolved)) {
+              throw new Error(`Referenced registry source file is missing: ${file.path}`);
+            }
+          }
+
+          console.log(
+            `Validated published registry manifests, data-table item, and ${sourceItem.files.length} referenced source files`
+          );
+          NODE
