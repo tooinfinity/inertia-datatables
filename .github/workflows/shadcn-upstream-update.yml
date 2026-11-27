@@ -82,28 +82,54 @@ jobs:
           npm run registry:build
 
       - name: Commit proposed changes
+        id: commit
         if: steps.detect.outputs.status == '3'
         run: |
+          set -euo pipefail
           git add -A
+          if git diff --cached --quiet; then
+            echo "::error::Expected proposed upstream changes to be staged, but the index is empty."
+            exit 1
+          fi
           git -c user.name='github-actions[bot]' \
             -c user.email='github-actions[bot]@users.noreply.github.com' \
-            commit -m "chore: propose shadcn/ui upstream update" >/dev/null 2>&1 || true
+            commit -m "chore: propose shadcn/ui upstream update"
+          commit_sha="$(git rev-parse HEAD)"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
 
       # Run the same mandatory checks that guard the default branch before the
-      # pull request is proposed. A failure here means no pull request is
-      # created and nothing is pushed.
+      # pull request is proposed. Because PRs created with GITHUB_TOKEN do not
+      # trigger pull_request workflows, all frontend and registry checks must
+      # pass here before pushing.
       - name: Validate proposed changes
         if: steps.detect.outputs.status == '3'
         run: |
+          set -euo pipefail
+          npm test
+          npm run lint
+          npm run typecheck
+          npm run registry:validate
+          npm run registry:verify-consumer
+          git diff --exit-code public/r
+          test -z "$(git ls-files --others --exclude-standard -- public/r)"
           node scripts/ci/shadcn-compatibility-audit.js
           node scripts/ci/check-shadcn-version.js
 
       - name: Push update branch
         if: steps.detect.outputs.status == '3'
-        run: |
-          git push -f origin "${UPDATE_BRANCH}"
         env:
           UPDATE_BRANCH: ci/shadcn-upstream-update
+          DEFAULT_BRANCH: main
+          EXPECTED_COMMIT: ${{ steps.commit.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          base_sha="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          if [ -z "${EXPECTED_COMMIT}" ] || [ "$head_sha" != "${EXPECTED_COMMIT}" ] || [ "$head_sha" = "$base_sha" ]; then
+            echo "::error::Refusing to push: expected commit (${EXPECTED_COMMIT}) is missing or identical to origin/${DEFAULT_BRANCH}."
+            exit 1
+          fi
+          git push -f origin "${UPDATE_BRANCH}"
 
       - name: Create or update pull request
         id: pr
@@ -163,20 +189,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE_PR_LABEL: "maintenance: protected-component"
+          DEFAULT_BRANCH: main
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
+          set -euo pipefail
           if [ -z "${PR_NUMBER}" ]; then
-            echo "No pull request number available; skipping label routing."
+            echo "::error::No pull request number available; cannot route protected changes."
+            exit 1
+          fi
+
+          protected_changes="$(git diff --name-only "origin/${DEFAULT_BRANCH}..HEAD" -- registry/data-table/components/ui/)"
+          if [ -z "$protected_changes" ]; then
+            echo "No protected paths modified; maintenance label routing not required."
             exit 0
           fi
-          # Only attach the label when it already exists in the repository, so
-          # label setup never blocks pull request creation. Let gh label list
-          # failures (e.g. auth or network errors) fail the step instead of
-          # treating them as a missing label.
+
           labels="$(gh label list --search "${UPDATE_PR_LABEL}" --limit 100 --json name --jq '.[].name')"
-          if printf '%s\n' "$labels" | grep -Fxq "${UPDATE_PR_LABEL}"; then
-            gh pr edit "${PR_NUMBER}" --add-label "${UPDATE_PR_LABEL}"
-            echo "Added ${UPDATE_PR_LABEL} label to pull request #${PR_NUMBER}."
-          else
-            echo "Note: label ${UPDATE_PR_LABEL} does not exist; create it so protected changes route to the protected-maintenance environment gate."
+          if ! printf '%s\n' "$labels" | grep -Fxq "${UPDATE_PR_LABEL}"; then
+            echo "::error::Required label '${UPDATE_PR_LABEL}' does not exist; cannot route protected-component pull request #${PR_NUMBER} to maintenance authorization."
+            exit 1
           fi
+
+          gh pr edit "${PR_NUMBER}" --add-label "${UPDATE_PR_LABEL}"
+
+          attached_labels="$(gh pr view "${PR_NUMBER}" --json labels --jq '.labels[].name')"
+          if ! printf '%s\n' "$attached_labels" | grep -Fxq "${UPDATE_PR_LABEL}"; then
+            echo "::error::Failed to verify that '${UPDATE_PR_LABEL}' is attached to pull request #${PR_NUMBER}."
+            exit 1
+          fi
+
+          echo "Added and verified ${UPDATE_PR_LABEL} label on pull request #${PR_NUMBER}."

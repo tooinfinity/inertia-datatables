@@ -222,7 +222,8 @@ export function buildPrBody(proposal) {
 
     lines.push('### Validation');
     lines.push(
-        'The generated changes are validated by `npm run registry:validate`, `npm run registry:build`, '
+        'The generated changes are validated by `npm test`, `npm run lint`, `npm run typecheck`, '
+        + '`npm run registry:validate`, `npm run registry:verify-consumer`, `npm run registry:build`, '
         + 'the compatibility audit (validation mode), and the shadcn CLI version consistency check '
         + 'before the pull request is proposed. Generated `public/r` registry artifacts are rebuilt '
         + 'and included in this pull request.',

@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, chmodSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -756,7 +757,11 @@ describe('shadcn-upstream-update: buildPrTitle / buildPrBody', () => {
         expect(body).toContain('protected-maintenance');
         expect(body).toContain('never approves, merges, or closes');
         expect(body).toContain('table');
+        expect(body).toContain('npm test');
+        expect(body).toContain('npm run lint');
+        expect(body).toContain('npm run typecheck');
         expect(body).toContain('registry:validate');
+        expect(body).toContain('registry:verify-consumer');
         expect(body).toContain('registry:build');
         expect(body).toContain('public/r');
         expect(body).not.toContain('artifacts are not modified');
@@ -826,11 +831,414 @@ describe('shadcn-upstream-update: workflow security', () => {
     it('rebuilds registry artifacts before committing and uses supported gh CLI flags', () => {
         expect(workflow).toContain('npm run registry:validate');
         expect(workflow).toContain('npm run registry:build');
+        expect(workflow).toContain('npm run registry:verify-consumer');
+        expect(workflow).toContain('npm test');
+        expect(workflow).toContain('npm run lint');
+        expect(workflow).toContain('npm run typecheck');
         expect(workflow).toContain('|| status=$?');
         expect(workflow).toContain('gh pr edit "$existing"');
         expect(workflow).toContain('--title "${pr_title}"');
         expect(workflow).not.toContain('--title-file');
         expect(workflow).toContain('gh label list');
         expect(workflow).not.toContain('gh label view');
+        expect(workflow).not.toContain('>/dev/null 2>&1 || true');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Workflow integration tests (executes extracted YAML steps in temp git repo)
+// ---------------------------------------------------------------------------
+
+function extractWorkflowStepRun(workflowYaml: string, stepName: string): string {
+    const lines = workflowYaml.split('\n');
+    const stepHeader = `      - name: ${stepName}`;
+    const startIdx = lines.findIndex((line) => line.trimEnd() === stepHeader);
+    if (startIdx === -1) {
+        throw new Error(`Workflow step not found: ${stepName}`);
+    }
+
+    let runIdx = -1;
+    for (let i = startIdx + 1; i < lines.length; i += 1) {
+        if (lines[i].startsWith('      - name:')) {
+            break;
+        }
+        if (lines[i].trim() === 'run: |') {
+            runIdx = i + 1;
+            break;
+        }
+    }
+    if (runIdx === -1) {
+        throw new Error(`run: | block not found for step: ${stepName}`);
+    }
+
+    const scriptLines: string[] = [];
+    for (let i = runIdx; i < lines.length; i += 1) {
+        const line = lines[i];
+        if (line.startsWith('      - name:') || (/^\s{6}[a-z-]+:/.test(line) && !line.startsWith('          '))) {
+            break;
+        }
+        if (line === '') {
+            scriptLines.push('');
+        } else if (line.startsWith('          ')) {
+            scriptLines.push(line.slice(10));
+        } else {
+            break;
+        }
+    }
+    return scriptLines.join('\n').trim() + '\n';
+}
+
+function setupWorkflowTestRepo() {
+    const root = mkdtempSync(join(tmpdir(), 'shadcn-workflow-test-'));
+    const originDir = join(root, 'origin.git');
+    const workDir = join(root, 'work');
+    const binDir = join(root, 'bin');
+    const githubOutput = join(root, 'github_output.txt');
+    const ghLog = join(root, 'gh.log');
+    const titleFile = join(root, 'pr-title.txt');
+    const bodyFile = join(root, 'pr-body.txt');
+
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(githubOutput, '', 'utf-8');
+    writeFileSync(ghLog, '', 'utf-8');
+    writeFileSync(titleFile, 'chore: automated shadcn/ui upstream update (1 component)\n', 'utf-8');
+    writeFileSync(bodyFile, 'Automated proposal body\n', 'utf-8');
+
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', originDir]);
+    execFileSync('git', ['clone', originDir, workDir]);
+    execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: workDir });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: workDir });
+    execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: workDir });
+
+    mkdirSync(join(workDir, 'registry/data-table/components/ui'), { recursive: true });
+    mkdirSync(join(workDir, 'public/r'), { recursive: true });
+    writeFileSync(
+        join(workDir, 'registry/data-table/components/ui/table.tsx'),
+        'export const Table = () => <table />;\n',
+        'utf-8',
+    );
+    writeFileSync(join(workDir, 'public/r/data-table.json'), '{"name":"data-table"}\n', 'utf-8');
+    execFileSync('git', ['add', '-A'], { cwd: workDir });
+    execFileSync('git', ['commit', '-m', 'chore: initial'], { cwd: workDir });
+    execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: workDir });
+
+    return { root, originDir, workDir, binDir, githubOutput, ghLog, titleFile, bodyFile };
+}
+
+function installMockGh(
+    binDir: string,
+    ghLog: string,
+    options: {
+        existingPr?: string;
+        createdPrNumber?: string;
+        labels?: string[];
+        attachedLabels?: string[];
+    } = {},
+) {
+    const stateFile = join(binDir, 'gh-state.json');
+    writeFileSync(
+        stateFile,
+        JSON.stringify({
+            prNumber: options.existingPr ?? '',
+            createdPrNumber: options.createdPrNumber ?? '42',
+            labels: options.labels ?? ['maintenance: protected-component'],
+            attachedLabels: options.attachedLabels ?? null,
+        }),
+        'utf-8',
+    );
+
+    const ghScript = `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(ghLog)}, JSON.stringify(args) + '\\n');
+const state = JSON.parse(fs.readFileSync(${JSON.stringify(stateFile)}, 'utf-8'));
+
+if (args[0] === 'pr' && args[1] === 'list') {
+  if (state.prNumber) {
+    process.stdout.write(state.prNumber + '\\n');
+  }
+  process.exit(0);
+}
+if (args[0] === 'pr' && args[1] === 'create') {
+  state.prNumber = state.createdPrNumber;
+  fs.writeFileSync(${JSON.stringify(stateFile)}, JSON.stringify(state));
+  process.exit(0);
+}
+if (args[0] === 'pr' && args[1] === 'edit') {
+  const addLabelIdx = args.indexOf('--add-label');
+  if (addLabelIdx !== -1 && state.attachedLabels === null) {
+    state.attachedLabels = [args[addLabelIdx + 1]];
+    fs.writeFileSync(${JSON.stringify(stateFile)}, JSON.stringify(state));
+  }
+  process.exit(0);
+}
+if (args[0] === 'pr' && args[1] === 'view') {
+  const out = state.attachedLabels ?? [];
+  for (const l of out) process.stdout.write(l + '\\n');
+  process.exit(0);
+}
+if (args[0] === 'label' && args[1] === 'list') {
+  for (const l of state.labels) process.stdout.write(l + '\\n');
+  process.exit(0);
+}
+process.exit(1);
+`;
+    const ghPath = join(binDir, 'gh');
+    writeFileSync(ghPath, ghScript, 'utf-8');
+    chmodSync(ghPath, 0o755);
+}
+
+function runWorkflowStep(
+    workflowYaml: string,
+    stepName: string,
+    workDir: string,
+    env: Record<string, string>,
+) {
+    const script = extractWorkflowStepRun(workflowYaml, stepName);
+    return spawnSync('bash', ['-e', '-c', script], {
+        cwd: workDir,
+        env: { ...process.env, ...env },
+        encoding: 'utf-8',
+    });
+}
+
+describe('shadcn-upstream-update: workflow integration', () => {
+    const workflow = readFileSync('.github/workflows/shadcn-upstream-update.yml', 'utf-8');
+
+    it('creates branch, commits, pushes, opens a new PR, and routes protected changes', () => {
+        const ctx = setupWorkflowTestRepo();
+        try {
+            installMockGh(ctx.binDir, ctx.ghLog, {
+                existingPr: '',
+                createdPrNumber: '42',
+                labels: ['maintenance: protected-component'],
+            });
+
+            const baseEnv = {
+                PATH: `${ctx.binDir}:${process.env.PATH}`,
+                GITHUB_OUTPUT: ctx.githubOutput,
+                UPDATE_BRANCH: 'ci/shadcn-upstream-update',
+                DEFAULT_BRANCH: 'main',
+                PR_TITLE_FILE: ctx.titleFile,
+                PR_BODY_FILE: ctx.bodyFile,
+                GH_TOKEN: 'test-token',
+                UPDATE_PR_LABEL: 'maintenance: protected-component',
+            };
+
+            const branchRes = runWorkflowStep(workflow, 'Create update branch', ctx.workDir, baseEnv);
+            expect(branchRes.status).toBe(0);
+
+            writeFileSync(
+                join(ctx.workDir, 'registry/data-table/components/ui/table.tsx'),
+                'export const Table = () => <table data-updated="true" />;\n',
+                'utf-8',
+            );
+
+            const commitRes = runWorkflowStep(workflow, 'Commit proposed changes', ctx.workDir, baseEnv);
+            expect(commitRes.status).toBe(0);
+
+            const outputs = readFileSync(ctx.githubOutput, 'utf-8');
+            const commitSha = outputs.match(/commit_sha=([0-9a-f]+)/)?.[1] ?? '';
+            expect(commitSha).toMatch(/^[0-9a-f]{40}$/);
+
+            const pushRes = runWorkflowStep(workflow, 'Push update branch', ctx.workDir, {
+                ...baseEnv,
+                EXPECTED_COMMIT: commitSha,
+            });
+            expect(pushRes.status).toBe(0);
+
+            const remoteHead = execFileSync(
+                'git',
+                ['--git-dir', ctx.originDir, 'rev-parse', 'refs/heads/ci/shadcn-upstream-update'],
+                { encoding: 'utf-8' },
+            ).trim();
+            expect(remoteHead).toBe(commitSha);
+
+            const prRes = runWorkflowStep(workflow, 'Create or update pull request', ctx.workDir, baseEnv);
+            expect(prRes.status).toBe(0);
+
+            const prNumber = readFileSync(ctx.githubOutput, 'utf-8').match(/pr_number=(\d+)/)?.[1] ?? '';
+            expect(prNumber).toBe('42');
+
+            const routeRes = runWorkflowStep(
+                workflow,
+                'Route protected changes to maintenance authorization',
+                ctx.workDir,
+                { ...baseEnv, PR_NUMBER: prNumber },
+            );
+            expect(routeRes.status).toBe(0);
+
+            const ghCalls = readFileSync(ctx.ghLog, 'utf-8')
+                .trim()
+                .split('\n')
+                .map((line) => JSON.parse(line) as string[]);
+            expect(ghCalls.some((c) => c[0] === 'pr' && c[1] === 'create' && c.includes('--title'))).toBe(true);
+            expect(ghCalls.some((c) => c[0] === 'pr' && c[1] === 'edit' && c.includes('--add-label'))).toBe(true);
+            expect(ghCalls.some((c) => c[0] === 'pr' && c[1] === 'view')).toBe(true);
+        } finally {
+            rmSync(ctx.root, { recursive: true, force: true });
+        }
+    });
+
+    it('updates an existing open PR instead of creating a duplicate', () => {
+        const ctx = setupWorkflowTestRepo();
+        try {
+            installMockGh(ctx.binDir, ctx.ghLog, { existingPr: '99' });
+
+            const res = runWorkflowStep(workflow, 'Create or update pull request', ctx.workDir, {
+                PATH: `${ctx.binDir}:${process.env.PATH}`,
+                GITHUB_OUTPUT: ctx.githubOutput,
+                UPDATE_BRANCH: 'ci/shadcn-upstream-update',
+                DEFAULT_BRANCH: 'main',
+                PR_TITLE_FILE: ctx.titleFile,
+                PR_BODY_FILE: ctx.bodyFile,
+                GH_TOKEN: 'test-token',
+            });
+            expect(res.status).toBe(0);
+            expect(readFileSync(ctx.githubOutput, 'utf-8')).toContain('pr_number=99');
+
+            const ghCalls = readFileSync(ctx.ghLog, 'utf-8')
+                .trim()
+                .split('\n')
+                .map((line) => JSON.parse(line) as string[]);
+            expect(ghCalls.some((c) => c[0] === 'pr' && c[1] === 'edit' && c[2] === '99' && c.includes('--title'))).toBe(true);
+            expect(ghCalls.some((c) => c[0] === 'pr' && c[1] === 'create')).toBe(false);
+        } finally {
+            rmSync(ctx.root, { recursive: true, force: true });
+        }
+    });
+
+    it('fails on empty commit, failing git commit hook, and refuses to push without expected commit', () => {
+        const ctx = setupWorkflowTestRepo();
+        try {
+            const baseEnv = {
+                GITHUB_OUTPUT: ctx.githubOutput,
+                UPDATE_BRANCH: 'ci/shadcn-upstream-update',
+                DEFAULT_BRANCH: 'main',
+            };
+
+            // 1. Empty index
+            const emptyCommit = runWorkflowStep(workflow, 'Commit proposed changes', ctx.workDir, baseEnv);
+            expect(emptyCommit.status).not.toBe(0);
+            expect(emptyCommit.stdout + emptyCommit.stderr).toContain('index is empty');
+
+            // 2. Failing pre-commit hook (commit failure must not be suppressed)
+            writeFileSync(
+                join(ctx.workDir, 'registry/data-table/components/ui/table.tsx'),
+                'export const Table = () => <table data-changed="1" />;\n',
+                'utf-8',
+            );
+            const hookPath = join(ctx.workDir, '.git/hooks/pre-commit');
+            writeFileSync(hookPath, '#!/usr/bin/env bash\necho "hook failed" >&2\nexit 1\n', 'utf-8');
+            chmodSync(hookPath, 0o755);
+
+            const failedCommit = runWorkflowStep(workflow, 'Commit proposed changes', ctx.workDir, baseEnv);
+            expect(failedCommit.status).not.toBe(0);
+            expect(failedCommit.stderr).toContain('hook failed');
+
+            // 3. Push refuses when EXPECTED_COMMIT is missing or equals origin/main
+            const refusedPush = runWorkflowStep(workflow, 'Push update branch', ctx.workDir, {
+                ...baseEnv,
+                EXPECTED_COMMIT: '',
+            });
+            expect(refusedPush.status).not.toBe(0);
+            expect(refusedPush.stdout + refusedPush.stderr).toContain('Refusing to push');
+        } finally {
+            rmSync(ctx.root, { recursive: true, force: true });
+        }
+    });
+
+    it('fails routing when protected paths are modified and the maintenance label is missing or unverified', () => {
+        const ctx = setupWorkflowTestRepo();
+        try {
+            execFileSync('git', ['checkout', '-B', 'ci/shadcn-upstream-update', 'origin/main'], { cwd: ctx.workDir });
+            writeFileSync(
+                join(ctx.workDir, 'registry/data-table/components/ui/table.tsx'),
+                'export const Table = () => <table data-protected-change="1" />;\n',
+                'utf-8',
+            );
+            execFileSync('git', ['add', '-A'], { cwd: ctx.workDir });
+            execFileSync('git', ['commit', '-m', 'chore: update table'], { cwd: ctx.workDir });
+
+            // 1. Missing label -> must fail explicitly
+            installMockGh(ctx.binDir, ctx.ghLog, { labels: [] });
+            const missingLabel = runWorkflowStep(
+                workflow,
+                'Route protected changes to maintenance authorization',
+                ctx.workDir,
+                {
+                    PATH: `${ctx.binDir}:${process.env.PATH}`,
+                    GH_TOKEN: 'test-token',
+                    UPDATE_PR_LABEL: 'maintenance: protected-component',
+                    DEFAULT_BRANCH: 'main',
+                    PR_NUMBER: '42',
+                },
+            );
+            expect(missingLabel.status).not.toBe(0);
+            expect(missingLabel.stdout + missingLabel.stderr).toContain('does not exist');
+
+            // 2. Label exists, but verification via gh pr view shows it was not attached -> must fail
+            installMockGh(ctx.binDir, ctx.ghLog, {
+                labels: ['maintenance: protected-component'],
+                attachedLabels: [],
+            });
+            const unverified = runWorkflowStep(
+                workflow,
+                'Route protected changes to maintenance authorization',
+                ctx.workDir,
+                {
+                    PATH: `${ctx.binDir}:${process.env.PATH}`,
+                    GH_TOKEN: 'test-token',
+                    UPDATE_PR_LABEL: 'maintenance: protected-component',
+                    DEFAULT_BRANCH: 'main',
+                    PR_NUMBER: '42',
+                },
+            );
+            expect(unverified.status).not.toBe(0);
+            expect(unverified.stdout + unverified.stderr).toContain('Failed to verify');
+        } finally {
+            rmSync(ctx.root, { recursive: true, force: true });
+        }
+    });
+
+    it('fails validation step when a frontend quality gate fails and passes when all gates succeed', () => {
+        const ctx = setupWorkflowTestRepo();
+        try {
+            const installMockNpmAndNode = (failCommand: string | null) => {
+                const npmPath = join(ctx.binDir, 'npm');
+                writeFileSync(
+                    npmPath,
+                    `#!/usr/bin/env bash
+cmd="$*"
+if [ "$cmd" = "${failCommand}" ]; then
+  echo "mocked failure: $cmd" >&2
+  exit 1
+fi
+exit 0
+`,
+                    'utf-8',
+                );
+                chmodSync(npmPath, 0o755);
+
+                const nodePath = join(ctx.binDir, 'node');
+                writeFileSync(nodePath, '#!/usr/bin/env bash\nexit 0\n', 'utf-8');
+                chmodSync(nodePath, 0o755);
+            };
+
+            installMockNpmAndNode('run lint');
+            const failedValidation = runWorkflowStep(workflow, 'Validate proposed changes', ctx.workDir, {
+                PATH: `${ctx.binDir}:${process.env.PATH}`,
+            });
+            expect(failedValidation.status).not.toBe(0);
+            expect(failedValidation.stderr).toContain('mocked failure: run lint');
+
+            installMockNpmAndNode(null);
+            const passedValidation = runWorkflowStep(workflow, 'Validate proposed changes', ctx.workDir, {
+                PATH: `${ctx.binDir}:${process.env.PATH}`,
+            });
+            expect(passedValidation.status).toBe(0);
+        } finally {
+            rmSync(ctx.root, { recursive: true, force: true });
+        }
     });
 });
