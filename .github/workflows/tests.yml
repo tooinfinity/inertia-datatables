@@ -98,13 +98,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        uses: ./.github/actions/setup-php
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
-          ini-values: error_reporting=E_ALL
-          tools: composer:v2
-          coverage: none
 
       - name: Install dependencies
         run: |
@@ -197,13 +193,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        uses: ./.github/actions/setup-php
         with:
           php-version: 8.4
           extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, pdo_mysql, pdo_pgsql, bcmath, intl
-          ini-values: error_reporting=E_ALL
-          tools: composer:v2
-          coverage: none
 
       - name: Install dependencies
         run: |
