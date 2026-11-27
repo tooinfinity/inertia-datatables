@@ -796,6 +796,193 @@ describe('shadcn-upstream-update: applyChanges', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    it('keeps the local baseline synchronized so consecutive updates remain applicable', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'shadcn-update-baseline-sync-'));
+        const uiDir = join(dir, 'registry', 'data-table', 'components', 'ui');
+        const baselineDir = join(dir, 'scripts', 'ci', 'shadcn-compatibility-baselines');
+        mkdirSync(uiDir, { recursive: true });
+        mkdirSync(baselineDir, { recursive: true });
+
+        const realTableSource = readFileSync(
+            join(process.cwd(), 'registry', 'data-table', 'components', 'ui', 'table.tsx'),
+            'utf-8',
+        );
+        writeFileSync(join(uiDir, 'table.tsx'), realTableSource, 'utf-8');
+        writeFileSync(join(baselineDir, 'table.tsx'), realTableSource, 'utf-8');
+
+        const manifestPath = join(dir, 'manifest.json');
+        const manifest = makeManifest({ baselineCommit: BASELINE_COMMIT });
+        const table = manifest.components.find((c) => c.name === 'table')! as {
+            localBaselinePath?: string;
+        };
+        table.localBaselinePath = 'scripts/ci/shadcn-compatibility-baselines/table.tsx';
+        writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+        const sourceB = latestTableSourceAddedCaption; // first upstream change (adds TableCaption)
+        const sourceC = latestTableSourceAddedCaption.replace(
+            'export { Table, TableHeader, TableBody, TableRow, TableCell, TableCaption };',
+            `function TableSummary({ children, ...props }) {
+  return <tfoot {...props}>{children}</tfoot>;
+}
+export { Table, TableHeader, TableBody, TableRow, TableCell, TableCaption, TableSummary };`,
+        ); // second upstream change (adds TableSummary)
+
+        const sourcesByCommit: Record<string, string> = {
+            [BASELINE_COMMIT]: realTableSource,
+            [LATEST_COMMIT]: sourceB,
+            'cccccccccccccccccccccccccccccccccccccccc': sourceC,
+        };
+        let discoveredCommit = LATEST_COMMIT;
+
+        mockFetch(async (url) => {
+            if (url.includes('api.github.com')) {
+                return mockResponse(JSON.stringify({ sha: discoveredCommit }));
+            }
+            const match = url.match(/ui\/([^/.]+)\.tsx$/);
+            const component = match ? match[1] : null;
+            let commit: string | null = null;
+            for (const c of [
+                BASELINE_COMMIT,
+                LATEST_COMMIT,
+                'cccccccccccccccccccccccccccccccccccccccc',
+            ]) {
+                if (url.includes(`/${c}/`)) {
+                    commit = c;
+                    break;
+                }
+            }
+            if (!commit) {
+                return mockResponse('not found', 404);
+            }
+            const text = component ? sourcesByCommit[commit] : undefined;
+            if (text === undefined) {
+                return mockResponse('not found', 404);
+            }
+            return mockResponse(text);
+        });
+
+        // --- Cycle 1: apply the first upstream update (source B) ---
+        const result1 = await applyChanges(manifestPath, { localBaseDir: dir });
+        expect(result1.shouldApply).toBe(true);
+        expect(result1.changedFiles).toContain('registry/data-table/components/ui/table.tsx');
+        expect(result1.changedFiles).toContain(
+            'scripts/ci/shadcn-compatibility-baselines/table.tsx',
+        );
+        expect(result1.changedFiles).toContain(manifestPath);
+
+        const tableAfter1 = readFileSync(join(uiDir, 'table.tsx'), 'utf-8');
+        const baselineAfter1 = readFileSync(join(baselineDir, 'table.tsx'), 'utf-8');
+        expect(tableAfter1).toContain('TableCaption');
+        expect(baselineAfter1).toContain('TableCaption');
+        expect(tableAfter1).toBe(baselineAfter1); // source and baseline synchronized
+
+        const manifestAfter1 = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+        expect(manifestAfter1.upstream.baselineCommit).toBe(LATEST_COMMIT);
+
+        // --- Cycle 2: second upstream update (source C). Local source B still
+        // matches local baseline B, so the table remains eligible for automatic
+        // application instead of being misclassified as locally customized. ---
+        discoveredCommit = 'cccccccccccccccccccccccccccccccccccccccc';
+        const result2 = await applyChanges(manifestPath, { localBaseDir: dir });
+        expect(result2.shouldApply).toBe(true);
+
+        const tableAfter2 = readFileSync(join(uiDir, 'table.tsx'), 'utf-8');
+        const baselineAfter2 = readFileSync(join(baselineDir, 'table.tsx'), 'utf-8');
+        expect(tableAfter2).toContain('TableSummary');
+        expect(baselineAfter2).toContain('TableSummary');
+        expect(tableAfter2).toBe(baselineAfter2);
+
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('still detects and preserves a genuine customization introduced after a baseline sync', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'shadcn-update-baseline-custom-'));
+        const uiDir = join(dir, 'registry', 'data-table', 'components', 'ui');
+        const baselineDir = join(dir, 'scripts', 'ci', 'shadcn-compatibility-baselines');
+        mkdirSync(uiDir, { recursive: true });
+        mkdirSync(baselineDir, { recursive: true });
+
+        const realTableSource = readFileSync(
+            join(process.cwd(), 'registry', 'data-table', 'components', 'ui', 'table.tsx'),
+            'utf-8',
+        );
+        writeFileSync(join(uiDir, 'table.tsx'), realTableSource, 'utf-8');
+        writeFileSync(join(baselineDir, 'table.tsx'), realTableSource, 'utf-8');
+
+        const manifestPath = join(dir, 'manifest.json');
+        const manifest = makeManifest({ baselineCommit: BASELINE_COMMIT });
+        const table = manifest.components.find((c) => c.name === 'table')! as {
+            localBaselinePath?: string;
+        };
+        table.localBaselinePath = 'scripts/ci/shadcn-compatibility-baselines/table.tsx';
+        writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+        const sourceB = latestTableSourceAddedCaption; // first upstream change (adds TableCaption)
+        const sourceC = latestTableSourceAddedCaption.replace(
+            'export { Table, TableHeader, TableBody, TableRow, TableCell, TableCaption };',
+            `function TableSummary({ children, ...props }) {
+  return <tfoot {...props}>{children}</tfoot>;
+}
+export { Table, TableHeader, TableBody, TableRow, TableCell, TableCaption, TableSummary };`,
+        ); // second upstream change (adds TableSummary)
+
+        const sourcesByCommit: Record<string, string> = {
+            [BASELINE_COMMIT]: realTableSource,
+            [LATEST_COMMIT]: sourceB,
+            'cccccccccccccccccccccccccccccccccccccccc': sourceC,
+        };
+        let discoveredCommit = LATEST_COMMIT;
+
+        mockFetch(async (url) => {
+            if (url.includes('api.github.com')) {
+                return mockResponse(JSON.stringify({ sha: discoveredCommit }));
+            }
+            const match = url.match(/ui\/([^/.]+)\.tsx$/);
+            const component = match ? match[1] : null;
+            let commit: string | null = null;
+            for (const c of [
+                BASELINE_COMMIT,
+                LATEST_COMMIT,
+                'cccccccccccccccccccccccccccccccccccccccc',
+            ]) {
+                if (url.includes(`/${c}/`)) {
+                    commit = c;
+                    break;
+                }
+            }
+            if (!commit) {
+                return mockResponse('not found', 404);
+            }
+            const text = component ? sourcesByCommit[commit] : undefined;
+            if (text === undefined) {
+                return mockResponse('not found', 404);
+            }
+            return mockResponse(text);
+        });
+
+        // Cycle 1: sync the baseline by applying the first upstream update.
+        const result1 = await applyChanges(manifestPath, { localBaseDir: dir });
+        expect(result1.shouldApply).toBe(true);
+        const tableAfter1 = readFileSync(join(uiDir, 'table.tsx'), 'utf-8');
+        expect(tableAfter1).toBe(readFileSync(join(baselineDir, 'table.tsx'), 'utf-8'));
+        expect(tableAfter1).toContain('TableCaption');
+
+        // Introduce a genuine local customization after the sync.
+        const customized = tableAfter1.replace('<table ', '<table className="custom" ');
+        writeFileSync(join(uiDir, 'table.tsx'), customized, 'utf-8');
+
+        // Cycle 2: another upstream update (source C). The customized local
+        // source now differs from the synced baseline (source B), so it must be
+        // preserved, not automatically overwritten.
+        discoveredCommit = 'cccccccccccccccccccccccccccccccccccccccc';
+        const result2 = await applyChanges(manifestPath, { localBaseDir: dir });
+        expect(result2.shouldApply).toBe(false);
+        expect(result2.changedFiles).not.toContain('registry/data-table/components/ui/table.tsx');
+        expect(readFileSync(join(uiDir, 'table.tsx'), 'utf-8')).toBe(customized);
+
+        rmSync(dir, { recursive: true, force: true });
+    });
 });
 
 // ---------------------------------------------------------------------------

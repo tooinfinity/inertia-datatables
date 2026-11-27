@@ -622,6 +622,15 @@ export async function applyChanges(manifestPath = MANIFEST_PATH, options = {}) {
         const targetPath = join(localBaseDir, result.localPath);
         writeFileSync(targetPath, latestSource, 'utf-8');
         changedFiles.push(result.localPath);
+
+        // Keep the pinned local baseline in sync with the applied component
+        // source so the next audit compares against the accepted revision and
+        // does not misclassify a deliberately-updated shim as locally customized.
+        if (result.localBaselinePath) {
+            const baselineTargetPath = join(localBaseDir, result.localBaselinePath);
+            writeFileSync(baselineTargetPath, latestSource, 'utf-8');
+            changedFiles.push(result.localBaselinePath);
+        }
     }
 
     // Nothing safe to apply: leave the manifest untouched so the baseline is
