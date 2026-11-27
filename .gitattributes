@@ -37,3 +37,4 @@
 /tsconfig.test.json export-ignore
 /rector.php         export-ignore
 /.commitlintrc.json export-ignore
+/release-please-config.json export-ignore
