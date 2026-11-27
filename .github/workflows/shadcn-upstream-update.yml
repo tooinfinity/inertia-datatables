@@ -76,11 +76,20 @@ jobs:
             exit 0
           fi
 
+          SHADCN_VERSION=$(npx --no-install shadcn --version)
           mkdir -p .github/shadcn-upstream
           {
             echo "# Upstream shadcn/ui \`table\` Proposal"
             echo ""
             echo "The protected compatibility shim at \`registry/data-table/components/ui/table.tsx\` was **not** overwritten."
+            echo ""
+            echo "## Provenance"
+            echo ""
+            echo "- **Component:** \`table\`"
+            echo "- **Style:** \`new-york\`"
+            echo "- **shadcn CLI:** \`${SHADCN_VERSION}\`"
+            echo "- **Upstream source:** \`https://ui.shadcn.com/r/styles/new-york-v4/table.json\`"
+            echo "- **Local shim:** \`registry/data-table/components/ui/table.tsx\`"
             echo ""
             if grep -q '@/lib/utils' "$RUNNER_TEMP/shadcn-upstream/table.tsx"; then
               echo "> **Warning:** Upstream \`table.tsx\` imports \`@/lib/utils\` (\`cn\`), which does not exist in this repository. Adapt any desired changes to the local shim without introducing an unresolved \`@/lib/utils\` import."
