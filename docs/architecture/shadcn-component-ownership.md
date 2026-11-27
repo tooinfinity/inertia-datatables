@@ -384,3 +384,71 @@ CI verifies that `public/r/` artifacts are up to date with registry source; any 
 - Do not work around it by editing `components/ui/`.
 - Open an issue documenting the limitation.
 - Propose a dedicated maintenance task (or PR 2/PR 3 enforcement) to update the protected component with explicit maintainer authorization.
+
+## Automated upstream-update proposals
+
+The package provides an automated workflow (`.github/workflows/shadcn-upstream-update.yml`) that detects upstream shadcn/ui changes and opens a **reviewable pull-request proposal** when a safely applicable update exists. It is proposal-generation only: it never automatically updates local components, never merges, and never approves its own pull requests.
+
+### What it does
+
+On its schedule (and on manual `workflow_dispatch`), the workflow:
+
+1. Discovers the latest commit on the configured upstream branch (`shadcn-ui/ui`, `main`).
+2. Compares it against the pinned baseline in `scripts/ci/shadcn-compatibility-manifest.json`.
+3. Identifies added, modified, and removed upstream components.
+4. For each structurally-compared component, checks whether the local shim still matches the pinned baseline exactly (no local customizations).
+5. Applies only the safely applicable changes to the working tree and bumps the pinned baseline.
+6. Runs the compatibility audit (validation mode) and the shadcn CLI version consistency check.
+7. Creates a dedicated branch, commits the changes, and opens a pull request targeting `main`.
+
+### Schedule and manual trigger
+
+The workflow runs on a conservative weekly schedule (`0 9 * * 1`, Mondays at 09:00 UTC) and can be triggered manually through `workflow_dispatch`. The schedule is configured in the workflow `on.schedule.cron` and can be adjusted by editing that value.
+
+### How the upstream baseline is determined
+
+The baseline is the `upstream.baselineCommit` in `scripts/ci/shadcn-compatibility-manifest.json` — the upstream revision last reviewed and accepted as compatible. It is pinned to a 40-character commit SHA so detection is reproducible. The baseline only advances when the workflow applies a safely applicable update and re-runs cleanly, which prevents the same drift from being re-proposed on every run.
+
+### How generated branches and pull requests are handled
+
+- All changes are made on a dedicated, automation-owned branch (`ci/shadcn-upstream-update`), always rebased onto `main`.
+- Re-runs reuse the same branch, so there is never more than one update branch at a time.
+- Before opening a pull request, the workflow checks whether an open pull request already exists from that branch; if so, pushing the branch refreshes it and no second, competing pull request is created.
+- The pull request targets `main` and uses a conventional-commit title (`chore: ...`).
+- The pull request body documents the upstream source, baseline/latest commits, affected components, any conflicts or skipped components, validation results, and an explicit statement that the changes require normal human review.
+
+### How local customizations are protected
+
+Local compatibility shims are never blindly overwritten:
+
+- Only `structural` components are eligible for automatic updates; the six manual role-equivalent shims are always reported for manual review.
+- A component is updated automatically only when its local shim still matches the pinned baseline exactly (no local customizations).
+- Components with local modifications (including all six manual shims, whose upstream source diff is not meaningful) are preserved and reported as conflicts or skipped.
+- No pull request is created when there are no safely applicable changes.
+- If validation fails, nothing is pushed and no pull request is created.
+
+### Required GitHub permissions and configuration
+
+The workflow uses least-privilege `GITHUB_TOKEN` permissions (`contents: write`, `pull-requests: write`) and no PAT or GitHub App.
+
+**Note:** Pull requests created with `GITHUB_TOKEN` do not trigger `pull_request` workflows (a GitHub security limitation). The generated pull request is therefore a proposal that a maintainer adopts by reviewing it; required status checks run when a maintainer interacts with the branch (for example by pushing a commit).
+
+Pull requests that touch protected compatibility shims carry the `maintenance: protected-component` label, routing them through the `protected-maintenance` GitHub Environment gate established by PR #146. A repository administrator must have that environment configured (required reviewers, prevent self-review) before such a pull request can be merged. CODEOWNER review and all required status checks still apply.
+
+### Troubleshooting failed upstream checks
+
+- If the workflow fails to discover the latest upstream commit, the run exits with a retrieval error and opens no pull request. Confirm network access to `api.github.com` and `raw.githubusercontent.com`.
+- If a component source cannot be fetched or parsed, it is reported as `unavailable` and excluded from automatic changes.
+- If the manifest is invalid, detection fails closed and no pull request is created.
+- If validation (compatibility audit or shadcn CLI version check) fails after changes are applied, nothing is pushed and no pull request is created.
+
+### Why generated pull requests still require normal maintenance authorization and human review
+
+An automatically generated pull request is a proposal, not authorization to modify protected components. It must still:
+
+- Pass the `protected-maintenance` environment gate (human reviewer approval) when it touches protected compatibility shims.
+- Satisfy CODEOWNER review (enforced by branch protection).
+- Pass all required status checks.
+
+The workflow never approves, merges, or closes its own pull requests. A maintainer must explicitly review and merge.
+

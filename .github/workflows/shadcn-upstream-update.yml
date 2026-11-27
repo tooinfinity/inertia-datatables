@@ -1,0 +1,168 @@
+name: shadcn upstream update
+
+on:
+  schedule:
+    # Conservative weekly schedule: every Monday at 09:00 UTC. Override by
+    # editing this cron; do not run more frequently than weekly.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+# Least privilege: only enough to create/update a branch and open a pull
+# request. No PAT or GitHub App is required; see the workflow security notes
+# in docs/architecture/shadcn-component-ownership.md.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: shadcn-upstream-update
+  cancel-in-progress: true
+
+jobs:
+  detect-and-propose:
+    name: Detect upstream shadcn updates and propose a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Work from a dedicated, automation-owned branch that is always rebased
+      # onto the default branch. Re-runs reuse the same branch so there is
+      # never more than one update branch or pull request at a time.
+      - name: Create update branch
+        id: branch
+        run: |
+          git checkout -B "${UPDATE_BRANCH}" origin/${DEFAULT_BRANCH}
+        env:
+          UPDATE_BRANCH: ci/shadcn-upstream-update
+          DEFAULT_BRANCH: main
+
+      - name: Detect upstream changes and apply safe updates
+        id: detect
+        env:
+          CI: "true"
+          PROPOSAL_OUTPUT_FILE: "${{ runner.temp }}/shadcn-update-proposal.json"
+          PR_TITLE_FILE: "${{ runner.temp }}/shadcn-pr-title.txt"
+          PR_BODY_FILE: "${{ runner.temp }}/shadcn-pr-body.txt"
+          UPDATE_BRANCH: ci/shadcn-upstream-update
+          DEFAULT_BRANCH: main
+        run: |
+          node scripts/ci/shadcn-upstream-update.js --apply
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          # Exit 0 = no safely applicable changes (no pull request).
+          # Exit 3 = safely applicable changes applied to the working tree.
+          # Anything else = detection/validation failure; stop without pushing.
+          if [ "$status" -eq 0 ]; then
+            echo "No safely applicable upstream changes — no pull request will be created."
+            exit 0
+          fi
+          if [ "$status" -ne 3 ]; then
+            echo "::error::Upstream update detection failed with exit status $status."
+            exit 1
+          fi
+
+      - name: Commit proposed changes
+        if: steps.detect.outputs.status == '3'
+        run: |
+          git add -A
+          git -c user.name='github-actions[bot]' \
+            -c user.email='github-actions[bot]@users.noreply.github.com' \
+            commit -m "chore: propose shadcn/ui upstream update" >/dev/null 2>&1 || true
+
+      # Run the same mandatory checks that guard the default branch before the
+      # pull request is proposed. A failure here means no pull request is
+      # created and nothing is pushed.
+      - name: Validate proposed changes
+        if: steps.detect.outputs.status == '3'
+        run: |
+          node scripts/ci/shadcn-compatibility-audit.js
+          node scripts/ci/check-shadcn-version.js
+
+      - name: Push update branch
+        if: steps.detect.outputs.status == '3'
+        run: |
+          git push -f origin "${UPDATE_BRANCH}"
+        env:
+          UPDATE_BRANCH: ci/shadcn-upstream-update
+
+      - name: Create or update pull request
+        id: pr
+        if: steps.detect.outputs.status == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_BRANCH: ci/shadcn-upstream-update
+          DEFAULT_BRANCH: main
+          PR_TITLE_FILE: "${{ runner.temp }}/shadcn-pr-title.txt"
+          PR_BODY_FILE: "${{ runner.temp }}/shadcn-pr-body.txt"
+        run: |
+          set -euo pipefail
+
+          # Duplicate prevention: if a pull request already exists from this
+          # automation-owned branch, pushing the branch refreshes it. Never
+          # create a second, competing update pull request.
+          existing="$(gh pr list \
+            --head "${UPDATE_BRANCH}" \
+            --base "${DEFAULT_BRANCH}" \
+            --state open \
+            --json number \
+            --jq '.[].number' | head -n 1 || true)"
+
+          if [ -n "$existing" ]; then
+            echo "Pull request #${existing} already open; the branch push refreshes it."
+            echo "pr_number=$existing" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh pr create \
+            --head "${UPDATE_BRANCH}" \
+            --base "${DEFAULT_BRANCH}" \
+            --title-file "${PR_TITLE_FILE}" \
+            --body-file "${PR_BODY_FILE}"
+
+          pr_number="$(gh pr list \
+            --head "${UPDATE_BRANCH}" \
+            --base "${DEFAULT_BRANCH}" \
+            --state open \
+            --json number \
+            --jq '.[].number' | head -n 1)"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "Pull request #${pr_number} created from ${UPDATE_BRANCH}."
+
+      # Route protected-component changes through the maintenance authorization
+      # gate established by PR #146. This does not approve or merge anything;
+      # it only signals that the pull request touches protected paths and
+      # requires human reviewer approval via the protected-maintenance
+      # environment before it can be merged.
+      - name: Route protected changes to maintenance authorization
+        if: steps.pr.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_PR_LABEL: "maintenance: protected-component"
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "No pull request number available; skipping label routing."
+            exit 0
+          fi
+          # Only attach the label when it already exists in the repository, so
+          # label setup never blocks pull request creation.
+          if gh label view "${UPDATE_PR_LABEL}" >/dev/null 2>&1; then
+            gh pr edit "${PR_NUMBER}" --add-label "${UPDATE_PR_LABEL}"
+            echo "Added ${UPDATE_PR_LABEL} label to pull request #${PR_NUMBER}."
+          else
+            echo "Note: label ${UPDATE_PR_LABEL} does not exist; create it so protected changes route to the protected-maintenance environment gate."
+          fi
