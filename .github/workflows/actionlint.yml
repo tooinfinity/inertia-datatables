@@ -1,0 +1,41 @@
+name: actionlint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Validate GitHub Actions configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download actionlint
+        run: |
+          # Pin actionlint to a specific release. The official download script
+          # accepts a version argument and verifies the downloaded binary.
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> $GITHUB_PATH
+
+      - name: Lint workflows and composite actions
+        run: |
+          # Validate every workflow YAML file under .github/workflows/ (the
+          # default location actionlint scans when no path is given) plus the
+          # composite action metadata under .github/actions/. Fails on any
+          # invalid config.
+          actionlint -color
+          actionlint -color .github/actions/setup-php/action.yml .github/actions/setup-node/action.yml
