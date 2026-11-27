@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -37,8 +39,34 @@ jobs:
       # under registry/data-table/components/ui/ (button, checkbox, dropdown-menu,
       # input, select, skeleton) are package-maintained compatibility shims and are
       # intentionally excluded from upstream overwrites.
+      # A temporary components.json is created so `shadcn add` does not trigger
+      # the interactive init prompt, then removed before PR creation.
       - name: Update tracked shadcn/ui components
-        run: npx --no-install shadcn add table --overwrite --yes --path registry/data-table/components/ui
+        run: |
+          trap 'rm -f components.json' EXIT
+          cat <<'EOF' > components.json
+          {
+            "$schema": "https://ui.shadcn.com/schema.json",
+            "style": "new-york",
+            "rsc": false,
+            "tsx": true,
+            "tailwind": {
+              "config": "",
+              "css": "resources/css/app.css",
+              "baseColor": "neutral",
+              "cssVariables": true
+            },
+            "aliases": {
+              "components": "@/registry/data-table/components",
+              "ui": "@/registry/data-table/components/ui",
+              "utils": "@/lib/utils",
+              "lib": "@/lib",
+              "hooks": "@/hooks"
+            },
+            "iconLibrary": "lucide"
+          }
+          EOF
+          npx --no-install shadcn add table --overwrite --yes --path registry/data-table/components/ui
 
       - name: Validate registry
         run: npm run registry:validate
