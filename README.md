@@ -24,46 +24,17 @@ php artisan vendor:publish --tag="inertia-datatables-config"
 
 ### Frontend (React + shadcn/ui)
 
-#### Prerequisites
-
-Before installing the frontend components, ensure your project has:
-
-- A React application using Inertia (`@inertiajs/react`).
-- An initialized shadcn/ui project using Radix UI primitives with a valid `components.json` configuration.
-- Node.js (`>=20.18.1`, matching shadcn CLI requirements).
-- A supported package manager (`npm`, `pnpm`, `yarn`, or `bun`).
-
-#### Recommended Installation (Native GitHub Registry)
-
-Install the DataTable components directly using the native shadcn GitHub registry command:
+Install the DataTable components via the shadcn registry:
 
 ```bash
-npx shadcn@latest add tooinfinity/inertia-datatables/data-table
-```
-
-The shadcn CLI handles registry resolution, dependency installation (`@tanstack/react-table`, `@inertiajs/react`), file placement according to your configured aliases, and required shadcn primitives (`button`, `input`, `dropdown-menu`, `select`, `checkbox`, `table`, `skeleton`).
-
-#### Alternative Installation Methods
-
-**Direct Registry URL:**
-
-If you prefer direct registry access via URL:
-
-```bash
+# For Laravel projects (installs to resources/js/components/)
 npx shadcn@latest add https://raw.githubusercontent.com/tooinfinity/inertia-datatables/main/public/r/data-table.json
-```
 
-**Local Registry File:**
-
-For local development or when working from a clone of the repository:
-
-```bash
+# Or from local path if cloning the repo
 npx shadcn@latest add ./path/to/inertia-datatables/public/r/data-table.json
 ```
 
-#### Installed Files and Dependencies
-
-This will install the complete DataTable feature into your application (paths adapt to your `components.json` aliases, shown here with standard Laravel paths `resources/js/components/`):
+This will install the complete DataTable feature into your Laravel application:
 
 - `resources/js/components/data-table/data-table.tsx`
 - `resources/js/components/data-table/data-table-toolbar.tsx`
@@ -75,9 +46,9 @@ This will install the complete DataTable feature into your application (paths ad
 - `resources/js/components/data-table/types.ts`
 - `resources/js/components/data-table/table-features.ts`
 - `resources/js/components/data-table/cell-formatters.ts`
-- `resources/js/components/data-table/index.ts`
+- `resources/js/components/ui/table.tsx`
 
-Required shadcn primitives (resolved automatically from the default registry as registry dependencies):
+Required shadcn primitives (auto-installed as registry dependencies):
 - `button`
 - `input`
 - `dropdown-menu`
@@ -86,9 +57,8 @@ Required shadcn primitives (resolved automatically from the default registry as 
 - `table`
 - `skeleton`
 
-Required npm dependencies (auto-installed):
+Required npm dependency (auto-installed):
 - `@tanstack/react-table@^9.3.1` (TanStack Table v9)
-- `@inertiajs/react` (Inertia 3 React adapter)
 
 ## Configuration
 
