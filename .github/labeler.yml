@@ -1,0 +1,43 @@
+# Label pull requests based on changed paths.
+# Documentation is applied only when every changed file is documentation.
+# Other labels are added when any changed file matches their paths.
+# Labels are only added; manually assigned labels are not removed.
+
+documentation:
+  - changed-files:
+      - all-globs-to-all-files:
+          - "*.md"
+          - "**/*.md"
+          - "docs/**"
+
+php:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "config/**"
+          - "routes/**"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "resources/**"
+          - "registry/**"
+          - "*.ts"
+          - "*.tsx"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/actions/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+
+registry:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "registry/**"
+          - "public/r/**"

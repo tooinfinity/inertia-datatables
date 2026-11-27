@@ -1,0 +1,21 @@
+name: Setup Node.js
+description: Reusable Node.js setup for Inertia Datatables CI workflows
+
+inputs:
+  node-version:
+    description: Node.js version to install
+    required: false
+    default: "22"
+  cache:
+    description: Package manager to cache (npm, yarn, or pnpm); leave empty to disable caching
+    required: false
+    default: "npm"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache }}
