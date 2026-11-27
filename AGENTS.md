@@ -58,7 +58,7 @@ Rules:
 
 Protected paths: `registry/data-table/components/ui/` (package-maintained compatibility shims; `table.tsx` structurally mirrors the official shadcn Table), `public/r/` (generated artifacts). Package-owned, editable: `registry/data-table/components/data-table/`. `registry.json` is editable intentionally as the registry manifest source of truth.
 
-Generated artifacts (`public/r/`) are produced by `npm run registry:validate` and `npm run registry:build` from `registry.json` and registry sources. Never edit them manually. CI enforces ownership boundaries (`.github/workflows/ownership.yml`) and runs automated upstream drift detection (`.github/workflows/shadcn-compatibility-audit.yml`).
+Generated artifacts (`public/r/`) are produced by `npm run registry:validate` and `npm run registry:build` from `registry.json` and registry sources. Never edit them manually.
 
 ## Changelog Maintenance
 
