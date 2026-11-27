@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...HEAD)
+## [Unreleased](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...HEAD)
 
 ### Breaking Changes
 
@@ -62,10 +62,6 @@
 ### Documentation
 
 - Establish shadcn/ui component ownership boundaries and agent-protection rules for `registry/data-table/components/ui/`, `registry/data-table/components/data-table/`, and generated `public/r/` artifacts.
-
-## [v0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) - 202x-xx-xx
-
-Initial pre-release.
 
 ## [v0.0.1](https://github.com/tooinfinity/inertia-datatables/compare/...v0.0.1) - 2026-10-08
 
