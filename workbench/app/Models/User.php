@@ -52,6 +52,14 @@ final class User extends Authenticatable
     }
 
     /**
+     * Computed row-level metadata attribute (not a database column).
+     */
+    public function getCanUpdateAttribute(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

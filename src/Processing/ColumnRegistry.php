@@ -25,9 +25,12 @@ final readonly class ColumnRegistry
 
     /**
      * @param  array<int, Column>  $columns
+     * @param  array<int, string>  $responseKeys
      */
-    public function __construct(private array $columns)
-    {
+    public function __construct(
+        private array $columns,
+        private array $responseKeys = [],
+    ) {
         $index = [];
         foreach ($columns as $column) {
             $index[$column->name] = $column;
@@ -107,19 +110,65 @@ final readonly class ColumnRegistry
      */
     public function applyColumnFields(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query): void
     {
+        $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
+        $qualifier = $this->tableQualifier($queryBuilder->from);
+
         foreach ($this->columns as $column) {
             if ($column->field === null || $column->relation !== null || $column->value !== null) {
                 continue;
             }
-
-            $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
-            $qualifier = $this->tableQualifier($queryBuilder->from);
 
             if ($queryBuilder->columns === null) {
                 $queryBuilder->select($qualifier !== null ? $qualifier.'.*' : '*');
             }
 
             $queryBuilder->addSelect($this->aliasedField($column));
+        }
+
+        if ($this->responseKeys === []) {
+            return;
+        }
+
+        $selectedAliases = array_column((new Projection)->items($queryBuilder), 'alias');
+
+        // Resolve the table's column listing once so response keys are not
+        // re-checked against the schema for every key.
+        $databaseColumns = [];
+        if ($query instanceof \Illuminate\Database\Eloquent\Builder) {
+            // Do not silently treat a failed schema lookup as an empty table:
+            // doing so would omit valid response keys and return incomplete data.
+            // Let the original database/schema exception surface to the caller.
+            $databaseColumns = $query->getModel()->getConnection()
+                ->getSchemaBuilder()
+                ->getColumnListing($query->getModel()->getTable());
+        }
+
+        foreach ($this->responseKeys as $responseKey) {
+            // Relation keys are eager-loaded separately; only plain attributes
+            // can be selected directly in the SQL projection.
+            if (str_contains($responseKey, '.')) {
+                continue;
+            }
+
+            // Preserve values already selected under the requested output name.
+            if (in_array($responseKey, $selectedAliases, true)) {
+                continue;
+            }
+
+            // Eloquent models may expose computed attributes (accessors / appends)
+            // that are not database columns. Only select response keys that are
+            // real columns so we never emit SQL for an unknown column. Query
+            // Builder results have no computed attributes, so every key is a
+            // valid SQL column there.
+            if ($query instanceof \Illuminate\Database\Eloquent\Builder && ! in_array($responseKey, $databaseColumns, true)) {
+                continue;
+            }
+
+            if ($queryBuilder->columns === null) {
+                $queryBuilder->select($qualifier !== null ? $qualifier.'.*' : '*');
+            }
+
+            $queryBuilder->addSelect($qualifier !== null ? $qualifier.'.'.$responseKey : $responseKey);
         }
     }
 
@@ -168,6 +217,9 @@ final readonly class ColumnRegistry
         return $this->columns;
     }
 
+    /**
+     * Determine whether an expression contains an alias.
+     */
     private function hasAlias(string $expression): bool
     {
         return stripos($expression, ' as ') !== false;

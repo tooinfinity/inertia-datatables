@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Model as BaseModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -127,4 +128,299 @@ it('can expose a configured response key without exposing other undeclared attri
 
     expect($row)->toHaveKeys(['id', 'name'])
         ->and($row)->toHaveCount(2);
+});
+
+it('includes multiple chained response keys without exposing other undeclared attributes', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('id')
+        ->responseKey('status')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes multiple response keys via responseKeys() without exposing other undeclared attributes', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes multiple chained response keys for Query Builder without exposing other undeclared attributes', function (): void {
+    DB::table('users')->insert([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'password' => 'password',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(DB::table('users'))
+        ->columns([Column::make('name')])
+        ->responseKey('id')
+        ->responseKey('status')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('selects configured response keys for Eloquent when the query explicitly selects columns', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query()->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret')
+        ->and($row)->not->toHaveKey('email');
+});
+
+it('selects configured response keys for Query Builder when the query explicitly selects columns', function (): void {
+    DB::table('users')->insert([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'password' => 'password',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(DB::table('users')->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret')
+        ->and($row)->not->toHaveKey('email');
+});
+
+it('preserves a selected alias when adding response keys', function (bool $includeStatus): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    $table = DataTable::query(User::query()->selectRaw('name, id + 100 as "id"'))
+        ->columns([Column::make('name')]);
+
+    $table = $includeStatus ? $table->responseKeys(['id', 'status']) : $table->responseKey('id');
+
+    $result = $table->handle(DataTableRequest::fromRequest(Request::create('/test')));
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toBe($includeStatus
+        ? ['name' => 'John Doe', 'id' => 101, 'status' => 'active']
+        : ['name' => 'John Doe', 'id' => 101]);
+})->with([
+    'single response key' => false,
+    'multiple response keys' => true,
+]);
+
+it('preserves explicitly selected declared columns alongside response keys', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query()->select(['name', 'email']))
+        ->columns([Column::make('name'), Column::make('email')])
+        ->responseKeys(['id'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'name', 'email'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('does not break when an Eloquent accessor is used as a response key', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    // `can_update` is a computed accessor, not a database column. It must not
+    // be added to the SQL SELECT list, so no unknown-column error occurs.
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('does not break when an Eloquent accessor is used as a response key with an explicit selection', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    // `status` is not selected, so the accessor evaluates against a null
+    // source attribute and returns false. The important thing is that no
+    // unknown-column SQL error occurs and strict projection is preserved.
+    $result = DataTable::query(User::query()->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeFalse()
+        ->and($row)->not->toHaveKey('status')
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes an appended Eloquent attribute as a response key without selecting it in SQL', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    // A model that appends the computed `can_update` attribute. The attribute
+    // is not a database column, so it must not be added to the SQL SELECT.
+    $model = new class extends BaseModel
+    {
+        protected $table = 'users';
+
+        protected $appends = ['can_update'];
+
+        public function getCanUpdateAttribute(): bool
+        {
+            return $this->status === 'active';
+        }
+    };
+
+    $result = DataTable::query($model::query()->select(['name', 'status']))
+        ->columns([Column::make('name'), Column::make('status')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'status', 'can_update'])
+        ->and($row)->toHaveCount(3)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('only serializes declared appended attributes and supports modern Eloquent accessors', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+        'secret' => 'private-token',
+    ]);
+
+    $model = new class extends BaseModel
+    {
+        protected $table = 'users';
+
+        protected $appends = ['internal_metadata'];
+
+        protected function canUpdate(): Illuminate\Database\Eloquent\Casts\Attribute
+        {
+            return Illuminate\Database\Eloquent\Casts\Attribute::get(
+                fn (): bool => $this->status === 'active',
+            );
+        }
+
+        protected function internalMetadata(): Illuminate\Database\Eloquent\Casts\Attribute
+        {
+            return Illuminate\Database\Eloquent\Casts\Attribute::get(
+                fn (): string => 'must-not-leak',
+            );
+        }
+    };
+
+    $result = DataTable::query($model::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('internal_metadata')
+        ->and($row)->not->toHaveKey('status')
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('preserves computed accessor value when its source attribute is not projected', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+        'secret' => 'private-token',
+    ]);
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $model = $result->toArray()['data'][0];
+
+    expect($model->getAttributes())->toHaveKey('status', 'active')
+        ->and($model->getAttributes())->not->toHaveKey('can_update')
+        ->and($model->getAppends())->toBe(['can_update']);
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('status')
+        ->and($row)->not->toHaveKey('secret');
 });
