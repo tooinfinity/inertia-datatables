@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Processing;
 
-use Throwable;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
@@ -131,13 +130,12 @@ final readonly class ColumnRegistry
         // are response keys to validate.
         $databaseColumns = [];
         if ($this->responseKeys !== [] && $query instanceof \Illuminate\Database\Eloquent\Builder) {
-            try {
-                $databaseColumns = $query->getModel()->getConnection()
-                    ->getSchemaBuilder()
-                    ->getColumnListing($query->getModel()->getTable());
-            } catch (Throwable) {
-                $databaseColumns = [];
-            }
+            // Do not silently treat a failed schema lookup as an empty table:
+            // doing so would omit valid response keys and return incomplete data.
+            // Let the original database/schema exception surface to the caller.
+            $databaseColumns = $query->getModel()->getConnection()
+                ->getSchemaBuilder()
+                ->getColumnListing($query->getModel()->getTable());
         }
 
         foreach ($this->responseKeys as $responseKey) {
