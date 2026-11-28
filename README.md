@@ -925,7 +925,7 @@ The package implements strict allow-lists for both requests and response data:
 
 The `query` object reflects the effective table state. In particular, `query.per_page` always matches `meta.per_page`, and an applied `defaultSort()` is included in `query.sort` even when the client did not send a sort parameter.
 
-Each item in `data` contains only the declared columns, plus an optional attribute configured with `->responseKey()`. The `->exposeAll()` escape hatch restores the previous behavior of returning every selected attribute.
+Each item in `data` contains only the declared columns, plus optional attributes configured with `->responseKey()` or `->responseKeys()`. The `->exposeAll()` escape hatch restores the previous behavior of returning every selected attribute.
 
 ## Optional: Reusable UsersDataTable Component
 

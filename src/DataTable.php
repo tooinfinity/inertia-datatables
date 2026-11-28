@@ -18,6 +18,7 @@ final readonly class DataTable
     /**
      * @param  EloquentBuilder<TModel>|QueryBuilder  $query
      * @param  array<int, Column>  $columns
+     * @param  array<int, string>  $responseKeys
      */
     private function __construct(
         private EloquentBuilder|QueryBuilder $query,
@@ -26,7 +27,7 @@ final readonly class DataTable
         private string $defaultSortDirection = 'desc',
         private ?int $perPage = null,
         private bool $exposeAll = false,
-        private ?string $responseKey = null,
+        private array $responseKeys = [],
     ) {}
 
     /**
@@ -53,7 +54,7 @@ final readonly class DataTable
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $this->perPage,
             exposeAll: $this->exposeAll,
-            responseKey: $this->responseKey,
+            responseKeys: $this->responseKeys,
         );
 
         if ($newTable->defaultSortColumn !== null) {
@@ -80,7 +81,7 @@ final readonly class DataTable
             defaultSortDirection: $normalizedDirection,
             perPage: $this->perPage,
             exposeAll: $this->exposeAll,
-            responseKey: $this->responseKey,
+            responseKeys: $this->responseKeys,
         );
 
         if ($newTable->columns !== []) {
@@ -102,7 +103,7 @@ final readonly class DataTable
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $perPage,
             exposeAll: $this->exposeAll,
-            responseKey: $this->responseKey,
+            responseKeys: $this->responseKeys,
         );
     }
 
@@ -120,7 +121,7 @@ final readonly class DataTable
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $this->perPage,
             exposeAll: true,
-            responseKey: $this->responseKey,
+            responseKeys: $this->responseKeys,
         );
     }
 
@@ -138,7 +139,26 @@ final readonly class DataTable
             defaultSortDirection: $this->defaultSortDirection,
             perPage: $this->perPage,
             exposeAll: $this->exposeAll,
-            responseKey: $column,
+            responseKeys: [...$this->responseKeys, $column],
+        );
+    }
+
+    /**
+     * Include multiple additional attributes in the response data.
+     *
+     * @param  array<int, string>  $columns
+     * @return self<TModel>
+     */
+    public function responseKeys(array $columns): self
+    {
+        return new self(
+            query: $this->query,
+            columns: $this->columns,
+            defaultSortColumn: $this->defaultSortColumn,
+            defaultSortDirection: $this->defaultSortDirection,
+            perPage: $this->perPage,
+            exposeAll: $this->exposeAll,
+            responseKeys: [...$this->responseKeys, ...$columns],
         );
     }
 
@@ -150,7 +170,7 @@ final readonly class DataTable
         $request ??= app(DataTableRequest::class);
 
         /** @var QueryProcessor<TModel> $processor */
-        $processor = new QueryProcessor($this->columns, $this->exposeAll, $this->responseKey);
+        $processor = new QueryProcessor($this->columns, $this->exposeAll, $this->responseKeys);
 
         return $processor->process($this->query, $request, $this->defaultSortColumn, $this->defaultSortDirection, $this->perPage);
     }

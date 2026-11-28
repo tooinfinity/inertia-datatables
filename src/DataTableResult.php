@@ -25,6 +25,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
      * @param  array{page: int, per_page: int, search: string, sort: array<int, array{column: string, direction: string}>, searches: array<int, array{column: string, value: string}>, filters: array<int, array{column: string, value: mixed}>}  $query
      * @param  array{debounce: int, per_page_options: array<int, int>, query_keys: array{page: string, per_page: string, search: string, searches: string, sort: string, filters: string}}  $config
      * @param  array<int, array<string, mixed>>  $computedValues
+     * @param  array<int, string>  $responseKeys
      */
     public function __construct(
         public LengthAwarePaginator $paginator,
@@ -32,7 +33,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
         public array $query,
         public array $config,
         private bool $exposeAll = false,
-        private ?string $responseKey = null,
+        private array $responseKeys = [],
         private array $computedValues = [],
     ) {
         $this->data = $this->projectData();
@@ -90,9 +91,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
         /** @var array<int, string> $responseColumns */
         $responseColumns = array_column($this->columns, 'name');
 
-        if ($this->responseKey !== null) {
-            $responseColumns[] = $this->responseKey;
-        }
+        $responseColumns = array_merge($responseColumns, $this->responseKeys);
 
         $responseColumns = array_values(array_unique($responseColumns));
 

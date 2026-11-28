@@ -37,11 +37,12 @@ final readonly class QueryProcessor
 
     /**
      * @param  array<int, Column>  $columns
+     * @param  array<int, string>  $responseKeys
      */
     public function __construct(
         private array $columns,
         private bool $exposeAll = false,
-        private ?string $responseKey = null,
+        private array $responseKeys = [],
         ?ColumnRegistry $registry = null,
         ?RelationResolver $relations = null,
         ?FilterApplier $filterApplier = null,
@@ -116,7 +117,7 @@ final readonly class QueryProcessor
             query: $this->buildQueryState($request, $page, $perPage, $sorts),
             config: $this->buildConfig($perPage, $maxPerPage),
             exposeAll: $this->exposeAll,
-            responseKey: $this->responseKey,
+            responseKeys: $this->responseKeys,
             computedValues: $this->valueComputer->compute($paginator->items(), $query),
         );
     }

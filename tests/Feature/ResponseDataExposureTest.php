@@ -128,3 +128,66 @@ it('can expose a configured response key without exposing other undeclared attri
     expect($row)->toHaveKeys(['id', 'name'])
         ->and($row)->toHaveCount(2);
 });
+
+it('includes multiple chained response keys without exposing other undeclared attributes', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('id')
+        ->responseKey('status')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes multiple response keys via responseKeys() without exposing other undeclared attributes', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes multiple chained response keys for Query Builder without exposing other undeclared attributes', function (): void {
+    DB::table('users')->insert([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'password' => 'password',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(DB::table('users'))
+        ->columns([Column::make('name')])
+        ->responseKey('id')
+        ->responseKey('status')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
