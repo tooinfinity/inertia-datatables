@@ -148,10 +148,17 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
                 $model->getAttributes(),
                 array_flip($responseColumns),
             ));
-            $model->setAppends(array_values(array_intersect(
-                $model->getAppends(),
-                $responseColumns,
+            // Include configured response keys that resolve to computed
+            // Eloquent attributes (accessors / appends) but are not raw
+            // database attributes, so they are serialized in the response.
+            $appends = array_values(array_unique(array_merge(
+                array_intersect($model->getAppends(), $responseColumns),
+                array_filter(
+                    $responseColumns,
+                    fn (string $key): bool => ! array_key_exists($key, $model->getAttributes()),
+                ),
             )));
+            $model->setAppends($appends);
             $model->unsetRelations();
 
             return $model;

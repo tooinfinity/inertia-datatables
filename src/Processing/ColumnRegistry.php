@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Processing;
 
-use Illuminate\Database\Eloquent\Model;
 use Throwable;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
@@ -127,6 +126,20 @@ final readonly class ColumnRegistry
             $queryBuilder->addSelect($this->aliasedField($column));
         }
 
+        // Resolve the table's column listing once so response keys are not
+        // re-checked against the schema for every key. Only needed when there
+        // are response keys to validate.
+        $databaseColumns = [];
+        if ($this->responseKeys !== [] && $query instanceof \Illuminate\Database\Eloquent\Builder) {
+            try {
+                $databaseColumns = $query->getModel()->getConnection()
+                    ->getSchemaBuilder()
+                    ->getColumnListing($query->getModel()->getTable());
+            } catch (Throwable) {
+                $databaseColumns = [];
+            }
+        }
+
         foreach ($this->responseKeys as $responseKey) {
             // Relation keys are eager-loaded separately; only plain attributes
             // can be selected directly in the SQL projection.
@@ -142,7 +155,7 @@ final readonly class ColumnRegistry
             // real columns so we never emit SQL for an unknown column. Query
             // Builder results have no computed attributes, so every key is a
             // valid SQL column there.
-            if ($query instanceof \Illuminate\Database\Eloquent\Builder && ! $this->isDatabaseColumn($query, $responseKey)) {
+            if ($query instanceof \Illuminate\Database\Eloquent\Builder && ! in_array($responseKey, $databaseColumns, true)) {
                 continue;
             }
 
@@ -200,31 +213,8 @@ final readonly class ColumnRegistry
     }
 
     /**
-     * Determine whether an attribute is a real database column on the model's
-     * table. Computed Eloquent attributes (accessors / appends) are not columns
-     * and must not be added to the SQL SELECT list.
-     *
-     * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder<TModel>|\Illuminate\Database\Query\Builder  $query
+     * Determine whether an expression contains an alias.
      */
-    private function isDatabaseColumn(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query, string $attribute): bool
-    {
-        if (! $query instanceof \Illuminate\Database\Eloquent\Builder) {
-            return false;
-        }
-
-        $model = $query->getModel();
-
-        try {
-            $columns = $model->getConnection()->getSchemaBuilder()->getColumnListing($model->getTable());
-        } catch (Throwable) {
-            return false;
-        }
-
-        return in_array($attribute, $columns, true);
-    }
-
     private function hasAlias(string $expression): bool
     {
         return stripos($expression, ' as ') !== false;

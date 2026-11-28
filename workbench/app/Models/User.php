@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Workbench\App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Attributes\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -55,9 +54,9 @@ final class User extends Authenticatable
     /**
      * Computed row-level metadata attribute (not a database column).
      */
-    protected function canUpdate(): Attribute
+    public function getCanUpdateAttribute(): bool
     {
-        return Attribute::get(fn () => $this->status === 'active');
+        return $this->name === 'John Doe';
     }
 
     /**

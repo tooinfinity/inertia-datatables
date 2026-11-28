@@ -269,7 +269,12 @@ it('does not break when an Eloquent accessor is used as a response key', functio
         ->responseKey('can_update')
         ->handle(DataTableRequest::fromRequest(Request::create('/test')));
 
-    expect($result->paginator->total())->toBe(1);
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('secret');
 });
 
 it('does not break when an Eloquent accessor is used as a response key with an explicit selection', function (): void {
@@ -285,8 +290,9 @@ it('does not break when an Eloquent accessor is used as a response key with an e
 
     $row = json_decode(json_encode($result), true)['data'][0];
 
-    expect($row)->toHaveKeys(['name'])
-        ->and($row)->toHaveCount(1)
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
         ->and($row)->not->toHaveKey('secret');
 });
 
