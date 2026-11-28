@@ -346,16 +346,16 @@ it('only serializes declared appended attributes and supports modern Eloquent ac
 
         protected $appends = ['internal_metadata'];
 
-        protected function canUpdate(): \\Illuminate\\Database\\Eloquent\\Casts\\Attribute
+        protected function canUpdate(): \Illuminate\\Database\\Eloquent\\Casts\\Attribute
         {
-            return \\Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
+            return \Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
                 fn (): bool => $this->status === 'active',
             );
         }
 
-        protected function internalMetadata(): \\Illuminate\\Database\\Eloquent\\Casts\\Attribute
+        protected function internalMetadata(): \Illuminate\\Database\\Eloquent\\Casts\\Attribute
         {
-            return \\Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
+            return \Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
                 fn (): string => 'must-not-leak',
             );
         }
