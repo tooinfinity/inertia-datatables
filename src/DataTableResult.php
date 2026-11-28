@@ -166,7 +166,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
             $model->setHidden($hidden);
 
             $appends = array_values(array_unique(array_merge(
-                $model->getAppends(),
+                array_intersect($model->getAppends(), $responseColumns),
                 $accessorKeys,
             )));
             $model->setAppends($appends);

@@ -333,6 +333,49 @@ it('includes an appended Eloquent attribute as a response key without selecting 
         ->and($row)->not->toHaveKey('secret');
 });
 
+it('only serializes declared appended attributes and supports modern Eloquent accessors', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+        'secret' => 'private-token',
+    ]);
+
+    $model = new class extends BaseModel
+    {
+        protected $table = 'users';
+
+        protected $appends = ['internal_metadata'];
+
+        protected function canUpdate(): \\Illuminate\\Database\\Eloquent\\Casts\\Attribute
+        {
+            return \\Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
+                fn (): bool => $this->status === 'active',
+            );
+        }
+
+        protected function internalMetadata(): \\Illuminate\\Database\\Eloquent\\Casts\\Attribute
+        {
+            return \\Illuminate\\Database\\Eloquent\\Casts\\Attribute::get(
+                fn (): string => 'must-not-leak',
+            );
+        }
+    };
+
+    $result = DataTable::query($model::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('internal_metadata')
+        ->and($row)->not->toHaveKey('status')
+        ->and($row)->not->toHaveKey('secret');
+});
+
 it('preserves computed accessor value when its source attribute is not projected', function (): void {
     createUser([
         'name' => 'John Doe',
