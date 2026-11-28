@@ -80,7 +80,7 @@
             "vendor/bin/pint --parallel"
         ],
         "rector": [
-          "vendor/bin/rector"
+            "vendor/bin/rector"
         ],
         "rector:check": [
             "vendor/bin/rector --dry-run"
