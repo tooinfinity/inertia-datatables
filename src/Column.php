@@ -38,7 +38,9 @@ final readonly class Column implements JsonSerializable
         public ?Closure $filterUsing = null,
         public ?Closure $value = null,
         public string $align = 'left',
-    ) {}
+    ) {
+        $this->validateAlignment($align);
+    }
 
     public static function make(string $name): self
     {
@@ -215,9 +217,7 @@ final readonly class Column implements JsonSerializable
      */
     public function align(string $alignment): self
     {
-        if (! in_array($alignment, ['left', 'center', 'right'], true)) {
-            throw new InvalidArgumentException("Alignment [{$alignment}] is not supported. Use 'left', 'center' or 'right'.");
-        }
+        $this->validateAlignment($alignment);
 
         return $this->with(['align' => $alignment]);
     }
@@ -262,6 +262,18 @@ final readonly class Column implements JsonSerializable
     private function defaultLabel(string $name): string
     {
         return ucwords(strtolower(str_replace(['_', '-'], ' ', $name)));
+    }
+
+    /**
+     * Validate that an alignment value is one of the supported values.
+     *
+     * @throws InvalidArgumentException When the alignment is not one of `left`, `center`, `right`.
+     */
+    private function validateAlignment(string $alignment): void
+    {
+        if (! in_array($alignment, ['left', 'center', 'right'], true)) {
+            throw new InvalidArgumentException("Alignment [{$alignment}] is not supported. Use 'left', 'center' or 'right'.");
+        }
     }
 
     /**

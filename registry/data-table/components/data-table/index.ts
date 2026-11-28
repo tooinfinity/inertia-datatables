@@ -14,6 +14,7 @@ export type {
   DataTableCellRenderer,
   DataTableCellRenderers,
   DataTableColumn,
+  DataTableColumnAlign,
   DataTableColumnDef,
   DataTableErrors,
   DataTableHttpException,

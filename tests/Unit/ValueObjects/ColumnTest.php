@@ -283,6 +283,11 @@ describe('Column', function (): void {
             ->toThrow(InvalidArgumentException::class, 'not supported');
     });
 
+    it('rejects unsupported alignment passed directly to the constructor', function (): void {
+        expect(fn (): mixed => new Column('balance', 'Balance', align: 'justify'))
+            ->toThrow(InvalidArgumentException::class, 'not supported');
+    });
+
     it('includes alignment in the array representation', function (): void {
         $column = Column::make('balance')->align('right');
 
