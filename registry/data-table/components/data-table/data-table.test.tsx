@@ -821,6 +821,165 @@ describe('DataTable customization', () => {
     });
 });
 
+describe('DataTable column alignment', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(usePage).mockReturnValue({ props: {} } as never);
+        global.location.search = '';
+    });
+
+    const alignedColumns = (align: 'left' | 'center' | 'right') => [
+        { name: 'id', label: 'ID', sortable: false, searchable: false, filterable: false, hidden: false, align },
+        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: false, hidden: false, align },
+        { name: 'status', label: 'Status', sortable: false, searchable: false, filterable: false, hidden: false, align },
+    ];
+
+    it('defaults missing alignment to left on headers', () => {
+        render(<DataTable data={createData()} />);
+
+        screen.getAllByRole('columnheader').forEach((header) => {
+            expect(header).toHaveClass('text-left');
+            expect(header).not.toHaveClass('text-center');
+            expect(header).not.toHaveClass('text-right');
+        });
+    });
+
+    it('renders left-aligned headers', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('left') })} />);
+
+        screen.getAllByRole('columnheader').forEach((header) => {
+            expect(header).toHaveClass('text-left');
+        });
+    });
+
+    it('renders center-aligned headers', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('center') })} />);
+
+        screen.getAllByRole('columnheader').forEach((header) => {
+            expect(header).toHaveClass('text-center');
+        });
+    });
+
+    it('renders right-aligned headers', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('right') })} />);
+
+        screen.getAllByRole('columnheader').forEach((header) => {
+            expect(header).toHaveClass('text-right');
+        });
+    });
+
+    it('renders left-aligned cells', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('left') })} />);
+
+        screen.getAllByRole('cell').forEach((cell) => {
+            expect(cell).toHaveClass('text-left');
+        });
+    });
+
+    it('renders center-aligned cells', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('center') })} />);
+
+        screen.getAllByRole('cell').forEach((cell) => {
+            expect(cell).toHaveClass('text-center');
+        });
+    });
+
+    it('renders right-aligned cells', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('right') })} />);
+
+        screen.getAllByRole('cell').forEach((cell) => {
+            expect(cell).toHaveClass('text-right');
+        });
+    });
+
+    it('keeps sorting controls working on a center-aligned sortable header', () => {
+        render(<DataTable data={createData({ columns: alignedColumns('center') })} />);
+
+        const button = screen.getByRole('button', { name: /Sort by Name/ });
+        expect(button).toBeInTheDocument();
+
+        act(() => {
+            fireEvent.click(button);
+        });
+
+        expect(button).toHaveTextContent('↑');
+        expect(router.visit).toHaveBeenCalledWith('/?sort=name', expect.objectContaining({ replace: true }));
+    });
+
+    it('aligns non-sortable headers individually', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        { name: 'id', label: 'ID', sortable: false, searchable: false, filterable: false, hidden: false, align: 'right' },
+                        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: false, hidden: false, align: 'left' },
+                        { name: 'status', label: 'Status', sortable: false, searchable: false, filterable: false, hidden: false, align: 'right' },
+                    ],
+                })}
+            />
+        );
+
+        const headers = screen.getAllByRole('columnheader');
+        expect(headers[0]).toHaveClass('text-right');
+        expect(headers[1]).toHaveClass('text-left');
+        expect(headers[2]).toHaveClass('text-right');
+    });
+
+    it('keeps custom cell renderers functional with alignment', () => {
+        render(
+            <DataTable
+                data={createData({ columns: alignedColumns('center') })}
+                cells={{
+                    status: ({ getValue }) => <span data-testid="status">{String(getValue())}</span>,
+                }}
+            />
+        );
+
+        expect(screen.getAllByTestId('status').map((node) => node.textContent)).toEqual([
+            'active',
+            'inactive',
+        ]);
+        screen.getAllByRole('cell').forEach((cell) => {
+            expect(cell).toHaveClass('text-center');
+        });
+    });
+
+    it('preserves alignment metadata through client-side column overrides', () => {
+        render(
+            <DataTable
+                data={createData({
+                    columns: [
+                        { name: 'id', label: 'ID', sortable: false, searchable: false, filterable: false, hidden: false },
+                        { name: 'name', label: 'Name', sortable: true, searchable: true, filterable: false, hidden: false },
+                        { name: 'status', label: 'Status', sortable: false, searchable: false, filterable: false, hidden: false },
+                    ],
+                })}
+                columns={[{ id: 'name', meta: { align: 'center' } }]}
+            />
+        );
+
+        const headers = screen.getAllByRole('columnheader');
+        expect(headers[0]).toHaveClass('text-left');
+        expect(headers[1]).toHaveClass('text-center');
+        expect(headers[2]).toHaveClass('text-left');
+    });
+
+    it('keeps client-only columns without alignment left-aligned', () => {
+        render(
+            <DataTable
+                data={createData()}
+                columns={[{ id: 'extra', header: () => <span>Extra</span>, cell: () => <span>x</span> }]}
+            />
+        );
+
+        const headers = screen.getAllByRole('columnheader');
+        expect(headers).toHaveLength(4);
+        headers.forEach((header) => {
+            expect(header).toHaveClass('text-left');
+        });
+    });
+});
+
 describe('DataTable filter chip dropdown regression (#98)', () => {
     const selectOptions = [
         { value: 'active', label: 'Active' },

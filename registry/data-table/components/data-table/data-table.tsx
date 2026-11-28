@@ -215,19 +215,34 @@ const DataTableComponent = forwardRef<HTMLTableElement, DataTableProps<Record<st
                                                 : 'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'
                                         }
                                     >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell
-                                                key={cell.id}
-                                                className="p-4 align-middle"
-                                                onClick={
-                                                    cell.column.id === DATA_TABLE_ACTIONS_COLUMN_ID
-                                                        ? (e) => e.stopPropagation()
-                                                        : undefined
-                                                }
-                                            >
-                                                {flexRender(cell.column.columnDef.cell!, cell.getContext())}
-                                            </TableCell>
-                                        ))}
+                                        {row.getVisibleCells().map((cell) => {
+                                            const align = (
+                                                cell.column.columnDef.meta?.align ?? 'left'
+                                            ) as 'left' | 'center' | 'right';
+
+                                            const textAlign = {
+                                                left: 'text-left',
+                                                center: 'text-center',
+                                                right: 'text-right',
+                                            }[align];
+
+                                            return (
+                                                <TableCell
+                                                    key={cell.id}
+                                                    className={`p-4 align-middle ${textAlign}`}
+                                                    onClick={
+                                                        cell.column.id === DATA_TABLE_ACTIONS_COLUMN_ID
+                                                            ? (e) => e.stopPropagation()
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {flexRender(
+                                                        cell.column.columnDef.cell!,
+                                                        cell.getContext()
+                                                    )}
+                                                </TableCell>
+                                            );
+                                        })}
                                     </TableRow>
                                 ))
                             )}

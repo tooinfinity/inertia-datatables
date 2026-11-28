@@ -214,6 +214,7 @@ describe('Column', function (): void {
             'hidden' => true,
             'filter_type' => 'select',
             'filter_options' => [['value' => 'a', 'label' => 'A']],
+            'align' => 'left',
         ]);
     });
 
@@ -251,6 +252,74 @@ describe('Column', function (): void {
         expect($column->hidden)->toBeTrue();
         expect($column->filterType)->toBe('select');
         expect($column->filterOptions)->toBe([['value' => 'a', 'label' => 'A']]);
+    });
+
+    it('defaults alignment to left', function (): void {
+        $column = Column::make('name');
+
+        expect($column->align)->toBe('left');
+    });
+
+    it('allows setting alignment to left', function (): void {
+        $column = Column::make('name')->align('left');
+
+        expect($column->align)->toBe('left');
+    });
+
+    it('allows setting alignment to center', function (): void {
+        $column = Column::make('name')->align('center');
+
+        expect($column->align)->toBe('center');
+    });
+
+    it('allows setting alignment to right', function (): void {
+        $column = Column::make('name')->align('right');
+
+        expect($column->align)->toBe('right');
+    });
+
+    it('rejects unsupported alignment values', function (): void {
+        expect(fn (): mixed => Column::make('name')->align('justify'))
+            ->toThrow(InvalidArgumentException::class, 'not supported');
+    });
+
+    it('rejects unsupported alignment passed directly to the constructor', function (): void {
+        expect(fn (): mixed => new Column('balance', 'Balance', align: 'justify'))
+            ->toThrow(InvalidArgumentException::class, 'not supported');
+    });
+
+    it('includes alignment in the array representation', function (): void {
+        $column = Column::make('balance')->align('right');
+
+        expect($column->toArray()['align'])->toBe('right');
+    });
+
+    it('includes alignment in the JSON representation', function (): void {
+        $column = Column::make('status')->align('center');
+
+        expect(json_decode(json_encode($column), true)['align'])->toBe('center');
+    });
+
+    it('preserves alignment when another property is changed', function (): void {
+        $column = Column::make('balance')->align('right')->label('Balance');
+
+        expect($column->align)->toBe('right');
+        expect($column->label)->toBe('Balance');
+    });
+
+    it('returns a new immutable instance when setting alignment', function (): void {
+        $original = Column::make('name');
+        $modified = $original->align('center');
+
+        expect($original->align)->toBe('left');
+        expect($modified->align)->toBe('center');
+        expect($original)->not->toBe($modified);
+    });
+
+    it('keeps alignment when constructed positionally without alignment', function (): void {
+        $column = new Column('name', 'Name');
+
+        expect($column->align)->toBe('left');
     });
 
     it('allows setting a database field', function (): void {
@@ -307,6 +376,7 @@ describe('Column', function (): void {
             'hidden' => false,
             'filter_type' => null,
             'filter_options' => [],
+            'align' => 'left',
         ]);
     });
 });
