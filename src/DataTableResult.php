@@ -144,21 +144,40 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
     {
         if ($row instanceof Model) {
             $model = clone $row;
-            $model->setRawAttributes(array_intersect_key(
-                $model->getAttributes(),
-                array_flip($responseColumns),
-            ));
-            // Include configured response keys that resolve to computed
-            // Eloquent attributes (accessors / appends) but are not raw
-            // database attributes, so they are serialized in the response.
+
+            // Response keys that resolve to Eloquent accessors need their source
+            // attributes available during serialization, because Eloquent
+            // re-evaluates accessors when converting the model to an array.
+            // Those source attributes stay in the raw attributes but are hidden
+            // from output, along with every other non-declared attribute.
+            $accessorKeys = [];
+            foreach ($responseColumns as $key) {
+                if (! array_key_exists($key, $model->getAttributes())
+                    && $model->hasGetMutator($key)
+                ) {
+                    $accessorKeys[] = $key;
+                }
+            }
+
+            $hidden = array_values(array_unique(array_merge(
+                $model->getHidden(),
+                array_diff(array_keys($model->getAttributes()), $responseColumns),
+            )));
+            $model->setHidden($hidden);
+
             $appends = array_values(array_unique(array_merge(
-                array_intersect($model->getAppends(), $responseColumns),
-                array_filter(
-                    $responseColumns,
-                    fn (string $key): bool => ! array_key_exists($key, $model->getAttributes()),
-                ),
+                $model->getAppends(),
+                $accessorKeys,
             )));
             $model->setAppends($appends);
+
+            // Pre-compute accessor values as a fallback.
+            $computedValues = [];
+            foreach ($accessorKeys as $key) {
+                $computedValues[$key] = $model->getAttributeValue($key);
+            }
+            $model->setRawAttributes(array_merge($model->getAttributes(), $computedValues));
+
             $model->unsetRelations();
 
             return $model;

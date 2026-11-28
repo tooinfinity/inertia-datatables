@@ -283,6 +283,9 @@ it('does not break when an Eloquent accessor is used as a response key with an e
         'status' => 'active',
     ]);
 
+    // `status` is not selected, so the accessor evaluates against a null
+    // source attribute and returns false. The important thing is that no
+    // unknown-column SQL error occurs and strict projection is preserved.
     $result = DataTable::query(User::query()->select(['name']))
         ->columns([Column::make('name')])
         ->responseKey('can_update')
@@ -292,7 +295,8 @@ it('does not break when an Eloquent accessor is used as a response key with an e
 
     expect($row)->toHaveKeys(['name', 'can_update'])
         ->and($row)->toHaveCount(2)
-        ->and($row['can_update'])->toBeTrue()
+        ->and($row['can_update'])->toBeFalse()
+        ->and($row)->not->toHaveKey('status')
         ->and($row)->not->toHaveKey('secret');
 });
 
@@ -326,5 +330,29 @@ it('includes an appended Eloquent attribute as a response key without selecting 
     expect($row)->toHaveKeys(['name', 'status', 'can_update'])
         ->and($row)->toHaveCount(3)
         ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('preserves computed accessor value when its source attribute is not projected', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+        'secret' => 'private-token',
+    ]);
+
+    // `status` is neither a declared column nor a response key, so it is
+    // stripped from the raw attributes. `can_update` depends on `status`, so
+    // its value must be computed before projection and preserved.
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'can_update'])
+        ->and($row)->toHaveCount(2)
+        ->and($row['can_update'])->toBeTrue()
+        ->and($row)->not->toHaveKey('status')
         ->and($row)->not->toHaveKey('secret');
 });

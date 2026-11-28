@@ -56,7 +56,7 @@ final class User extends Authenticatable
      */
     public function getCanUpdateAttribute(): bool
     {
-        return $this->name === 'John Doe';
+        return $this->status === 'active';
     }
 
     /**
