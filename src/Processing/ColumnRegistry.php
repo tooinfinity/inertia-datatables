@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace TooInfinity\InertiaDataTables\Processing;
 
+use Illuminate\Database\Eloquent\Model;
+use Throwable;
 use TooInfinity\InertiaDataTables\Column;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidColumnException;
 use TooInfinity\InertiaDataTables\Exceptions\InvalidFilterException;
@@ -135,6 +137,15 @@ final readonly class ColumnRegistry
             $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
             $qualifier = $this->tableQualifier($queryBuilder->from);
 
+            // Eloquent models may expose computed attributes (accessors / appends)
+            // that are not database columns. Only select response keys that are
+            // real columns so we never emit SQL for an unknown column. Query
+            // Builder results have no computed attributes, so every key is a
+            // valid SQL column there.
+            if ($query instanceof \Illuminate\Database\Eloquent\Builder && ! $this->isDatabaseColumn($query, $responseKey)) {
+                continue;
+            }
+
             if ($queryBuilder->columns === null) {
                 $queryBuilder->select($qualifier !== null ? $qualifier.'.*' : '*');
             }
@@ -186,6 +197,32 @@ final readonly class ColumnRegistry
     public function all(): array
     {
         return $this->columns;
+    }
+
+    /**
+     * Determine whether an attribute is a real database column on the model's
+     * table. Computed Eloquent attributes (accessors / appends) are not columns
+     * and must not be added to the SQL SELECT list.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<TModel>|\Illuminate\Database\Query\Builder  $query
+     */
+    private function isDatabaseColumn(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query, string $attribute): bool
+    {
+        if (! $query instanceof \Illuminate\Database\Eloquent\Builder) {
+            return false;
+        }
+
+        $model = $query->getModel();
+
+        try {
+            $columns = $model->getConnection()->getSchemaBuilder()->getColumnListing($model->getTable());
+        } catch (Throwable) {
+            return false;
+        }
+
+        return in_array($attribute, $columns, true);
     }
 
     private function hasAlias(string $expression): bool

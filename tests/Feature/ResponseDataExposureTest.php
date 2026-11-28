@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Model as BaseModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -252,5 +253,72 @@ it('preserves explicitly selected declared columns alongside response keys', fun
 
     expect($row)->toHaveKeys(['id', 'name', 'email'])
         ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('does not break when an Eloquent accessor is used as a response key', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    // `can_update` is a computed accessor, not a database column. It must not
+    // be added to the SQL SELECT list, so no unknown-column error occurs.
+    $result = DataTable::query(User::query())
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    expect($result->paginator->total())->toBe(1);
+});
+
+it('does not break when an Eloquent accessor is used as a response key with an explicit selection', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query()->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name'])
+        ->and($row)->toHaveCount(1)
+        ->and($row)->not->toHaveKey('secret');
+});
+
+it('includes an appended Eloquent attribute as a response key without selecting it in SQL', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    // A model that appends the computed `can_update` attribute. The attribute
+    // is not a database column, so it must not be added to the SQL SELECT.
+    $model = new class extends BaseModel
+    {
+        protected $table = 'users';
+
+        protected $appends = ['can_update'];
+
+        public function getCanUpdateAttribute(): bool
+        {
+            return $this->status === 'active';
+        }
+    };
+
+    $result = DataTable::query($model::query()->select(['name', 'status']))
+        ->columns([Column::make('name'), Column::make('status')])
+        ->responseKey('can_update')
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['name', 'status', 'can_update'])
+        ->and($row)->toHaveCount(3)
+        ->and($row['can_update'])->toBeTrue()
         ->and($row)->not->toHaveKey('secret');
 });
