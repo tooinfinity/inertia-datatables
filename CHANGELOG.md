@@ -1,5 +1,12 @@
 # Release Notes
 
+## [0.2.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.1.0...v0.2.0) (2026-11-28)
+
+
+### Features
+
+* support multiple response keys in projected data ([#159](https://github.com/tooinfinity/inertia-datatables/issues/159)) ([7b34e04](https://github.com/tooinfinity/inertia-datatables/commit/7b34e0477c2832b04f38256e1b7027a2aa81f210))
+
 ## [0.1.0](https://github.com/tooinfinity/inertia-datatables/compare/v0.0.1...v0.1.0) (2026-11-28)
 
 
