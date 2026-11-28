@@ -153,7 +153,7 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
             $accessorKeys = [];
             foreach ($responseColumns as $key) {
                 if (! array_key_exists($key, $model->getAttributes())
-                    && $model->hasGetMutator($key)
+                    && ($model->hasGetMutator($key) || $model->hasAttributeGetMutator($key))
                 ) {
                     $accessorKeys[] = $key;
                 }
