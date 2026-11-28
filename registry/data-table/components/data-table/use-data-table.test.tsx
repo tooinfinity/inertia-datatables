@@ -1846,7 +1846,7 @@ describe('useDataTable', () => {
         const columns = capturedColumns(capturedResult!);
 
         expect(columns).toHaveLength(1);
-        expect(columns[0].meta).toEqual({ searchable: true, filterable: true });
+        expect(columns[0].meta).toEqual({ searchable: true, filterable: true, align: 'left' });
     });
 
     it('keeps the server capabilities authoritative for column overrides', () => {

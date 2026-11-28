@@ -18,6 +18,7 @@ final readonly class Column implements JsonSerializable
      * @param  Closure|null  $sortUsing  Receives the query builder and the sort direction.
      * @param  Closure|null  $filterUsing  Receives the query builder and the filter value.
      * @param  Closure|null  $value  Receives the row and returns the value exposed for this column.
+     * @param  string  $align  Cell and header alignment. One of `left`, `center`, `right`. Defaults to `left`.
      */
     public function __construct(
         public string $name,
@@ -36,6 +37,7 @@ final readonly class Column implements JsonSerializable
         public ?Closure $sortUsing = null,
         public ?Closure $filterUsing = null,
         public ?Closure $value = null,
+        public string $align = 'left',
     ) {}
 
     public static function make(string $name): self
@@ -205,7 +207,23 @@ final readonly class Column implements JsonSerializable
     }
 
     /**
-     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>}
+     * Set the cell and header alignment for this column.
+     *
+     * Accepts `left`, `center` or `right`. Defaults to `left`.
+     *
+     * @throws InvalidArgumentException When the alignment is not one of `left`, `center`, `right`.
+     */
+    public function align(string $alignment): self
+    {
+        if (! in_array($alignment, ['left', 'center', 'right'], true)) {
+            throw new InvalidArgumentException("Alignment [{$alignment}] is not supported. Use 'left', 'center' or 'right'.");
+        }
+
+        return $this->with(['align' => $alignment]);
+    }
+
+    /**
+     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>, align: string}
      */
     public function toArray(): array
     {
@@ -218,11 +236,12 @@ final readonly class Column implements JsonSerializable
             'hidden' => $this->hidden,
             'filter_type' => $this->filterType,
             'filter_options' => $this->filterOptions,
+            'align' => $this->align,
         ];
     }
 
     /**
-     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>}
+     * @return array{name: string, label: string, searchable: bool, sortable: bool, filterable: bool, hidden: bool, filter_type: string|null, filter_options: array<int, array{value: int|string, label: string}>, align: string}
      */
     public function jsonSerialize(): array
     {
@@ -264,6 +283,7 @@ final readonly class Column implements JsonSerializable
      *     sortUsing?: Closure|null,
      *     filterUsing?: Closure|null,
      *     value?: Closure|null,
+     *     align?: string,
      * }  $changes
      */
     private function with(array $changes): self
@@ -284,6 +304,7 @@ final readonly class Column implements JsonSerializable
             sortUsing: $changes['sortUsing'] ?? $this->sortUsing,
             filterUsing: $changes['filterUsing'] ?? $this->filterUsing,
             value: $changes['value'] ?? $this->value,
+            align: $changes['align'] ?? $this->align,
         );
     }
 }

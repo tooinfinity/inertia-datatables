@@ -91,6 +91,7 @@ it('converts column to array', function (): void {
         'hidden' => false,
         'filter_type' => null,
         'filter_options' => [],
+        'align' => 'left',
     ]);
 });
 

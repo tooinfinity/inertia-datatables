@@ -245,6 +245,7 @@ export function useDataTable<TData extends RowData = Record<string, unknown>>({
                         filterable: col.filterable,
                         filter_type: col.filter_type,
                         filter_options: col.filter_options,
+                        align: col.align ?? 'left',
                     },
                 }
             );

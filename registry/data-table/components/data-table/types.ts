@@ -12,6 +12,9 @@ import type {
 } from '@tanstack/react-table';
 import type { DataTableFeatures } from './table-features';
 
+/** Supported cell and header alignment values. */
+export type DataTableColumnAlign = 'left' | 'center' | 'right';
+
 export interface DataTableColumn<TData extends RowData = Record<string, unknown>> {
     name: string;
     label: string;
@@ -21,6 +24,8 @@ export interface DataTableColumn<TData extends RowData = Record<string, unknown>
     hidden: boolean;
     filter_type?: 'text' | 'select' | 'boolean' | null;
     filter_options?: Array<{ value: string | number; label: string }>;
+    /** Cell and header alignment. Defaults to `left` when not set. */
+    align?: DataTableColumnAlign;
     /** Custom cell formatter. Receives the cell context and returns a React node. */
     cell?: (info: CellContext<DataTableFeatures, TData, unknown>) => ReactNode;
 }

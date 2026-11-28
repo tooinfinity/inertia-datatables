@@ -200,7 +200,12 @@ Column::make('status')->filterable()->filterType('select')->filterOptions([
 Column::make('status')->filterable()->filterEnum(PostStatus::class);            // Select options from a backed enum
 Column::make('is_admin')->filterable()->filterType('boolean'); // Yes/No filter
 Column::make('internal_id')->hidden();             // Hide from UI (but available in data)
+Column::make('name');                              // Aligns left by default
+Column::make('balance')->align('right');           // Align cells and header to the right
+Column::make('status')->align('center');           // Align cells and header to the center
 ```
+
+`->align()` accepts `left`, `center` or `right` and defaults to `left`. The alignment is applied to both the column header and its data cells. Older responses without an `align` property remain left-aligned.
 
 ### Relation, Aliased and Computed Columns
 

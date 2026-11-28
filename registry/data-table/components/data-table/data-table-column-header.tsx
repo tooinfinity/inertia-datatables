@@ -53,9 +53,24 @@ export function DataTableColumnHeader<TData extends RowData>({
         ? `Sort by ${headerTitle}, ${priorityText}currently ${currentState}. ${nextActionText}`
         : headerTitle;
 
+    // Column alignment, defaulting to left for backward compatibility.
+    const align = (column.columnDef.meta?.align ?? 'left') as 'left' | 'center' | 'right';
+
+    // Explicit Tailwind class mappings; never dynamically constructed class names.
+    const textAlign = {
+        left: 'text-left',
+        center: 'text-center',
+        right: 'text-right',
+    }[align];
+    const justify = {
+        left: 'justify-start',
+        center: 'justify-center',
+        right: 'justify-end',
+    }[align];
+
     return (
         <TableHead
-            className="px-4 py-3 text-left align-middle font-medium text-muted-foreground"
+            className={`px-4 py-3 ${textAlign} align-middle font-medium text-muted-foreground`}
             scope="col"
             aria-sort={
                 // Apply aria-sort to the primary sorted column only. Omit the
@@ -70,13 +85,17 @@ export function DataTableColumnHeader<TData extends RowData>({
                     : undefined
             }
         >
-            <div className="flex items-center gap-1 min-w-0">
+            <div className={`flex items-center gap-1 min-w-0 ${justify}`}>
                 {canSort ? (
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={(event) => toggleSorting?.(event)}
-                        className="-ml-3 h-8 text-xs font-medium hover:bg-accent data-[state=open]:bg-accent"
+                        className={
+                            align === 'left'
+                                ? '-ml-3 h-8 text-xs font-medium hover:bg-accent data-[state=open]:bg-accent'
+                                : 'h-8 text-xs font-medium hover:bg-accent data-[state=open]:bg-accent'
+                        }
                         aria-label={ariaLabel}
                     >
                         <span className="truncate">{flexRender(column.columnDef.header!, header.getContext())}</span>
