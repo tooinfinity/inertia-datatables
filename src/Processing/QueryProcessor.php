@@ -50,7 +50,7 @@ final readonly class QueryProcessor
         ?SortApplier $sortApplier = null,
         ?ValueComputer $valueComputer = null,
     ) {
-        $this->registry = $registry ?? new ColumnRegistry($this->columns);
+        $this->registry = $registry ?? new ColumnRegistry($this->columns, $this->responseKeys);
         $this->relations = $relations ?? new RelationResolver;
         $this->searchApplier = $searchApplier ?? new SearchApplier($this->registry, $this->relations);
         $this->filterApplier = $filterApplier ?? new FilterApplier($this->registry, $this->relations, $this->searchApplier);

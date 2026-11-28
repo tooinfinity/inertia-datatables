@@ -191,3 +191,66 @@ it('includes multiple chained response keys for Query Builder without exposing o
         ->and($row)->toHaveCount(3)
         ->and($row)->not->toHaveKey('secret');
 });
+
+it('selects configured response keys for Eloquent when the query explicitly selects columns', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query()->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret')
+        ->and($row)->not->toHaveKey('email');
+});
+
+it('selects configured response keys for Query Builder when the query explicitly selects columns', function (): void {
+    DB::table('users')->insert([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'password' => 'password',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(DB::table('users')->select(['name']))
+        ->columns([Column::make('name')])
+        ->responseKeys(['id', 'status'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'status', 'name'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret')
+        ->and($row)->not->toHaveKey('email');
+});
+
+it('preserves explicitly selected declared columns alongside response keys', function (): void {
+    createUser([
+        'name' => 'John Doe',
+        'email' => 'john@example.com',
+        'secret' => 'private-token',
+        'status' => 'active',
+    ]);
+
+    $result = DataTable::query(User::query()->select(['name', 'email']))
+        ->columns([Column::make('name'), Column::make('email')])
+        ->responseKeys(['id'])
+        ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toHaveKeys(['id', 'name', 'email'])
+        ->and($row)->toHaveCount(3)
+        ->and($row)->not->toHaveKey('secret');
+});

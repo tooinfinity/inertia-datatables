@@ -25,9 +25,12 @@ final readonly class ColumnRegistry
 
     /**
      * @param  array<int, Column>  $columns
+     * @param  array<int, string>  $responseKeys
      */
-    public function __construct(private array $columns)
-    {
+    public function __construct(
+        private array $columns,
+        private array $responseKeys = [],
+    ) {
         $index = [];
         foreach ($columns as $column) {
             $index[$column->name] = $column;
@@ -120,6 +123,23 @@ final readonly class ColumnRegistry
             }
 
             $queryBuilder->addSelect($this->aliasedField($column));
+        }
+
+        foreach ($this->responseKeys as $responseKey) {
+            // Relation keys are eager-loaded separately; only plain attributes
+            // can be selected directly in the SQL projection.
+            if (str_contains($responseKey, '.')) {
+                continue;
+            }
+
+            $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
+            $qualifier = $this->tableQualifier($queryBuilder->from);
+
+            if ($queryBuilder->columns === null) {
+                $queryBuilder->select($qualifier !== null ? $qualifier.'.*' : '*');
+            }
+
+            $queryBuilder->addSelect($qualifier !== null ? $qualifier.'.'.$responseKey : $responseKey);
         }
     }
 
