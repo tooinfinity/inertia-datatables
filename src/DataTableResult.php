@@ -171,13 +171,6 @@ final readonly class DataTableResult implements Arrayable, JsonSerializable
             )));
             $model->setAppends($appends);
 
-            // Pre-compute accessor values as a fallback.
-            $computedValues = [];
-            foreach ($accessorKeys as $key) {
-                $computedValues[$key] = $model->getAttributeValue($key);
-            }
-            $model->setRawAttributes(array_merge($model->getAttributes(), $computedValues));
-
             $model->unsetRelations();
 
             return $model;

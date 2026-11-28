@@ -110,13 +110,13 @@ final readonly class ColumnRegistry
      */
     public function applyColumnFields(\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder $query): void
     {
+        $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
+        $qualifier = $this->tableQualifier($queryBuilder->from);
+
         foreach ($this->columns as $column) {
             if ($column->field === null || $column->relation !== null || $column->value !== null) {
                 continue;
             }
-
-            $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
-            $qualifier = $this->tableQualifier($queryBuilder->from);
 
             if ($queryBuilder->columns === null) {
                 $queryBuilder->select($qualifier !== null ? $qualifier.'.*' : '*');
@@ -125,11 +125,16 @@ final readonly class ColumnRegistry
             $queryBuilder->addSelect($this->aliasedField($column));
         }
 
+        if ($this->responseKeys === []) {
+            return;
+        }
+
+        $selectedAliases = array_column((new Projection)->items($queryBuilder), 'alias');
+
         // Resolve the table's column listing once so response keys are not
-        // re-checked against the schema for every key. Only needed when there
-        // are response keys to validate.
+        // re-checked against the schema for every key.
         $databaseColumns = [];
-        if ($this->responseKeys !== [] && $query instanceof \Illuminate\Database\Eloquent\Builder) {
+        if ($query instanceof \Illuminate\Database\Eloquent\Builder) {
             // Do not silently treat a failed schema lookup as an empty table:
             // doing so would omit valid response keys and return incomplete data.
             // Let the original database/schema exception surface to the caller.
@@ -145,8 +150,10 @@ final readonly class ColumnRegistry
                 continue;
             }
 
-            $queryBuilder = $query instanceof \Illuminate\Database\Eloquent\Builder ? $query->getQuery() : $query;
-            $qualifier = $this->tableQualifier($queryBuilder->from);
+            // Preserve values already selected under the requested output name.
+            if (in_array($responseKey, $selectedAliases, true)) {
+                continue;
+            }
 
             // Eloquent models may expose computed attributes (accessors / appends)
             // that are not database columns. Only select response keys that are

@@ -236,6 +236,28 @@ it('selects configured response keys for Query Builder when the query explicitly
         ->and($row)->not->toHaveKey('email');
 });
 
+it('preserves a selected alias when adding response keys', function (bool $includeStatus): void {
+    createUser([
+        'name' => 'John Doe',
+        'status' => 'active',
+    ]);
+
+    $table = DataTable::query(User::query()->selectRaw('name, id + 100 as "id"'))
+        ->columns([Column::make('name')]);
+
+    $table = $includeStatus ? $table->responseKeys(['id', 'status']) : $table->responseKey('id');
+
+    $result = $table->handle(DataTableRequest::fromRequest(Request::create('/test')));
+    $row = json_decode(json_encode($result), true)['data'][0];
+
+    expect($row)->toBe($includeStatus
+        ? ['name' => 'John Doe', 'id' => 101, 'status' => 'active']
+        : ['name' => 'John Doe', 'id' => 101]);
+})->with([
+    'single response key' => false,
+    'multiple response keys' => true,
+]);
+
 it('preserves explicitly selected declared columns alongside response keys', function (): void {
     createUser([
         'name' => 'John Doe',
@@ -383,13 +405,16 @@ it('preserves computed accessor value when its source attribute is not projected
         'secret' => 'private-token',
     ]);
 
-    // `status` is neither a declared column nor a response key, so it is
-    // stripped from the raw attributes. `can_update` depends on `status`, so
-    // its value must be computed before projection and preserved.
     $result = DataTable::query(User::query())
         ->columns([Column::make('name')])
         ->responseKey('can_update')
         ->handle(DataTableRequest::fromRequest(Request::create('/test')));
+
+    $model = $result->toArray()['data'][0];
+
+    expect($model->getAttributes())->toHaveKey('status', 'active')
+        ->and($model->getAttributes())->not->toHaveKey('can_update')
+        ->and($model->getAppends())->toBe(['can_update']);
 
     $row = json_decode(json_encode($result), true)['data'][0];
 
